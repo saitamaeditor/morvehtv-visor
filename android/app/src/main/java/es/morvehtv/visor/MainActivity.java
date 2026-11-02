@@ -14,6 +14,7 @@ import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -67,6 +68,10 @@ public class MainActivity extends Activity {
         ajustes.setMediaPlaybackRequiresUserGesture(false);
         ajustes.setLoadWithOverviewMode(true);
         ajustes.setUseWideViewPort(true);
+        // Respeta la letra grande del sistema, pero sin pasar de +15 %: más allá los textos de la
+        // app ya no caben en la pantalla del móvil
+        float escala = getResources().getConfiguration().fontScale;
+        ajustes.setTextZoom(Math.round(Math.max(0.85f, Math.min(escala, 1.15f)) * 100));
         // La web reconoce la tele por «Android TV» en el nombre del navegador: letra grande y mando
         ajustes.setUserAgentString(ajustes.getUserAgentString() + (esTele() ? " Android TV" : "") + " MorvehTVApp");
 
@@ -81,6 +86,22 @@ public class MainActivity extends Activity {
         web.setFocusableInTouchMode(true);
 
         reintentar.setOnClickListener(v -> abrir());
+
+        // Android 15 dibuja la app por debajo de la barra de estado y de la de navegación: se deja
+        // ese hueco para que no tapen la cabecera ni los controles (en pantalla completa, nada)
+        raiz.setOnApplyWindowInsetsListener((v, insets) -> {
+            int arriba, abajo, izq, der;
+            if (android.os.Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets b = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                arriba = b.top; abajo = b.bottom; izq = b.left; der = b.right;
+            } else {
+                arriba = insets.getSystemWindowInsetTop(); abajo = insets.getSystemWindowInsetBottom();
+                izq = insets.getSystemWindowInsetLeft(); der = insets.getSystemWindowInsetRight();
+            }
+            if (vistaCompleta != null) v.setPadding(0, 0, 0, 0);
+            else v.setPadding(izq, arriba, der, abajo);
+            return insets;
+        });
         actualizador = new Actualizador(this);
 
         if (guardado != null) web.restoreState(guardado);
@@ -149,6 +170,7 @@ public class MainActivity extends Activity {
             raiz.addView(vista, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             web.setVisibility(View.GONE);
             ocultarBarras(true);
+            raiz.setPadding(0, 0, 0, 0);
             // En el móvil, el vídeo a pantalla completa se ve en horizontal (gira según cómo lo cojas)
             if (!esTele()) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         }
@@ -161,6 +183,7 @@ public class MainActivity extends Activity {
             web.setVisibility(View.VISIBLE);
             ocultarBarras(false);
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            raiz.requestApplyInsets();
             if (alSalirCompleta != null) alSalirCompleta.onCustomViewHidden();
             alSalirCompleta = null;
             web.requestFocus();

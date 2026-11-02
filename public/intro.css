@@ -27,6 +27,17 @@
 #intro.calidad-alta .intro-centro { transition: transform 1s cubic-bezier(.6,0,.9,.4), filter 1s ease, opacity .9s ease; }
 #intro.calidad-alta.salto .intro-centro { filter: blur(10px); }
 
+/* Nebulosa de color al fondo, moviéndose despacio (un degradado: no cuesta nada) */
+.intro-nebulosa {
+  position: absolute; top: -20%; left: -20%; width: 140%; height: 140%; pointer-events: none; opacity: 0;
+  background:
+    radial-gradient(ellipse 38% 30% at 32% 40%, rgba(79,140,255,.22), transparent 70%),
+    radial-gradient(ellipse 34% 28% at 70% 62%, rgba(214,64,159,.18), transparent 70%),
+    radial-gradient(ellipse 30% 24% at 55% 30%, rgba(142,78,198,.16), transparent 70%);
+  animation: intro-aparece 1.4s .2s ease forwards, intro-deriva 9s linear forwards; will-change: transform;
+}
+@keyframes intro-deriva { from { transform: scale(1) rotate(0deg); } to { transform: scale(1.18) rotate(8deg); } }
+
 /* ---------- Logo con su halo, destello y ondas, todo centrado en la nube ---------- */
 .intro-marca {
   position: relative; width: 150px; width: clamp(110px, calc(var(--u) * 28), 220px);
@@ -48,6 +59,9 @@
   fill: #fff; transform-origin: 66px 51px; transform: scale(0);
   animation: intro-pop .5s 1.3s cubic-bezier(.34,1.8,.64,1) forwards;
 }
+/* Brillo que recorre la nube ya rellena */
+.intro-logo .brillo { animation: intro-reflejo .9s 1.75s ease-in-out forwards; }
+@keyframes intro-reflejo { to { transform: translateX(200px); } }
 @keyframes intro-trazo { to { stroke-dashoffset: 0; } }
 @keyframes intro-relleno { to { fill-opacity: 1; stroke: #fff; } }
 @keyframes intro-pop { to { transform: scale(1); } }
@@ -62,6 +76,25 @@
   width: 300px; height: 300px; margin: -150px 0 0 -150px; opacity: 0;
   background: radial-gradient(circle, rgba(255,255,255,.95), rgba(79,140,255,.4) 35%, transparent 70%);
   animation: intro-flash .7s 1.2s ease-out forwards;
+}
+/* Destello horizontal de cine que cruza el logo */
+.intro-rayo {
+  position: absolute; left: 50%; top: 50%; width: 420%; height: 3px; margin: -1.5px 0 0 -210%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(143,180,255,.35) 30%, #fff 50%, rgba(214,64,159,.35) 70%, transparent);
+  border-radius: 50%; opacity: 0; transform: scaleX(0); will-change: transform, opacity;
+  animation: intro-rayo 1.1s 1.18s cubic-bezier(.2,.7,.2,1) forwards;
+}
+@keyframes intro-rayo { 0% { opacity: 0; transform: scaleX(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: scaleX(1); } }
+/* Chispas: cada una sale en su ángulo (--a) hasta su distancia (--d) y se apaga */
+.intro-chispas { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; margin: -50% 0 0 -50%; pointer-events: none; }
+.intro-chispas i {
+  position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%;
+  box-shadow: 0 0 6px currentColor; opacity: 0; will-change: transform, opacity;
+  animation: intro-chispa .9s cubic-bezier(.1,.7,.3,1) forwards;
+}
+@keyframes intro-chispa {
+  0% { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1.4); }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(.3); }
 }
 @keyframes intro-onda { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(18); } }
 @keyframes intro-flash { 0% { opacity: 0; transform: scale(.3); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.6); } }

@@ -128,7 +128,7 @@ function pintar(nota = '') {
   est.append(txt);
   if (nota) { const n = document.createElement('span'); n.textContent = nota; est.append(n); }
   if (!estado.buscando) {
-    const b = document.createElement('button'); b.className = 'boton'; b.textContent = '📊 Tamaño total de la carpeta';
+    const b = document.createElement('button'); b.className = 'boton'; b.innerHTML = '📊<span class="txt"> Tamaño total de la carpeta</span>';
     b.onclick = async () => {
       b.disabled = true; b.textContent = 'Calculando…';
       try { const d = await api('/api/tamano', { prefijo: estado.prefijo }); b.textContent = `📊 ${d.objetos} objetos · ${bytes(d.bytes)}`; }
@@ -151,7 +151,8 @@ function pintar(nota = '') {
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
     const titulo = estado.buscando ? f.key.slice(estado.prefijo.length) : nombre(f.key);
-    const t = tarjeta({ icono, titulo, miniatura: f.miniatura, meta: `${bytes(f.tamano)} · ${fecha(f.fecha)}`, alPulsar: () => abrir(i), nuevo: nuevas.has(f.key) });
+    const t = tarjeta({ icono, titulo, miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i), nuevo: nuevas.has(f.key) });
+    t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
     t.dataset.key = f.key;
     items.append(t);
     if (clase.startsWith('video')) conMeta(t, 'archivo', f.key);
@@ -301,7 +302,7 @@ async function conMeta(t, clase, clave) {
     mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
   }
   t.querySelector('.nombre').textContent = tituloDe(d);
-  if (d.valoracion) t.querySelector('.meta').textContent = `★ ${d.valoracion} · ${t.querySelector('.meta').textContent}`;
+  if (d.valoracion) t.querySelector('.meta').prepend(`★ ${d.valoracion} · `);
 }
 
 // Cabecera con fondo, cartel y sinopsis al entrar en la carpeta de una serie
@@ -531,7 +532,7 @@ function reproductor(key, m) {
   const bAdelante = el('button', 'boton', '10 ⟳');
   const rango = el('input'); rango.type = 'range'; rango.min = 0; rango.max = Math.floor(m.duracion) || 0; rango.step = 10; rango.value = 0;
   const tiempo = el('span', 'tiempo', `0:00 / ${hms(m.duracion)}`);
-  const bSonido = el('button', 'boton', '🔊');
+  const bSonido = el('button', 'boton sonido', '🔊');
   const bPantalla = el('button', 'boton', '⛶');
   barra.append(bPlay, bAtras, bAdelante, rango, tiempo);
 
@@ -702,7 +703,9 @@ async function abrir(i) {
   $('#visor').classList.add('abierto');
   if (clase === 'video' || clase === 'video-raro') entrarCine();
   else salirCine();
-  $('#vtitulo').textContent = f.key;
+  $('#vtitulo').textContent = nombre(f.key);
+  $('#vtitulo').title = f.key;
+  pedirMeta('archivo', f.key).then((d) => { if (actual === i && d && d.encontrado) $('#vtitulo').textContent = tituloDe(d).replace(/^T(\d+)·E/, `${d.titulo} · T$1·E`); });
   $('#vmeta').textContent = `${bytes(f.tamano)} · ${fecha(f.fecha)}`;
   $('#ant').hidden = i === 0; $('#sig').hidden = i === lista.length - 1;
   const c = $('#vcontenido'); c.innerHTML = '<div class="vacio">Cargando…</div>';
@@ -899,7 +902,9 @@ $('#q').oninput = (e) => { clearTimeout(espera); espera = setTimeout(() => busca
 $('#orden').value = estado.orden;
 $('#orden').onchange = (e) => { estado.orden = e.target.value; guardar('orden', estado.orden); pintar(); };
 
-const pintarVista = () => ($('#vista').textContent = estado.vista === 'rejilla' ? '☷ Lista' : '▦ Cuadrícula');
+const pintarVista = () => {
+  $('#vista').innerHTML = estado.vista === 'rejilla' ? '☷<span class="txt"> Lista</span>' : '▦<span class="txt"> Cuadrícula</span>';
+};
 pintarVista();
 $('#vista').onclick = () => { estado.vista = estado.vista === 'rejilla' ? 'lista' : 'rejilla'; guardar('vista', estado.vista); pintarVista(); pintar(); };
 

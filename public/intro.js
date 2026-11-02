@@ -3,8 +3,8 @@
 //
 // Tres niveles de calidad para que vaya fluida en todas partes:
 //   alta  → ordenador: más estrellas, resolución completa y brillos
-//   media → móvil y tablet: menos estrellas y resolución algo menor
-//   baja  → smart TV y aparatos modestos: lienzo a media resolución y sin desenfoques
+//   media → móvil, tablet y app: resolución completa (nítida en pantallas densas) y sin desenfoques
+//   baja  → smart TV y aparatos modestos: lienzo a 3/4 de resolución y menos estrellas
 // Si aun así va a tirones (se mide en los primeros fotogramas), baja un nivel sola.
 (() => {
   let vista = false;
@@ -17,9 +17,9 @@
   const modesto = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 2;
   let calidad = esTele || (esMovil && modesto) ? 'baja' : esMovil || modesto ? 'media' : 'alta';
   const AJUSTES = {
-    alta: { estrellas: 460, escala: 1, maxPixeles: 2.2e6 },
-    media: { estrellas: 240, escala: 0.75, maxPixeles: 0.9e6 },
-    baja: { estrellas: 150, escala: 0.5, maxPixeles: 0.45e6 },
+    alta: { estrellas: 520, escala: 1, maxPixeles: 3e6, chispas: 22 },
+    media: { estrellas: 340, escala: 1, maxPixeles: 2.6e6, chispas: 18 },
+    baja: { estrellas: 200, escala: 0.75, maxPixeles: 0.9e6, chispas: 12 },
   };
   const DURACION = reducir ? 1500 : 3900;
 
@@ -28,9 +28,12 @@
   intro.className = `calidad-${calidad}${esTele ? ' en-tele' : ''}`;
   intro.innerHTML = `
     <canvas></canvas>
+    <div class="intro-nebulosa"></div>
     <div class="intro-centro">
       <div class="intro-marca">
         <div class="intro-halo"></div>
+        <div class="intro-rayo"></div>
+        <div class="intro-chispas"></div>
         <div class="intro-destello"></div>
         <div class="intro-anillo"></div><div class="intro-anillo dos"></div>
         <svg class="intro-logo" viewBox="0 0 128 92" aria-hidden="true">
@@ -41,6 +44,13 @@
           </defs>
           <path class="nube" d="M34 80 H98 A22 22 0 0 0 100 36 A30 30 0 0 0 44 26 A24 24 0 0 0 34 80 Z"/>
           <path class="play" d="M56 38 L76 51 L56 64 Z"/>
+          <clipPath id="intro-recorte"><path d="M34 80 H98 A22 22 0 0 0 100 36 A30 30 0 0 0 44 26 A24 24 0 0 0 34 80 Z"/></clipPath>
+          <rect class="brillo" clip-path="url(#intro-recorte)" x="-60" y="0" width="40" height="92" fill="url(#intro-brillo)"/>
+          <defs>
+            <linearGradient id="intro-brillo" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".75"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
         </svg>
       </div>
       <div class="intro-texto">
@@ -52,6 +62,20 @@
     <button class="intro-saltar" type="button">${esTele ? 'Pulsa OK para saltar' : 'Saltar ›'}</button>`;
   document.body.insertBefore(intro, document.body.firstChild);
   document.documentElement.style.overflow = 'hidden';
+
+  // Chispas que salen disparadas de la nube cuando se completa el logo
+  const chispas = intro.querySelector('.intro-chispas');
+  const COLORES_CHISPA = ['#ffffff', '#8fb4ff', '#c58bff', '#ff8fcf'];
+  const tamLogo = intro.querySelector('.intro-marca').offsetWidth || 150;
+  for (let i = 0, n = AJUSTES[calidad].chispas; i < n && !reducir; i++) {
+    const c = document.createElement('i');
+    const angulo = (360 / n) * i + Math.random() * 14;
+    c.style.setProperty('--a', `${angulo}deg`);
+    c.style.setProperty('--d', `${Math.round(tamLogo * (0.65 + Math.random() * 0.75))}px`);
+    c.style.background = c.style.color = COLORES_CHISPA[i % COLORES_CHISPA.length];
+    c.style.animationDelay = `${1.22 + Math.random() * 0.12}s`;
+    chispas.appendChild(c);
+  }
 
   // Letras con entrada escalonada; el destello las cruza de izquierda a derecha
   const titulo = intro.querySelector('.intro-titulo');
