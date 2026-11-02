@@ -50,7 +50,6 @@ async function cargar(mas = false) {
     pintarCabecera(estado.prefijo);
   }
   pintarMigas();
-  obtenerCatalogo().then(pintarNav).catch(() => {});
   try {
     const d = await api('/api/listar', { prefijo: estado.prefijo, token: estado.token ?? '' });
     estado.carpetas.push(...d.carpetas);
@@ -68,7 +67,6 @@ async function cargar(mas = false) {
 function pintarMigas() {
   const partes = estado.prefijo.split('/').filter(Boolean);
   const m = $('#migas'); m.innerHTML = '';
-  m.hidden = partes.length < 2; // en la portada y en las categorías ya está el menú de arriba
   const enlace = (texto, pref) => {
     // Con href: así el enlace recibe el foco del mando y se abre con OK
     const a = document.createElement('a'); a.textContent = texto; a.href = `#${encodeURIComponent(pref)}`; m.append(a);
@@ -93,46 +91,29 @@ function visibles() {
 function pintar() {
   const { carpetas, archivos } = visibles();
   const items = $('#items');
+  items.className = 'rejilla';
   items.innerHTML = '';
-  document.body.classList.toggle('en-inicio', !estado.prefijo);
+
+  let otras = carpetas;
   if (!estado.prefijo) {
-    items.className = 'portada';
-    items.append(inicio());
-    $('#mas').hidden = true;
-    return;
+    otras = carpetas.filter((c) => !categoriaDe(c));
+    items.append(portada(carpetas));
+    if (otras.length || archivos.length) items.append(el('h2', 'seccion', 'Otras carpetas y archivos'));
   }
-  // Dentro de una serie (o de una temporada) los vídeos son episodios: van en lista
-  const profundidad = estado.prefijo.split('/').filter(Boolean).length;
-  const episodios = profundidad >= 2 && archivos.length > 0;
-  items.className = episodios ? 'rejilla episodios' : 'rejilla';
-  if (profundidad === 1) {
-    const categoria = categoriaDe(estado.prefijo);
-    const cab = aplicarTema(el('div', 'categoria-cabecera'), categoria);
-    cab.append(el('span', 'categoria-icono', (categoria || TEMA_MARCA).icono), el('h1', 'pagina-titulo', nombreCarpeta(estado.prefijo)),
-      el('span', 'categoria-cuenta', `${carpetas.length + archivos.length} título${carpetas.length + archivos.length === 1 ? '' : 's'}`));
-    items.append(cab);
-    aplicarTema(items, categoria);
-  } else aplicarTema(items, categoriaDe(`${estado.prefijo.split('/')[0]}/`)); // series y temporadas: el color de su categoría
-  for (const c of carpetas) {
-    const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: '', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
-    t.querySelector('.mini').classList.add('cartel');
+  for (const c of otras) {
+    const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
-    conMeta(t, 'carpeta', c);
+    if (estado.prefijo) conMeta(t, 'carpeta', c);
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
-    const t = tarjeta({ icono, titulo: nombre(f.key), miniatura: f.miniatura, meta: '', alPulsar: () => abrir(i, archivos), nuevo: nuevas.has(f.key) });
-    t.querySelector('.mini').classList.add(episodios ? 'ancha' : 'cartel');
+    const t = tarjeta({ icono, titulo: nombre(f.key), miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i, archivos), nuevo: nuevas.has(f.key) });
+    t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
     t.dataset.key = f.key;
     items.append(t);
     if (clase.startsWith('video')) conMeta(t, 'archivo', f.key);
   });
-  if (!carpetas.length && !archivos.length) {
-    const aviso = el('div', 'vacio');
-    aviso.append(el('strong', null, 'Próximamente'), el('br'),
-      `Aún no hay nada en ${nombreCarpeta(estado.prefijo)}. Lo que subas a la carpeta ${estado.prefijo} de e2 aparecerá aquí solo.`);
-    items.append(aviso);
-  }
+  if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
   $('#mas').hidden = !estado.token;
   // En la tele siempre hay algo con foco para que el mando funcione desde el principio
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
@@ -161,209 +142,63 @@ function categoriaDe(carpeta) {
   return CATEGORIAS.find((c) => c.es(n)) ?? null;
 }
 
-// ---------- Portada estilo plataforma: destacado + filas ----------
-// Un título destacado arriba (lo último que has subido que tenga imagen en TMDB) y debajo
-// filas que se desplazan en horizontal: «Novedades» y una por categoría. Sale de
-// /api/catalogo, que agrupa todo el bucket en una sola petición.
-let catalogoCache = null;
-function obtenerCatalogo() {
-  if (!catalogoCache) catalogoCache = api('/api/catalogo').catch((e) => { catalogoCache = null; throw e; });
-  return catalogoCache;
+const tamanos = new Map();
+
+// Imagen de fondo de cada categoría: la de uno de tus títulos (su ficha de TMDB) y, si aún
+// no hay ninguno, la de algo popular de ese tipo. Se elige una vez por visita.
+const fondos = new Map();
+function fondoCategoria(cat, suyas) {
+  if (!fondos.has(cat.id)) {
+    const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
+    fondos.set(cat.id, (async () => {
+      for (const c of suyas) {
+        const d = await api('/api/buscar', { prefijo: c, q: '' }).catch(() => null);
+        const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video')).slice(0, 4);
+        const metas = await Promise.all(videos.map((f) => pedirMeta('archivo', f.key)));
+        const suyos = metas.filter((m) => m && m.encontrado && m.fondo).map((m) => m.fondo);
+        if (suyos.length) return azar(suyos);
+      }
+      const r = await api('/api/portada', { cat: cat.id }).catch(() => null);
+      return r && r.fondos.length ? azar(r.fondos) : null;
+    })());
+  }
+  return fondos.get(cat.id);
 }
 
-const nombreCarpeta = (carpeta) => (categoriaDe(carpeta) || { nombre: nombre(carpeta) }).nombre;
-const reciente = (f) => Date.now() - new Date(f).getTime() < 3 * 86400000;
-
-// Todas las categorías, en su orden y aunque estén vacías, cada una con su carpeta del bucket
-// (si hay varias carpetas de la misma categoría, sus títulos se juntan). Detrás, las carpetas
-// que no son de ninguna categoría y tienen algo.
-function gruposCatalogo(cat) {
-  const grupos = CATEGORIAS.map((c) => ({ categoria: c, nombre: c.nombre, carpeta: null, titulos: [] }));
-  const otras = [];
-  for (const c of cat.carpetas) {
-    const categoria = categoriaDe(c.carpeta);
-    const g = categoria ? grupos[CATEGORIAS.indexOf(categoria)] : null;
-    if (g) {
-      g.carpeta = g.carpeta || c.carpeta;
-      g.titulos.push(...c.titulos);
-    } else if (c.titulos.length) {
-      otras.push({ categoria: null, nombre: nombre(c.carpeta), carpeta: c.carpeta, titulos: c.titulos });
+function portada(carpetas) {
+  const caja = el('div', 'categorias');
+  for (const cat of CATEGORIAS) {
+    const suyas = carpetas.filter((c) => categoriaDe(c) === cat);
+    const t = el('div', 'cat' + (suyas.length ? '' : ' vacia'));
+    if (suyas.length) { t.tabIndex = 0; t.setAttribute('role', 'button'); }
+    t.style.setProperty('--c', cat.color);
+    const meta = el('div', 'meta', suyas.length ? 'Contando…' : 'Sin contenido aún');
+    t.append(el('div', 'icono', cat.icono), el('div', 'nombre', cat.nombre), meta);
+    fondoCategoria(cat, suyas).then((url) => {
+      if (!url) return;
+      // Se precarga para que aparezca de golpe con un fundido, no a trozos
+      const img = new Image();
+      img.onload = () => { t.style.setProperty('--img', `url("${url}")`); t.classList.add('con-imagen'); };
+      img.src = url;
+    });
+    if (suyas.length) {
+      t.title = suyas.map(nombre).join(', ');
+      t.onclick = () => irA(suyas[0]);
+      // Archivos y espacio de la categoría (se calcula una vez por sesión)
+      Promise.all(suyas.map((c) => {
+        if (!tamanos.has(c)) tamanos.set(c, api('/api/tamano', { prefijo: c }).catch(() => null));
+        return tamanos.get(c);
+      })).then((r) => {
+        const ok = r.filter(Boolean);
+        meta.textContent = ok.length
+          ? `${ok.reduce((s, d) => s + d.objetos, 0)} archivos · ${bytes(ok.reduce((s, d) => s + d.bytes, 0))}`
+          : nombre(suyas[0]);
+      });
     }
+    caja.append(t);
   }
-  for (const g of grupos) g.titulos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  return grupos.concat(otras);
-}
-
-// Cada categoría con su color (Películas rojo, Series azul…): marco, selección y cabecera.
-// Se pasa como variables CSS ya calculadas (las teles antiguas no saben mezclar colores).
-const TEMA_MARCA = { color: '#8e4ec6', icono: '✨' };
-function aplicarTema(nodo, categoria) {
-  const c = (categoria || TEMA_MARCA).color;
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
-  nodo.style.setProperty('--c', c);
-  nodo.style.setProperty('--c-suave', `rgba(${r},${g},${b},.13)`);
-  nodo.style.setProperty('--c-medio', `rgba(${r},${g},${b},.45)`);
-  nodo.style.setProperty('--c-brillo', `rgba(${r},${g},${b},.6)`);
-  return nodo;
-}
-
-// Menú de arriba: Inicio y todas las categorías con su icono y su color (las vacías, apagadas)
-function pintarNav(cat) {
-  const nav = $('#nav');
-  nav.innerHTML = '';
-  const enlace = (texto, carpeta, vacia, categoria) => {
-    const a = el('a', vacia ? 'vacia' : null);
-    a.href = `#${encodeURIComponent(carpeta)}`;
-    if (categoria) a.append(el('span', 'nav-icono', categoria.icono));
-    a.append(texto);
-    aplicarTema(a, categoria);
-    if (carpeta ? estado.prefijo.startsWith(carpeta) : !estado.prefijo) a.classList.add('activo');
-    nav.append(a);
-  };
-  enlace('Inicio', '');
-  for (const g of gruposCatalogo(cat)) {
-    if (g.carpeta) enlace(g.nombre, g.carpeta, !g.titulos.length, g.categoria);
-  }
-  // La categoría activa, a la vista en el menú (en el móvil el menú se desliza)
-  const activo = nav.querySelector('.activo');
-  if (activo && activo.scrollIntoView) activo.scrollIntoView({ block: 'nearest', inline: 'center' });
-}
-
-function inicio() {
-  const caja = el('div', 'inicio');
-  const heroe = el('section', 'heroe');
-  heroe.append(el('div', 'heroe-imagen'));
-  const filas = el('div', 'filas');
-  caja.append(heroe, filas);
-  obtenerCatalogo().then((cat) => {
-    if (!caja.isConnected) return;
-    pintarNav(cat);
-    const grupos = gruposCatalogo(cat);
-    const todos = grupos.flatMap((g) => g.titulos.map((t) => Object.assign({ carpeta: g.carpeta }, t)))
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    if (todos.length) {
-      pintarHeroe(heroe, todos);
-      filas.append(fila('Novedades', null, todos.slice(0, 20), null));
-    } else heroe.hidden = true;
-    // Todas las categorías: las que tienen algo con sus carátulas y las vacías con «Próximamente»
-    for (const g of grupos) filas.append(fila(g.nombre, g.carpeta, g.titulos, g.categoria));
-    enfocarInicio();
-  }).catch((e) => {
-    heroe.hidden = true;
-    filas.innerHTML = `<div class="vacio error">No se pudo leer el catálogo: ${e.message}</div>`;
-  });
   return caja;
 }
-
-function fila(titulo, carpeta, titulos, categoria) {
-  const s = aplicarTema(el('section', 'fila'), categoria);
-  const h = el('h2', 'fila-titulo');
-  const icono = el('span', 'fila-icono', (categoria || TEMA_MARCA).icono);
-  if (carpeta) {
-    const a = el('a');
-    a.href = `#${encodeURIComponent(carpeta)}`;
-    a.append(icono, titulo, el('span', 'ver-todo', 'Ver todo ›'));
-    h.append(a);
-  } else h.append(icono, titulo);
-  const carrusel = el('div', 'carrusel');
-  // Flechas ‹ › para desplazar la fila con el ratón (en táctil y con mando no hacen falta)
-  if (titulos.length) {
-    const flecha = (dir, texto) => {
-      const b = el('button', `fila-flecha ${dir}`, texto);
-      b.tabIndex = -1;
-      b.setAttribute('aria-label', dir === 'izq' ? 'Anteriores' : 'Siguientes');
-      b.onclick = () => carrusel.scrollBy({ left: (dir === 'izq' ? -1 : 1) * carrusel.clientWidth * 0.85, behavior: 'smooth' });
-      return b;
-    };
-    s.append(flecha('izq', '‹'), flecha('der', '›'));
-  }
-  const archivos = titulos.filter((t) => t.tipo === 'archivo');
-  for (const t of titulos) carrusel.append(cartel(t, archivos));
-  if (!titulos.length) {
-    s.classList.add('vacia');
-    const aviso = el('div', 'proximamente');
-    aviso.append(el('strong', null, 'Próximamente'), el('span', null, 'Aún no hay nada aquí. Lo que subas aparecerá solo.'));
-    carrusel.append(aviso);
-  }
-  s.append(h, carrusel);
-  return s;
-}
-
-// Carátula de una película (se abre) o de una serie (se entra en su página)
-function cartel(t, archivos) {
-  const d = el('div', 'item');
-  d.tabIndex = 0;
-  d.setAttribute('role', 'button');
-  d.dataset.key = t.key;
-  const mini = el('div', 'mini cartel');
-  mini.append(el('span', 'provisional', nombre(t.key).replace(/\.[a-z0-9]{2,4}$/i, '')));
-  const n = el('div', 'nombre', nombre(t.key));
-  d.append(mini, n);
-  if (nuevas.has(t.key) || nuevas.has(t.ultimo) || reciente(t.fecha)) d.append(el('span', 'nuevo', t.tipo === 'carpeta' ? 'NUEVOS EPISODIOS' : 'NUEVO'));
-  d.title = nombre(t.key);
-  d.onclick = () => (t.tipo === 'archivo' ? abrir(archivos.indexOf(t), archivos) : irA(t.key));
-  pedirMeta(t.tipo, t.key).then((m) => {
-    if (!m || !m.encontrado || !d.isConnected) return;
-    if (m.poster) {
-      const img = el('img'); img.loading = 'lazy'; img.decoding = 'async'; img.alt = ''; img.src = m.poster;
-      img.onload = () => mini.classList.add('lista');
-      mini.replaceChildren(img);
-    }
-    n.textContent = m.titulo;
-    d.title = m.titulo;
-  });
-  return d;
-}
-
-// Destacado: el título más reciente que tenga imagen de fondo
-async function pintarHeroe(h, todos) {
-  let elegido = null;
-  for (const t of todos.slice(0, 8)) {
-    const m = await pedirMeta(t.tipo, t.key);
-    if (m && m.encontrado && m.fondo) { elegido = { t, m }; break; }
-  }
-  if (!h.isConnected) return;
-  if (!elegido) { h.hidden = true; return; }
-  const { t, m } = elegido;
-  const imagen = new Image();
-  imagen.onload = () => { h.style.setProperty('--fondo-heroe', `url("${m.fondo}")`); h.classList.add('con-imagen'); };
-  imagen.src = m.fondo;
-  const info = el('div', 'heroe-info');
-  info.append(el('div', 'heroe-tipo', `${nombreCarpeta(t.carpeta)}${reciente(t.fecha) ? ' · Novedad' : ''}`));
-  info.append(el('h1', null, m.titulo));
-  const datos = [m.anio, m.valoracion && `★ ${m.valoracion}`,
-    m.tipo === 'serie' ? (m.temporadas ? `${m.temporadas} temporada${m.temporadas > 1 ? 's' : ''}` : 'Serie') : m.duracion && `${m.duracion} min`,
-    m.generos.slice(0, 3).join(' · ')].filter(Boolean);
-  info.append(el('div', 'heroe-datos', datos.join('   ·   ')));
-  if (m.sinopsis) info.append(el('p', 'heroe-sinopsis', m.sinopsis));
-  const botones = el('div', 'heroe-botones');
-  const ver = el('button', 'boton boton-blanco', t.tipo === 'archivo' ? '▶  Reproducir' : '▶  Ver episodios');
-  const mas = el('button', 'boton boton-gris', 'ⓘ  Más información');
-  const archivos = todos.filter((x) => x.tipo === 'archivo');
-  if (t.tipo === 'archivo') {
-    ver.onclick = () => abrir(archivos.indexOf(t), archivos);
-    mas.onclick = () => abrir(archivos.indexOf(t), archivos, { ficha: true });
-  } else {
-    ver.onclick = mas.onclick = () => irA(t.key);
-  }
-  botones.append(ver, mas);
-  info.append(botones);
-  h.append(info);
-  enfocarInicio();
-}
-
-// En la tele el foco empieza en «Reproducir» del destacado
-function enfocarInicio() {
-  const conMando = esTele || document.documentElement.classList.contains('usa-mando');
-  if (!conMando || actual >= 0) return;
-  const a = document.activeElement;
-  if (a && a !== document.body && a.isConnected) return;
-  const b = document.querySelector('.heroe .boton') || document.querySelector('#items .item');
-  if (b) b.focus();
-}
-
-// Barra de arriba transparente sobre el destacado y opaca al bajar
-addEventListener('scroll', () => $('header').classList.toggle('solida', scrollY > 30), { passive: true });
 
 function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {
   const d = document.createElement('div'); d.className = 'item'; d.title = titulo;
@@ -422,12 +257,8 @@ async function conMeta(t, clase, clave) {
     mini.replaceChildren(img);
     mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
   }
-  t.querySelector('.nombre').textContent = d.episodio ? `${d.episodio.numero}. ${d.episodio.titulo}` : d.titulo;
-  const datos = d.episodio
-    ? [d.episodio.duracion && `${d.episodio.duracion} min`, d.episodio.fecha && new Date(d.episodio.fecha).getFullYear()]
-    : [d.valoracion && `★ ${d.valoracion}`, d.anio];
-  t.querySelector('.meta').textContent = datos.filter(Boolean).join('  ·  ');
-  if (d.episodio && d.episodio.sinopsis) t.querySelector('.nombre').after(el('p', 'sinopsis', d.episodio.sinopsis));
+  t.querySelector('.nombre').textContent = tituloDe(d);
+  if (d.valoracion) t.querySelector('.meta').prepend(`★ ${d.valoracion} · `);
 }
 
 // Cabecera con fondo, cartel y sinopsis al entrar en la carpeta de una serie
@@ -441,7 +272,7 @@ async function pintarCabecera(prefijo) {
   const d = await pedirMeta('carpeta', partes.join('/') + '/');
   if (!d?.encontrado || estado.prefijo !== prefijo) return;
   c.append(fichaHtml(d, { clave: partes.join('/') + '/' }));
-  if (d.fondo) c.style.backgroundImage = `linear-gradient(77deg, rgba(11,11,15,.94) 22%, rgba(11,11,15,.55) 55%, rgba(11,11,15,.1)), linear-gradient(0deg, #0b0b0f, rgba(11,11,15,0) 40%), url("${d.fondo}")`;
+  if (d.fondo) c.style.backgroundImage = `linear-gradient(90deg, var(--fondo) 30%, rgba(15,17,21,.75)), url("${d.fondo}")`;
   c.hidden = false;
 }
 
@@ -965,7 +796,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#salir-app, #nav a, #migas a, #cabecera summary, #cabecera a, .heroe .boton, .fila-titulo a, #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
@@ -982,7 +813,7 @@ function moverFoco(dir) {
   const cands = [...document.querySelectorAll(enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
-    const primero = enVisor ? cands[0] : (document.querySelector('.heroe .boton, #items .item') || cands[0]);
+    const primero = enVisor ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
     if (primero) { primero.focus(); primero.scrollIntoView({ block: 'nearest' }); }
     return;
   }
@@ -1007,7 +838,6 @@ function moverFoco(dir) {
     mejor.focus();
     // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
     if (mejor.closest('header')) scrollTo({ top: 0, behavior: 'smooth' });
-    else if (mejor.closest('.carrusel')) mejor.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
     else mejor.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   }
 }
@@ -1116,9 +946,8 @@ async function refrescar({ nuevos, cambiados, borrados }) {
   if (archivosNuevos.length) {
     aviso(archivosNuevos.length === 1 ? `Nuevo: ${nombre(archivosNuevos[0])}` : `${archivosNuevos.length} archivos nuevos`, 5000);
   }
-  catalogoCache = null;
-  // La portada muestra todo el bucket; las demás páginas, solo su carpeta
-  if (estado.prefijo && ![...nuevos, ...cambiados, ...borrados].some((k) => k.startsWith(estado.prefijo))) return;
+  tamanos.clear();
+  if (![...nuevos, ...cambiados, ...borrados].some((k) => k.startsWith(estado.prefijo))) return;
   const d = await api('/api/listar', { prefijo: estado.prefijo });
   if (actual >= 0) return; // se abrió un vídeo mientras tanto: ya se aplicará al cerrarlo
   estado.carpetas = d.carpetas; estado.archivos = d.archivos; estado.token = d.siguiente;
