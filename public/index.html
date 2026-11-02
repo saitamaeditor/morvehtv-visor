@@ -58,7 +58,7 @@
   .item .resumen { margin: -2px 8px 10px; color: #b3b9c4; font-size: 12px; line-height: 1.4;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .item .nombre { font-weight: 600; }
-  .tele .item .resumen { font-size: 15px; }
+  .tele .item .resumen { font-size: 13px; }
   #cabecera .ficha h3 { color: #fff; }
   .lista .item { flex-direction: row; align-items: center; }
   .lista { display: flex; flex-direction: column; gap: 4px; }
@@ -192,14 +192,21 @@
   .item, .cat { transition: transform .12s, box-shadow .12s, border-color .12s; }
   /* En la tele todo más grande: se ve desde el sofá */
   .tele body { font-size: 20px; }
-  .tele header { padding: 16px 40px; }
-  .tele main { padding: 24px 40px; }
-  .tele .rejilla { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 22px; }
+  /* Márgenes en % para que nada quede cortado por el borde de la tele (overscan) */
+  .tele header { padding: 10px 4vw; }
+  .tele main { padding: 2.5vh 4vw; }
+  /* Las teles muestran la web a poca resolución (unos 960×540): las carátulas se miden por el
+     alto de la pantalla para que quepa una fila entera con su texto, unas 6 por fila */
+  .tele .rejilla { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-template-columns: repeat(auto-fill, minmax(24vh, 1fr)); gap: 3vh 2vw; }
+  .tele .item .nombre { padding: 6px 8px 2px; }
+  .tele .item .resumen { -webkit-line-clamp: 2; }
+  .tele .ficha img.cartel { width: 26vh; }
+  .tele #cabecera .ficha p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
   .tele .categorias { grid-template-columns: repeat(4, 1fr); gap: 22px; }
   .tele .cat { padding: 26px; }
   .tele .cat .nombre { font-size: 24px; }
-  .tele .item .nombre { font-size: 18px; }
-  .tele .item .meta, .tele .cat .meta { font-size: 15px; }
+  .tele .item .nombre { font-size: 16px; }
+  .tele .item .meta, .tele .cat .meta { font-size: 13px; }
   .tele .boton, .tele select { padding: 10px 16px; }
   .tele .controles .boton { padding: 12px 20px; font-size: 22px; }
   /* ---------- Móvil y tablet (táctil) ---------- */
@@ -218,7 +225,7 @@
   @supports not (aspect-ratio: 1) {
     .item .mini { height: 120px; }
     .item .mini.cartel { height: 260px; }
-    .tele .item .mini.cartel { height: 340px; }
+    .tele .item .mini.cartel { height: 36vh; }
   }
   .aviso { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--acento); color: #fff; padding: 8px 14px; border-radius: 8px; z-index: 20; display: none; }
   @media (max-width: 600px) {
