@@ -596,8 +596,9 @@ function alCambiarPantalla() {
 document.addEventListener('fullscreenchange', alCambiarPantalla);
 document.addEventListener('webkitfullscreenchange', alCambiarPantalla);
 
-// Los controles se esconden a los 3 s viendo el vídeo y vuelven al mover el ratón, tocar la
-// pantalla o pulsar el mando. Si estaban escondidos, el primer toque solo los enseña (no pausa).
+// Viendo el vídeo, a los 3 s se esconde la barra de progreso (los botones siguen a la vista) y
+// vuelve al mover el ratón, tocar la pantalla o pulsar el mando. Tocar la imagen con la barra
+// escondida solo la enseña (no pausa); los botones y el selector de audio responden siempre.
 let reposo = null;
 let tocadoEnReposo = false;
 function despertar() {
@@ -617,7 +618,8 @@ document.addEventListener('pointerdown', () => {
   despertar();
 }, true);
 document.addEventListener('click', (e) => {
-  if (tocadoEnReposo && e.target.closest && e.target.closest('#visor')) { e.stopPropagation(); e.preventDefault(); }
+  const enControl = e.target.closest && e.target.closest('.controles, .barra, .gran-play');
+  if (tocadoEnReposo && !enControl && e.target.closest && e.target.closest('#visor')) { e.stopPropagation(); e.preventDefault(); }
   tocadoEnReposo = false;
 }, true);
 document.addEventListener('play', (e) => { if (e.target.closest && e.target.closest('#vcontenido')) despertar(); }, true);
@@ -630,6 +632,7 @@ function reproductor(key, m) {
   const caja = el('div', 'repro');
   // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
   const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
+  v.tabIndex = -1; // puede recibir el foco del mando
   const barra = el('div', 'controles');
   const bGrande = el('button', 'gran-play', '▶');
   cargarHls(); // se adelanta mientras el servidor prepara el vídeo
@@ -904,9 +907,16 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
 const ENFOCABLES_APP = '#nav a, #migas a, #cabecera summary, #cabecera a, .heroe .boton, .fila-titulo a, #items .item, #mas:not([hidden])';
-const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, .controles input, #vcontenido > video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
+// (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
+const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
-const visible = (x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+// Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
+const visible = (x) => {
+  const r = x.getBoundingClientRect();
+  if (!r.width || !r.height) return false;
+  const e = getComputedStyle(x);
+  return e.visibility !== 'hidden' && e.opacity !== '0' && e.pointerEvents !== 'none';
+};
 
 function moverFoco(dir) {
   const enVisor = actual >= 0;
@@ -937,10 +947,10 @@ function moverFoco(dir) {
   }
 }
 
-// Al abrir un vídeo con el mando, el foco va al botón de play
+// Al abrir un vídeo con el mando, el foco va al propio vídeo: OK lo reproduce y ← → lo mueven
 function enfocarVisor() {
   if (!esTele && !document.documentElement.classList.contains('usa-mando')) return;
-  const b = document.querySelector('.controles .boton') || document.querySelector('#vcontenido > video') || $('#vcerrar');
+  const b = document.querySelector('#vcontenido video') || document.querySelector('.controles .boton') || $('#vcerrar');
   if (b) b.focus();
 }
 
@@ -987,8 +997,9 @@ document.addEventListener('keydown', (e) => {
     const repro = document.querySelector('#vcontenido .repro');
     const video = document.querySelector('#vcontenido video');
     // «Libre» = el foco no está en un botón: ← → mueven el vídeo y OK pausa
-    // Con los controles escondidos, ← → siempre mueven el vídeo
-    const libre = !a || a === document.body || a.tagName === 'VIDEO' || $('#visor').classList.contains('reposo');
+    // Con el foco en el vídeo, ← → lo mueven y OK pausa; ↓ baja a los botones (audio, ▶, ⛶…),
+    // donde ← → pasan de uno a otro, y ↑ vuelve al vídeo
+    const libre = !a || a === document.body || a.tagName === 'VIDEO';
     const alternar = () => (repro ? repro.alternar() : video && (video.paused ? video.play() : video.pause()));
     const saltar = (s) => (repro ? repro.saltar(s) : video && (video.currentTime += s));
     if (k === 'play' || (k === 'ok' && libre) || (e.key === ' ' && libre)) { e.preventDefault(); return alternar(); }
