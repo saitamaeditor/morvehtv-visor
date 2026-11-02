@@ -675,7 +675,9 @@ function reproductor(key, m, urlDirecto = null) {
   }
   // Todos los botones a la izquierda y, detrás, la barra de progreso con el tiempo
   barra.append(bPlay, bAtras, bAdelante, bSonido, bPantalla, rango, tiempo);
-  const cargando = el('div', 'cargando', 'Preparando vídeo…');
+  // Sin avisos de carga («Preparando vídeo…», «Cargando…»): solo se usa para errores reales
+  const cargando = el('div', 'cargando');
+  cargando.hidden = true;
   caja.append(v, bGrande, cargando, barra);
 
   let desde = 0;
@@ -729,7 +731,6 @@ function reproductor(key, m, urlDirecto = null) {
     const mio = ++turno;
     // El reloj y la barra marcan ya el minuto elegido mientras se prepara
     rango.value = t; pintarTiempo(t);
-    cargando.hidden = false; cargando.textContent = 'Preparando vídeo…';
     try {
       // Empieza 20 s antes: así retroceder un poco es instantáneo
       const antes = Math.min(20, Math.floor(t));
@@ -741,7 +742,7 @@ function reproductor(key, m, urlDirecto = null) {
       if (mio !== turno || !caja.isConnected) return;
       fuente(r.url, t - r.desde, reproducir);
     } catch (e) {
-      if (mio === turno) cargando.textContent = e.message;
+      if (mio === turno) { cargando.hidden = false; cargando.textContent = e.message; }
     }
   }
   const pintarTiempo = (t) => (tiempo.textContent = `${hms(t)} / ${hms(total())}`);
@@ -774,15 +775,13 @@ function reproductor(key, m, urlDirecto = null) {
     cargando.hidden = false; cargando.textContent = 'Este dispositivo no puede reproducir este formato.';
   };
   v.onwaiting = () => {
-    cargando.hidden = false; cargando.textContent = 'Cargando…';
     clearTimeout(vigia);
     vigia = setTimeout(() => { if (caja.isConnected && !v.paused && v.readyState < 3) retomar(); }, 15000);
   };
   v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); intentos = 0; };
   v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; mantenerPantalla(true); };
   v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); };
-  // Listo para empezar: se quita «Preparando vídeo…» aunque aún no se haya pulsado ▶
-  v.oncanplay = () => { if (v.paused) cargando.hidden = true; };
+  v.oncanplay = () => { cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide
   // más desde ese punto
   v.onended = () => { if (!directo && ahora() < total() - 10) ir(ahora(), true); };
@@ -791,7 +790,14 @@ function reproductor(key, m, urlDirecto = null) {
   };
   bGrande.onclick = alternar;
   bPlay.onclick = alternar;
-  v.onclick = alternar;
+  // En pantallas táctiles tocar la imagen solo enseña u oculta los controles (no pausa, como en
+  // las apps de vídeo); con ratón, un clic sobre el vídeo sí pausa
+  v.onclick = () => {
+    if (!matchMedia('(pointer: coarse)').matches) return alternar();
+    const visor = $('#visor');
+    if (visor.classList.contains('reposo') || v.paused) return despertar();
+    visor.classList.add('reposo');
+  };
   bAtras.onclick = () => ir(ahora() - 10);
   bAdelante.onclick = () => ir(ahora() + 10);
   rango.oninput = () => { arrastrando = true; pintarTiempo(Number(rango.value)); };
@@ -849,7 +855,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   pedirMeta('archivo', f.key).then((d) => { if (actual === i && d && d.encontrado) $('#vtitulo').textContent = tituloDe(d).replace(/^T(\d+)·E/, `${d.titulo} · T$1·E`); });
   $('#vmeta').textContent = `${bytes(f.tamano)} · ${fecha(f.fecha)}`;
   $('#ant').hidden = i === 0; $('#sig').hidden = i === lista.length - 1;
-  const c = $('#vcontenido'); c.innerHTML = '<div class="vacio">Cargando…</div>';
+  const c = $('#vcontenido'); c.innerHTML = '';
 
   try {
     const { url } = await api('/api/url', { key: f.key });
