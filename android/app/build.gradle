@@ -1,5 +1,5 @@
-// App MorvehTV para móvil y Android TV: la interfaz es el visor publicado en Render (WebView) y
-// los vídeos se ven con el reproductor nativo de Android, ExoPlayer (Media3).
+// App MorvehTV para móvil y Android TV: una pantalla con el visor publicado en Render.
+// Usa el mismo reproductor que la web. Sin librerías externas (solo el WebView del sistema).
 plugins {
     id 'com.android.application'
 }
@@ -53,11 +53,4 @@ android {
         abortOnError false
         checkReleaseBuilds false
     }
-}
-
-dependencies {
-    def media3 = '1.4.1'
-    implementation "androidx.media3:media3-exoplayer:$media3"
-    implementation "androidx.media3:media3-exoplayer-hls:$media3"
-    implementation "androidx.media3:media3-ui:$media3"
 }

@@ -841,9 +841,8 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   const f = lista[i];
   const [, clase] = tipo(f.key);
   $('#visor').classList.add('abierto');
-  // En la app de Android los vídeos se ven con su reproductor nativo (ExoPlayer)
-  const nativo = !!(window.MorvehApp && typeof window.MorvehApp.reproducir === 'function');
-  if ((clase === 'video' || clase === 'video-raro') && !opciones.ficha && !nativo) entrarCine();
+  // El mismo reproductor en la web, el móvil y la app de Android
+  if ((clase === 'video' || clase === 'video-raro') && !opciones.ficha) entrarCine();
   else salirCine();
   $('#vtitulo').textContent = nombre(f.key);
   $('#vtitulo').title = f.key;
@@ -860,12 +859,6 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       const m = await api('/api/medio', { key: f.key }).catch(() => null);
       if (actual !== i) return;
       c.innerHTML = '';
-      if (nativo) {
-        await abrirNativo(f, url, m, c, opciones);
-        const d = await pedirMeta('archivo', f.key);
-        if (actual === i) c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key }));
-        return;
-      }
       // Directo de e2 solo si cualquier dispositivo lo abre: MP4/MOV con H.264 y un único
       // audio compatible. Lo demás (.mkv, .ts, AC3, varios idiomas…) pasa por el servidor.
       const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
@@ -930,7 +923,7 @@ const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
 const ENFOCABLES_APP = '#salir-app, #nav a, #migas a, #cabecera summary, #cabecera a, .heroe .boton, .fila-titulo a, #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, #vcontenido .ver-nativo, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
+const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
@@ -972,31 +965,10 @@ function moverFoco(dir) {
   }
 }
 
-// Reproductor nativo de la app Android (ExoPlayer). Lo que el aparato sabe abrir (H.264/HEVC/VP9
-// con audio AAC, MP3, Opus, Vorbis o FLAC, en MP4, MKV, TS…) lo lee directamente de e2; lo demás
-// (audio AC3/DTS, otros vídeos) se lo prepara el servidor en HLS. La ficha queda detrás, con un
-// botón para volver a verlo.
-async function abrirNativo(f, url, m, c, opciones) {
-  const directo = !!m && /\.(mp4|m4v|mov|mkv|webm|ts|avi)$/i.test(f.key)
-    && ['h264', 'hevc', 'vp9'].includes(m.video)
-    && m.audios.every((a) => ['aac', 'mp3', 'opus', 'vorbis', 'flac'].includes(a.codec));
-  const d = await pedirMeta('archivo', f.key);
-  const titulo = d && d.encontrado ? tituloDe(d).replace(/^T(\d+)·E/, `${d.titulo} · T$1·E`) : nombre(f.key);
-  const datos = JSON.stringify({
-    key: f.key, titulo, url, duracion: m ? m.duracion : 0, audios: m ? m.audios : [], modo: directo ? 'directo' : 'servidor',
-  });
-  const lanzar = () => window.MorvehApp.reproducir(datos);
-  const b = el('button', 'boton boton-blanco ver-nativo', '▶  Reproducir');
-  b.onclick = lanzar;
-  c.append(b);
-  if (!opciones.ficha) lanzar();
-  enfocarVisor();
-}
-
 // Al abrir un vídeo con el mando, el foco va al propio vídeo: OK lo reproduce y ← → lo mueven
 function enfocarVisor() {
   if (!esTele && !document.documentElement.classList.contains('usa-mando')) return;
-  const b = document.querySelector('#vcontenido video') || document.querySelector('#vcontenido .ver-nativo') || document.querySelector('.controles .boton') || $('#vcerrar');
+  const b = document.querySelector('#vcontenido video') || document.querySelector('.controles .boton') || $('#vcerrar');
   if (b) b.focus();
 }
 
