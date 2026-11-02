@@ -1,5 +1,6 @@
-// MorvehTV (visor de IDrive e2): un servidor local de solo lectura que lista el bucket y firma
-// enlaces para ver cada archivo. Nunca escribe ni borra nada en e2.
+// MorvehTV (visor de IDrive e2): un servidor que lista el bucket y firma enlaces para ver cada
+// archivo. Nunca escribe ni borra vídeos en e2: lo único que escribe es el archivo oculto de
+// perfiles (_morvehtv/usuarios.json, ver perfiles.js).
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
 import { readFile, mkdir, rm, stat } from 'node:fs/promises';
@@ -13,6 +14,7 @@ import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/clien
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as meta from './metadatos.js';
 import * as acceso from './acceso.js';
+import * as perfiles from './perfiles.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -42,6 +44,11 @@ const s3 = new S3Client({
   forcePathStyle: true,
   credentials: { accessKeyId: E2_ACCESS_KEY_ID, secretAccessKey: E2_SECRET_ACCESS_KEY },
 });
+perfiles.iniciar(s3, E2_BUCKET, acceso.NUBE);
+// Render apaga el servidor a menudo: antes se guarda el progreso pendiente de cada perfil
+for (const senal of ['SIGTERM', 'SIGINT']) {
+  process.once(senal, () => perfiles.guardarPendiente().finally(() => process.exit(0)));
+}
 
 const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(key);
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);
@@ -393,7 +400,7 @@ http
       if (url.pathname === '/api/entrar' && req.method === 'POST') return await acceso.entrar(req, res);
       // Para la pantalla de entrada (¿PIN o contraseña?) y para que Render sepa que está viva
       if (url.pathname === '/api/modo') return json(res, 200, { nube: acceso.NUBE });
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, arranque: ARRANQUE });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, arranque: ARRANQUE, perfiles: perfiles.escritura });
       if (permiso === 'pin' && !PUBLICO.includes(url.pathname)) {
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Falta el PIN' });
         res.writeHead(302, { location: '/entrar.html' });
@@ -401,6 +408,7 @@ http
       }
 
       if (url.pathname === '/api/eventos') return eventos(req, res);
+      if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json);
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
       const ruta = rutas[url.pathname];

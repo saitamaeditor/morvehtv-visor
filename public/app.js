@@ -26,8 +26,10 @@ const consulta = (params = {}) => Object.keys(params).map((k) => `${encodeURICom
 
 async function api(ruta, params) {
   const r = await fetch(`${ruta}?${consulta(params)}`, { credentials: 'same-origin' });
-  if (r.status === 401) { location.href = '/entrar.html'; throw new Error('Falta el PIN'); }
   const d = await r.json();
+  // Sin el PIN de la app, a la pantalla de entrada; sin perfil, a «¿Quién está viendo?»
+  if (r.status === 401 && d.error === 'Falta el PIN') { location.href = '/entrar.html'; throw new Error('Falta el PIN'); }
+  if (r.status === 401 && ruta !== '/api/yo' && typeof elegirPerfil === 'function') elegirPerfil();
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
@@ -97,6 +99,8 @@ function pintar() {
   let otras = carpetas;
   if (!estado.prefijo) {
     otras = carpetas.filter((c) => !categoriaDe(c));
+    seccionesPerfil(items);
+    if (items.children.length) items.append(el('h2', 'seccion', 'Categorías'));
     items.append(portada(carpetas));
     if (otras.length || archivos.length) items.append(el('h2', 'seccion', 'Otras carpetas y archivos'));
   }
@@ -347,6 +351,8 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     const enlaces = el('div', 'chips');
     if (d.trailer) enlaces.append(Object.assign(el('a', 'boton', '▶ Tráiler'), { href: d.trailer, target: '_blank', rel: 'noopener' }));
     enlaces.append(Object.assign(el('a', 'boton', 'TMDB ↗'), { href: d.tmdb, target: '_blank', rel: 'noopener' }));
+    const objetivo = archivo ? archivo.key : clave;
+    if (yo && objetivo) enlaces.prepend(botonFavorito(objetivo, archivo));
     cuerpo.append(enlaces);
   } else if (d) {
     cuerpo.append(el('h2', null, 'Sin datos de TMDB'));
@@ -548,25 +554,20 @@ function boton(clase, html, titulo) {
 // Un solo reproductor para todo el contenido. Con «urlDirecto» lee el archivo tal cual de e2
 // (MP4 que cualquier aparato abre: saltos instantáneos); sin él, el servidor lo prepara en HLS.
 // ---------- Seguir viendo ----------
-// Cada dispositivo recuerda por dónde ibas en cada vídeo (se guarda en el propio navegador o
-// en la app). Al terminarlo (últimos 2 min o el 95 %) se olvida y vuelve a empezar de cero.
-const POSICIONES = 'morveh-posiciones';
-function posiciones() {
-  try { return JSON.parse(localStorage.getItem(POSICIONES)) || {}; } catch (e) { return {}; }
-}
+// Cada perfil recuerda por dónde iba en cada vídeo (se guarda en el servidor, así sigue igual en
+// la tele, el móvil o el ordenador). Al terminarlo (últimos 2 min o el 95 %) se olvida.
 function posicionDe(key) {
-  const p = posiciones()[key];
+  const p = yo && yo.posiciones[key];
   return p && p.t > 0 ? p : null;
 }
 function guardarPosicion(key, t, total) {
-  const todas = posiciones();
+  if (!yo) return;
   const acabado = total > 0 && (t > total - 120 || t > total * 0.95);
-  if (t < 15 || acabado) delete todas[key];
-  else todas[key] = { t: Math.floor(t), total: Math.floor(total || 0), cuando: Date.now() };
-  // Como mucho los 300 vídeos más recientes
-  const claves = Object.keys(todas).sort((a, b) => todas[b].cuando - todas[a].cuando);
-  claves.slice(300).forEach((k) => delete todas[k]);
-  try { localStorage.setItem(POSICIONES, JSON.stringify(todas)); } catch (e) {}
+  const f = listaVisor.find((x) => x.key === key) || {};
+  const borrar = t < 15 || acabado;
+  if (borrar) delete yo.posiciones[key];
+  else yo.posiciones[key] = { t: Math.floor(t), total: Math.floor(total || 0), cuando: Date.now(), tamano: f.tamano, fecha: f.fecha };
+  enviar('/api/posicion', { key, t, total, borrar, tamano: f.tamano, fecha: f.fecha }).catch(() => {});
 }
 
 // Barra roja bajo la carátula con lo que ya has visto de ese vídeo
@@ -858,6 +859,7 @@ function cerrar() {
   $('#vcontenido').innerHTML = '';
   if (actual >= 0) {
     actual = -1;
+    if (!estado.prefijo) pintar();
     document.querySelectorAll('#items .item[data-key]').forEach(barraVisto);
     // Con el mando, el foco vuelve a la tarjeta del archivo que se estaba viendo
     const t = [...document.querySelectorAll('#items .item')].find((x) => x.dataset.key === actualKey);
@@ -883,7 +885,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
@@ -896,11 +898,12 @@ const visible = (x) => {
 };
 
 function moverFoco(dir) {
-  const enVisor = actual >= 0;
-  const cands = [...document.querySelectorAll(enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
+  const enPerfiles = document.documentElement.classList.contains('con-perfiles');
+  const enVisor = !enPerfiles && actual >= 0;
+  const cands = [...document.querySelectorAll(enPerfiles ? '#perfiles button, #perfiles input' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
-    const primero = enVisor ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
+    const primero = enVisor || enPerfiles ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
     if (primero) { primero.focus(); primero.scrollIntoView({ block: 'nearest' }); }
     return;
   }
@@ -962,6 +965,7 @@ document.addEventListener('keydown', (e) => {
 
   if (k === 'atras') {
     if (escribiendo && e.key === 'Backspace') return;
+    if (document.documentElement.classList.contains('con-perfiles')) return; // ahí «Atrás» no navega
     // Esc ya lo gestiona el navegador para salir de la pantalla completa
     if (enPantallaCompleta() && (e.key === 'Escape' || e.key === 'Esc')) return;
     e.preventDefault();
@@ -1063,5 +1067,6 @@ window.addEventListener('hashchange', () => {
 // El nombre del bucket solo se muestra si no es el mismo que el de la app
 api('/api/info').then((d) => { if (d.bucket.toLowerCase() !== 'morvehtv') $('#bucket').textContent = d.bucket; }).catch(() => {});
 estado.prefijo = decodeURIComponent(location.hash.slice(1));
-cargar();
+// Antes de nada, «¿Quién está viendo?» (perfiles.js, que se carga detrás de este archivo)
+document.addEventListener('DOMContentLoaded', () => empezar());
 
