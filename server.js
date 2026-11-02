@@ -301,10 +301,12 @@ async function catalogo() {
   }
   const carpetas = new Map();
   for (const o of objetos) {
-    if (!esVideo(o.key) || prohibido(o.key)) continue;
     const partes = o.key.split('/');
-    if (partes.length < 2) continue;
+    if (partes.length < 2 || prohibido(o.key)) continue;
     const raiz = `${partes[0]}/`;
+    // También las carpetas aún vacías (o sin vídeos): la portada las enseña como «Próximamente»
+    if (!carpetas.has(raiz)) carpetas.set(raiz, new Map());
+    if (!esVideo(o.key)) continue;
     const esSerie = partes.length >= 3;
     const clave = esSerie ? `${partes[0]}/${partes[1]}/` : o.key;
     if (!carpetas.has(raiz)) carpetas.set(raiz, new Map());

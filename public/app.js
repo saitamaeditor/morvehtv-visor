@@ -120,7 +120,12 @@ function pintar() {
     items.append(t);
     if (clase.startsWith('video')) conMeta(t, 'archivo', f.key);
   });
-  if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
+  if (!carpetas.length && !archivos.length) {
+    const aviso = el('div', 'vacio');
+    aviso.append(el('strong', null, 'Próximamente'), el('br'),
+      `Aún no hay nada en ${nombreCarpeta(estado.prefijo)}. Lo que subas a la carpeta ${estado.prefijo} de e2 aparecerá aquí solo.`);
+    items.append(aviso);
+  }
   $('#mas').hidden = !estado.token;
   // En la tele siempre hay algo con foco para que el mando funcione desde el principio
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
@@ -159,28 +164,43 @@ function obtenerCatalogo() {
   return catalogoCache;
 }
 
-const posicionCategoria = (carpeta) => {
-  const c = categoriaDe(carpeta);
-  return c ? CATEGORIAS.indexOf(c) : CATEGORIAS.length;
-};
 const nombreCarpeta = (carpeta) => (categoriaDe(carpeta) || { nombre: nombre(carpeta) }).nombre;
 const reciente = (f) => Date.now() - new Date(f).getTime() < 3 * 86400000;
 
-// Menú de arriba: Inicio y las categorías que tienen algo
+// Todas las categorías, en su orden y aunque estén vacías, cada una con su carpeta del bucket
+// (si hay varias carpetas de la misma categoría, sus títulos se juntan). Detrás, las carpetas
+// que no son de ninguna categoría y tienen algo.
+function gruposCatalogo(cat) {
+  const grupos = CATEGORIAS.map((c) => ({ categoria: c, nombre: c.nombre, carpeta: null, titulos: [] }));
+  const otras = [];
+  for (const c of cat.carpetas) {
+    const categoria = categoriaDe(c.carpeta);
+    const g = categoria ? grupos[CATEGORIAS.indexOf(categoria)] : null;
+    if (g) {
+      g.carpeta = g.carpeta || c.carpeta;
+      g.titulos.push(...c.titulos);
+    } else if (c.titulos.length) {
+      otras.push({ categoria: null, nombre: nombre(c.carpeta), carpeta: c.carpeta, titulos: c.titulos });
+    }
+  }
+  for (const g of grupos) g.titulos.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  return grupos.concat(otras);
+}
+
+// Menú de arriba: Inicio y todas las categorías (las vacías, más apagadas)
 function pintarNav(cat) {
   const nav = $('#nav');
   nav.innerHTML = '';
-  const enlace = (texto, carpeta) => {
-    const a = el('a', null, texto);
+  const enlace = (texto, carpeta, vacia) => {
+    const a = el('a', vacia ? 'vacia' : null, texto);
     a.href = `#${encodeURIComponent(carpeta)}`;
-    if (carpeta ? estado.prefijo.startsWith(carpeta) : !estado.prefijo) a.className = 'activo';
+    if (carpeta ? estado.prefijo.startsWith(carpeta) : !estado.prefijo) a.classList.add('activo');
     nav.append(a);
   };
   enlace('Inicio', '');
-  cat.carpetas
-    .filter((c) => c.titulos.length)
-    .sort((a, b) => posicionCategoria(a.carpeta) - posicionCategoria(b.carpeta))
-    .forEach((c) => enlace(nombreCarpeta(c.carpeta), c.carpeta));
+  for (const g of gruposCatalogo(cat)) {
+    if (g.carpeta) enlace(g.nombre, g.carpeta, !g.titulos.length);
+  }
 }
 
 function inicio() {
@@ -192,18 +212,15 @@ function inicio() {
   obtenerCatalogo().then((cat) => {
     if (!caja.isConnected) return;
     pintarNav(cat);
-    const grupos = cat.carpetas.filter((c) => c.titulos.length)
-      .sort((a, b) => posicionCategoria(a.carpeta) - posicionCategoria(b.carpeta));
+    const grupos = gruposCatalogo(cat);
     const todos = grupos.flatMap((g) => g.titulos.map((t) => Object.assign({ carpeta: g.carpeta }, t)))
       .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-    if (!todos.length) {
-      heroe.hidden = true;
-      filas.innerHTML = '<div class="vacio">Aún no hay vídeos. Súbelos a e2 y aparecerán aquí solos.</div>';
-      return;
-    }
-    pintarHeroe(heroe, todos);
-    filas.append(fila('Novedades', null, todos.slice(0, 20)));
-    for (const g of grupos) filas.append(fila(nombreCarpeta(g.carpeta), g.carpeta, g.titulos));
+    if (todos.length) {
+      pintarHeroe(heroe, todos);
+      filas.append(fila('Novedades', null, todos.slice(0, 20)));
+    } else heroe.hidden = true;
+    // Todas las categorías: las que tienen algo con sus carátulas y las vacías con «Próximamente»
+    for (const g of grupos) filas.append(fila(g.nombre, g.carpeta, g.titulos));
     enfocarInicio();
   }).catch((e) => {
     heroe.hidden = true;
@@ -224,6 +241,12 @@ function fila(titulo, carpeta, titulos) {
   const carrusel = el('div', 'carrusel');
   const archivos = titulos.filter((t) => t.tipo === 'archivo');
   for (const t of titulos) carrusel.append(cartel(t, archivos));
+  if (!titulos.length) {
+    s.classList.add('vacia');
+    const aviso = el('div', 'proximamente');
+    aviso.append(el('strong', null, 'Próximamente'), el('span', null, 'Aún no hay nada aquí. Lo que subas aparecerá solo.'));
+    carrusel.append(aviso);
+  }
   s.append(h, carrusel);
   return s;
 }

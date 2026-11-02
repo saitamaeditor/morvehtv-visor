@@ -263,6 +263,19 @@
   #nav a { color: #d6d6dc; text-decoration: none; font-size: 14px; white-space: nowrap; transition: color .2s; padding: 4px 0; }
   #nav a:hover { color: #fff; }
   #nav a.activo { color: #fff; font-weight: 700; }
+  #nav a.vacia:not(.activo) { color: #8a8a96; }
+  /* Fila de una categoría sin contenido todavía */
+  .proximamente {
+    flex: 0 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 120px;
+    padding: 18px 24px; border-radius: 6px; border: 1px dashed #34343f; color: #9a9aa6; font-size: 14px;
+    background: linear-gradient(135deg, rgba(79,140,255,.07), rgba(214,64,159,.05));
+  }
+  .proximamente strong { color: #d8d8e0; font-size: 16px; letter-spacing: .02em; }
+  .fila.vacia .fila-titulo a { color: #a8a8b4; }
+  .rejilla > .vacio { grid-column: 1 / -1; max-width: 560px; text-align: left; padding: 22px 26px; border-radius: 8px;
+    border: 1px dashed #34343f; background: linear-gradient(135deg, rgba(79,140,255,.07), rgba(214,64,159,.05)); line-height: 1.6; }
+  .rejilla > .vacio strong { color: #e0e0e8; font-size: 18px; }
+  .tele .proximamente { min-height: 170px; font-size: 18px; }
   #directo { flex: none; }
   #migas { margin: 4px 0 14px; flex: none; min-width: 0; }
 
