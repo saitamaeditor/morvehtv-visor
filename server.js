@@ -300,11 +300,6 @@ const rutas = {
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
   '/api/hls': (p) => hlsIniciar(p),
   '/api/hls-parar': (p) => hlsParar(p.get('id')),
-  '/api/red': (p, req) => ({
-    urls: acceso.direcciones(PUERTO),
-    // El PIN solo se enseña en el propio ordenador
-    pin: acceso.esLocal(req) ? acceso.elPin() : null,
-  }),
   '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),
   '/api/info': () => ({ bucket: E2_BUCKET }),
   '/api/listar': (p) => listarNivel(p.get('prefijo') ?? '', p.get('token')),
@@ -321,7 +316,6 @@ const tipos = {
 // Librerías servidas desde node_modules (sin depender de internet ni de un CDN)
 const VENDOR = {
   '/vendor/hls.min.js': 'node_modules/hls.js/dist/hls.min.js',
-  '/vendor/qrcode.js': 'node_modules/qrcode-generator/qrcode.js',
 };
 
 // El JavaScript de la app se rebaja a una versión que entienden las smart TV de 2017 en

@@ -1,11 +1,5 @@
 const $ = (s) => document.querySelector(s);
-const leer = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
-const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-
-const estado = {
-  prefijo: '', carpetas: [], archivos: [], token: null, buscando: '',
-  vista: leer('vista', 'rejilla'), internas: leer('internas', '0') === '1', orden: leer('orden', 'nombre'),
-};
+const estado = { prefijo: '', carpetas: [], archivos: [], token: null };
 
 const TIPOS = [
   [/\.(mp4|m4v|webm|mov|mkv|ogv)$/i, 'video', '🎬'],
@@ -67,27 +61,12 @@ async function cargar(mas = false) {
   }
 }
 
-async function buscar(q) {
-  estado.buscando = q;
-  if (!q) return cargar();
-  const items = $('#items');
-  items.innerHTML = '<div class="vacio">Buscando…</div>';
-  $('#mas').hidden = true;
-  try {
-    const d = await api('/api/buscar', { prefijo: estado.prefijo, q });
-    if (estado.buscando !== q) return;
-    estado.carpetas = []; estado.archivos = d.archivos; estado.token = null;
-    pintar(d.recortado ? 'Mostrando los primeros 500 resultados.' : '');
-  } catch (e) {
-    items.innerHTML = `<div class="vacio error">${e.message}</div>`;
-  }
-}
-
 function pintarMigas() {
   const partes = estado.prefijo.split('/').filter(Boolean);
   const m = $('#migas'); m.innerHTML = '';
   const enlace = (texto, pref) => {
-    const a = document.createElement('a'); a.textContent = texto; a.onclick = () => irA(pref); m.append(a);
+    // Con href: así el enlace recibe el foco del mando y se abre con OK
+    const a = document.createElement('a'); a.textContent = texto; a.href = `#${encodeURIComponent(pref)}`; m.append(a);
   };
   enlace('🏠 Inicio', '');
   partes.forEach((p, i) => {
@@ -96,49 +75,24 @@ function pintarMigas() {
   });
 }
 
-function ordenados() {
-  const a = [...estado.archivos];
-  const cmp = {
-    nombre: (x, y) => x.key.localeCompare(y.key, 'es', { numeric: true }),
-    fecha: (x, y) => new Date(y.fecha) - new Date(x.fecha),
-    tamano: (x, y) => y.tamano - x.tamano,
-  }[estado.orden];
-  return a.sort(cmp);
-}
-
+// Por nombre (con números en orden natural: «Episodio 2» antes que «Episodio 10») y sin las
+// carpetas internas que empiezan por «_»
 function visibles() {
-  const carpetas = estado.carpetas.filter((c) => estado.internas || !nombre(c).startsWith('_'));
-  const archivos = ordenados().filter((f) => estado.internas || !f.key.slice(estado.prefijo.length).split('/').some((p) => p.startsWith('_')));
+  const interna = (k) => k.slice(estado.prefijo.length).split('/').some((p) => p.startsWith('_'));
+  const carpetas = estado.carpetas.filter((c) => !nombre(c).startsWith('_'));
+  const archivos = estado.archivos.filter((f) => !interna(f.key))
+    .sort((x, y) => x.key.localeCompare(y.key, 'es', { numeric: true }));
   return { carpetas, archivos };
 }
 
-function pintar(nota = '') {
+function pintar() {
   const { carpetas, archivos } = visibles();
   const items = $('#items');
-  items.className = estado.vista;
+  items.className = 'rejilla';
   items.innerHTML = '';
-  const total = archivos.reduce((s, f) => s + f.tamano, 0);
-
-  const est = $('#estado');
-  est.innerHTML = '';
-  const txt = document.createElement('span');
-  txt.textContent = estado.buscando
-    ? `${archivos.length} resultado(s) para «${estado.buscando}» · ${bytes(total)}`
-    : `${carpetas.length} carpeta(s) · ${archivos.length} archivo(s) · ${bytes(total)}${estado.token ? ' (hay más)' : ''}`;
-  est.append(txt);
-  if (nota) { const n = document.createElement('span'); n.textContent = nota; est.append(n); }
-  if (!estado.buscando) {
-    const b = document.createElement('button'); b.className = 'boton'; b.innerHTML = '📊<span class="txt"> Tamaño total de la carpeta</span>';
-    b.onclick = async () => {
-      b.disabled = true; b.textContent = 'Calculando…';
-      try { const d = await api('/api/tamano', { prefijo: estado.prefijo }); b.textContent = `📊 ${d.objetos} objetos · ${bytes(d.bytes)}`; }
-      catch (e) { b.textContent = 'Error: ' + e.message; }
-    };
-    est.append(b);
-  }
 
   let otras = carpetas;
-  if (!estado.prefijo && !estado.buscando) {
+  if (!estado.prefijo) {
     otras = carpetas.filter((c) => !categoriaDe(c));
     items.append(portada(carpetas));
     if (otras.length || archivos.length) items.append(el('h2', 'seccion', 'Otras carpetas y archivos'));
@@ -146,12 +100,11 @@ function pintar(nota = '') {
   for (const c of otras) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
-    if (estado.prefijo || estado.buscando) conMeta(t, 'carpeta', c);
+    if (estado.prefijo) conMeta(t, 'carpeta', c);
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
-    const titulo = estado.buscando ? f.key.slice(estado.prefijo.length) : nombre(f.key);
-    const t = tarjeta({ icono, titulo, miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i), nuevo: nuevas.has(f.key) });
+    const t = tarjeta({ icono, titulo: nombre(f.key), miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i), nuevo: nuevas.has(f.key) });
     t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
     t.dataset.key = f.key;
     items.append(t);
@@ -248,7 +201,7 @@ function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {
   const d = document.createElement('div'); d.className = 'item'; d.title = titulo;
   d.tabIndex = 0; d.setAttribute('role', 'button');
   const mini = document.createElement('div'); mini.className = 'mini';
-  if (miniatura && estado.vista === 'rejilla') {
+  if (miniatura) {
     const img = document.createElement('img'); img.loading = 'lazy'; img.src = miniatura; img.alt = '';
     img.onerror = () => { mini.textContent = icono; };
     mini.append(img);
@@ -296,7 +249,7 @@ async function conMeta(t, clase, clave) {
   if (!d?.encontrado || !t.isConnected) return;
   const imagen = d.episodio?.imagen ?? d.poster;
   const mini = t.querySelector('.mini');
-  if (imagen && estado.vista === 'rejilla') {
+  if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
     mini.replaceChildren(img);
     mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
@@ -795,7 +748,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#migas a, .herr input, .herr select, .herr .boton, #estado .boton, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, .controles input, #vcontenido > video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
 const visible = (x) => { const r = x.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
@@ -840,10 +793,8 @@ function enfocarVisor() {
 // si ya está en la portada (la app de Android usa eso para salir con el botón Atrás).
 function atras() {
   if (window.morvehSaltarIntro && window.morvehSaltarIntro()) return true;
-  if (!$('#dispositivos').hidden) { $('#dispositivos').hidden = true; return true; }
   if ($('#visor').classList.contains('cine')) { salirCine(); return true; }
   if (actual >= 0) { cerrar(); return true; }
-  if (estado.buscando) { $('#q').value = ''; buscar(''); return true; }
   if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }
   return false;
 }
@@ -908,24 +859,6 @@ $('#salircine').onclick = salirCine;
 $('#ant').onclick = () => abrir(actual - 1);
 $('#sig').onclick = () => abrir(actual + 1);
 
-let espera;
-$('#q').oninput = (e) => { clearTimeout(espera); espera = setTimeout(() => buscar(e.target.value.trim()), 400); };
-
-$('#orden').value = estado.orden;
-$('#orden').onchange = (e) => { estado.orden = e.target.value; guardar('orden', estado.orden); pintar(); };
-
-const pintarVista = () => {
-  $('#vista').innerHTML = estado.vista === 'rejilla' ? '☷<span class="txt"> Lista</span>' : '▦<span class="txt"> Cuadrícula</span>';
-};
-pintarVista();
-$('#vista').onclick = () => { estado.vista = estado.vista === 'rejilla' ? 'lista' : 'rejilla'; guardar('vista', estado.vista); pintarVista(); pintar(); };
-
-$('#internas').classList.toggle('activo', estado.internas);
-$('#internas').onclick = () => {
-  estado.internas = !estado.internas; guardar('internas', estado.internas ? '1' : '0');
-  $('#internas').classList.toggle('activo', estado.internas); pintar();
-};
-
 // ---------- Actualización automática ----------
 // El servidor repasa el bucket cada 20 s y avisa de lo que se sube, cambia o se borra:
 // la carpeta que estás viendo se vuelve a pintar sin recargar la página.
@@ -940,7 +873,6 @@ async function refrescar({ nuevos, cambiados, borrados }) {
     aviso(archivosNuevos.length === 1 ? `Nuevo: ${nombre(archivosNuevos[0])}` : `${archivosNuevos.length} archivos nuevos`, 5000);
   }
   if (![...nuevos, ...cambiados, ...borrados].some((k) => k.startsWith(estado.prefijo))) return;
-  if (estado.buscando) return buscar(estado.buscando);
   const d = await api('/api/listar', { prefijo: estado.prefijo });
   estado.carpetas = d.carpetas; estado.archivos = d.archivos; estado.token = d.siguiente;
   pintar();
@@ -960,7 +892,7 @@ eventos.addEventListener('cambios', (e) => refrescar(JSON.parse(e.data)).catch((
 
 window.addEventListener('hashchange', () => {
   estado.prefijo = decodeURIComponent(location.hash.slice(1));
-  estado.buscando = ''; $('#q').value = ''; cerrar(); cargar();
+  cerrar(); cargar();
 });
 
 // El nombre del bucket solo se muestra si no es el mismo que el de la app
@@ -968,27 +900,3 @@ api('/api/info').then((d) => { if (d.bucket.toLowerCase() !== 'morvehtv') $('#bu
 estado.prefijo = decodeURIComponent(location.hash.slice(1));
 cargar();
 
-// ---------- Ver en otros dispositivos ----------
-// Solo en el ordenador donde corre el servidor (el único al que se le enseña el PIN)
-api('/api/red').then((d) => {
-  if (!d.pin || !d.urls.length) return;
-  const url = d.urls[0];
-  $('#otros').hidden = false;
-  $('#otros').onclick = () => {
-    $('#urlred').textContent = d.urls.join('  ·  ');
-    $('#pinred').textContent = d.pin;
-    if (window.qrcode && !$('#qr').firstChild) {
-      const q = qrcode(0, 'M');
-      q.addData(url);
-      q.make();
-      $('#qr').innerHTML = q.createImgTag(6, 0);
-    }
-    $('#dispositivos').hidden = false;
-    $('#cerrarotros').focus();
-  };
-}).catch(() => {});
-$('#cerrarotros').onclick = () => { $('#dispositivos').hidden = true; };
-$('#dispositivos').onclick = (e) => { if (e.target.id === 'dispositivos') $('#dispositivos').hidden = true; };
-
-// En internet las carpetas internas no se pueden ver: sobra el botón «Ocultas»
-fetch('/api/modo').then((r) => r.json()).then((d) => { if (d.nube) $('#internas').hidden = true; }).catch(() => {});
