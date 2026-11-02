@@ -757,6 +757,7 @@ function enfocarVisor() {
 // Un paso atrás: cerrar panel o vídeo, quitar la búsqueda o subir de carpeta. Devuelve false
 // si ya está en la portada (la app de Android usa eso para salir con el botón Atrás).
 function atras() {
+  if (window.morvehSaltarIntro && window.morvehSaltarIntro()) return true;
   if (!$('#dispositivos').hidden) { $('#dispositivos').hidden = true; return true; }
   if (actual >= 0) { cerrar(); return true; }
   if (estado.buscando) { $('#q').value = ''; buscar(''); return true; }
