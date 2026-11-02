@@ -45,6 +45,8 @@ export async function iniciar(dir) {
 }
 
 export const elPin = () => (NUBE ? null : secreto);
+// Diagnóstico temporal: forma del PIN configurado, sin revelarlo
+export const formaPin = () => ({ caracteres: secreto.length, soloNumeros: /^\d+$/.test(secreto) });
 
 // Detrás del proxy de Render la IP real llega en x-forwarded-for
 const ipDe = (req) =>
