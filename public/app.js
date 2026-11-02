@@ -525,8 +525,11 @@ document.addEventListener('pause', () => { clearTimeout(reposo); $('#visor').cla
 // nuevo desde ese punto.
 function reproductor(key, m) {
   const caja = el('div', 'repro');
-  const v = el('video'); v.autoplay = true; v.playsInline = true; v.setAttribute('playsinline', '');
+  // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
+  const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
   const barra = el('div', 'controles');
+  const bGrande = el('button', 'gran-play', '▶');
+  bGrande.setAttribute('aria-label', 'Reproducir');
   const bPlay = el('button', 'boton', '▶');
   const bAtras = el('button', 'boton', '⟲ 10');
   const bAdelante = el('button', 'boton', '10 ⟳');
@@ -534,23 +537,24 @@ function reproductor(key, m) {
   const tiempo = el('span', 'tiempo', `0:00 / ${hms(m.duracion)}`);
   const bSonido = el('button', 'boton sonido', '🔊');
   const bPantalla = el('button', 'boton', '⛶');
-  barra.append(bPlay, bAtras, bAdelante, rango, tiempo);
-
+  // El idioma del audio va el primero, a la izquierda
   let selAudio = null;
   if (m.audios.length > 1) {
-    selAudio = el('select');
+    selAudio = el('select', 'audio');
+    selAudio.title = 'Idioma del audio';
     m.audios.forEach((a, n) => selAudio.append(new Option(`🗣 ${(a.titulo || a.idioma || `Pista ${n + 1}`).toUpperCase()}`, n)));
     barra.append(selAudio);
   }
-  barra.append(bSonido, bPantalla);
+  barra.append(bPlay, bAtras, bAdelante, rango, tiempo, bSonido, bPantalla);
   const cargando = el('div', 'cargando', 'Preparando vídeo…');
-  caja.append(v, cargando, barra);
+  caja.append(v, bGrande, cargando, barra);
 
   let desde = 0;
   let sesion = null;
   let hls = null;
   let turno = 0;
   let arrastrando = false;
+  let quiere = false; // se pulsó ▶ antes de que el vídeo estuviera listo
   const ahora = () => desde + v.currentTime;
   const preparado = () => (v.seekable.length ? v.seekable.end(v.seekable.length - 1) : 0);
   const parar = (id) => id && fetch(`/api/hls-parar?id=${id}`, { keepalive: true }).catch(() => {});
@@ -559,7 +563,7 @@ function reproductor(key, m) {
   // «reproducir»: falso al recuperarse de un corte con el vídeo en pausa (sigue en pausa)
   function fuente(url, inicio, reproducir) {
     if (hls) { hls.destroy(); hls = null; }
-    const arrancar = () => reproducir && v.play().catch(() => {});
+    const arrancar = () => (reproducir || quiere) && v.play().catch(() => {});
     if (hlsNativo(v)) {
       v.src = url;
       v.addEventListener('loadedmetadata', () => { v.currentTime = inicio; }, { once: true });
@@ -583,10 +587,13 @@ function reproductor(key, m) {
     });
   }
 
-  async function ir(t, reproducir = true) {
+  // Saltar de minuto o cambiar de idioma mantiene el estado: si estaba en pausa, sigue en pausa
+  async function ir(t, reproducir = !v.paused) {
     t = Math.min(Math.max(0, t), Math.max(0, m.duracion - 5));
     if (sesion && t >= desde && t - desde < preparado() - 2) { v.currentTime = t - desde; return; }
     const mio = ++turno;
+    // El reloj y la barra marcan ya el minuto elegido mientras se prepara
+    rango.value = t; pintarTiempo(t);
     cargando.hidden = false; cargando.textContent = 'Preparando vídeo…';
     try {
       // Empieza 20 s antes: así retroceder un poco es instantáneo
@@ -619,12 +626,17 @@ function reproductor(key, m) {
     vigia = setTimeout(() => { if (caja.isConnected && !v.paused && v.readyState < 3) retomar(); }, 15000);
   };
   v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); };
-  v.onplay = () => { bPlay.textContent = '❚❚'; mantenerPantalla(true); };
-  v.onpause = () => { bPlay.textContent = '▶'; mantenerPantalla(false); };
+  v.onplay = () => { bPlay.textContent = '❚❚'; bGrande.hidden = true; mantenerPantalla(true); };
+  v.onpause = () => { quiere = false; bPlay.textContent = '▶'; bGrande.hidden = false; mantenerPantalla(false); };
+  // Listo para empezar: se quita «Preparando vídeo…» aunque aún no se haya pulsado ▶
+  v.oncanplay = () => { if (v.paused) cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide
   // más desde ese punto
-  v.onended = () => { if (ahora() < m.duracion - 10) ir(ahora()); };
-  const alternar = () => (v.paused ? v.play().catch(() => {}) : v.pause());
+  v.onended = () => { if (ahora() < m.duracion - 10) ir(ahora(), true); };
+  const alternar = () => {
+    if (v.paused) { quiere = true; v.play().catch(() => {}); } else { quiere = false; v.pause(); }
+  };
+  bGrande.onclick = alternar;
   bPlay.onclick = alternar;
   v.onclick = alternar;
   bAtras.onclick = () => ir(ahora() - 10);
@@ -638,14 +650,14 @@ function reproductor(key, m) {
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
   caja.parar = () => { turno++; clearTimeout(vigia); mantenerPantalla(false); if (hls) hls.destroy(); hls = null; parar(sesion); sesion = null; };
-  ir(0);
+  ir(0, false);
   return caja;
 }
 
 // Vídeo MP4 que va directo desde e2. Si la red se corta, vuelve a pedirlo (con un enlace
 // nuevo) desde el mismo segundo en vez de quedarse parado.
 function videoDirecto(key, url, alFallar) {
-  const v = el('video'); v.controls = true; v.autoplay = true; v.playsInline = true; v.setAttribute('playsinline', '');
+  const v = el('video'); v.controls = true; v.preload = 'auto'; v.playsInline = true; v.setAttribute('playsinline', '');
   let intentos = 0;
   let vigia = null;
   async function retomar() {
@@ -734,7 +746,7 @@ async function abrir(i) {
     } else if (clase === 'imagen') {
       const img = el('img'); img.src = url; img.alt = nombre(f.key); c.append(img);
     } else if (clase === 'audio') {
-      const a = el('audio'); a.src = url; a.controls = true; a.autoplay = true; c.append(a);
+      const a = el('audio'); a.src = url; a.controls = true; c.append(a);
     } else if (clase === 'pdf') {
       const fr = el('iframe'); fr.src = url; c.append(fr);
     } else if (clase === 'texto') {

@@ -129,10 +129,20 @@
     padding: 36px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
   #visor.cine .controles .boton, #visor.cine .controles select { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
   #visor.cine .controles .tiempo { color: #e7e9ee; }
-  #visor.cine .cargando { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; padding: 10px 16px; z-index: 2; }
+  #visor.cine .cargando { position: fixed; top: calc(50% + 78px); left: 50%; transform: translate(-50%, -50%); font-size: 18px; padding: 10px 16px; z-index: 2; }
   #visor.cine.reposo .controles, #visor.cine.reposo .barra { opacity: 0; pointer-events: none; }
   #visor.cine.reposo { cursor: none; }
   .tele #visor.cine .controles .boton { font-size: 24px; }
+  /* ▶ grande en el centro mientras el vídeo está en pausa */
+  .gran-play {
+    position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 2;
+    width: 84px; height: 84px; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); cursor: pointer;
+    background: rgba(10,12,16,.55); color: #fff; font-size: 34px; line-height: 1; padding-left: 6px;
+    box-shadow: 0 6px 30px rgba(0,0,0,.6); transition: transform .15s, background .15s;
+  }
+  .gran-play:hover, .gran-play:focus { background: rgba(79,140,255,.75); transform: translate(-50%, -50%) scale(1.06); outline: none; }
+  #visor.cine .gran-play { position: fixed; top: 50%; }
+  .tele .gran-play { width: 110px; height: 110px; font-size: 44px; }
   .cargando { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,.7); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
   /* Metadatos */
   .item .mini.cartel { aspect-ratio: 2/3; }
@@ -242,7 +252,7 @@
   /* Controles del reproductor en pantallas estrechas: la barra de progreso arriba, a lo
      ancho, y los botones debajo en una fila (el volumen lo llevan los botones del móvil) */
   @media (max-width: 700px) {
-    .controles { gap: 6px; padding: 8px 10px; justify-content: center; }
+    .controles { gap: 6px; padding: 8px 10px; justify-content: flex-start; }
     .controles input[type=range] { order: -2; flex: 1 1 100%; min-width: 0; margin: 0; }
     .controles .tiempo { order: -1; flex: 1 1 100%; text-align: right; font-size: 12px; margin-top: -2px; }
     .controles .boton { padding: 8px 12px; }
