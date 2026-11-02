@@ -127,15 +127,13 @@
   #visor.cine .controles .boton, #visor.cine .controles select { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
   #visor.cine .controles .tiempo { color: #e7e9ee; }
   #visor.cine .cargando { position: fixed; top: calc(50% + 78px); left: 50%; transform: translate(-50%, -50%); font-size: 18px; padding: 10px 16px; z-index: 2; }
-  /* Viendo el vídeo solo se esconde la barra de progreso (y el título): el idioma del audio,
-     ⛶ para hacer pequeña la pantalla, «‹ Volver» y el resto de botones siguen a mano */
-  #visor.cine .controles input[type=range], #visor.cine .controles .tiempo, #visor.cine #vtitulo { transition: opacity .3s; }
-  #visor.cine.reposo .controles input[type=range], #visor.cine.reposo .controles .tiempo, #visor.cine.reposo #vtitulo { opacity: 0; pointer-events: none; }
-  #visor.cine.reposo .controles, #visor.cine.reposo .barra { background: transparent; }
-  #visor.cine.reposo .controles .boton, #visor.cine.reposo .controles select, #visor.cine.reposo #salircine { opacity: .72; }
-  #visor.cine.reposo .controles .boton:hover, #visor.cine.reposo .controles .boton:focus,
-  #visor.cine.reposo .controles select:focus, #visor.cine.reposo #salircine:focus { opacity: 1; }
+  /* Viendo el vídeo, a los 3 s se esconden solos los botones, la barra de progreso y la barra
+     de arriba; vuelven al tocar la pantalla, mover el ratón o pulsar el mando */
+  #visor.cine.reposo .controles, #visor.cine.reposo .barra { opacity: 0; }
+  #visor.cine.reposo .controles *, #visor.cine.reposo .barra * { pointer-events: none; }
   #visor.cine.reposo video { cursor: none; }
+  /* Botones agrupados a la izquierda; la barra de progreso ocupa el resto */
+  .controles { justify-content: flex-start; }
   .tele #visor.cine .controles .boton { font-size: 24px; }
   /* ▶ grande en el centro mientras el vídeo está en pausa */
   .gran-play {

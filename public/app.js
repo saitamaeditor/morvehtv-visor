@@ -596,9 +596,9 @@ function alCambiarPantalla() {
 document.addEventListener('fullscreenchange', alCambiarPantalla);
 document.addEventListener('webkitfullscreenchange', alCambiarPantalla);
 
-// Viendo el vídeo, a los 3 s se esconde la barra de progreso (los botones siguen a la vista) y
-// vuelve al mover el ratón, tocar la pantalla o pulsar el mando. Tocar la imagen con la barra
-// escondida solo la enseña (no pausa); los botones y el selector de audio responden siempre.
+// Viendo el vídeo, a los 3 s se esconden los controles (botones, barra de progreso y la barra de
+// arriba) y vuelven al mover el ratón, tocar la pantalla o pulsar el mando. Con ellos escondidos,
+// tocar la pantalla solo los enseña (no pausa); con el mando, cualquier tecla los enseña.
 let reposo = null;
 let tocadoEnReposo = false;
 function despertar() {
@@ -652,7 +652,8 @@ function reproductor(key, m) {
     m.audios.forEach((a, n) => selAudio.append(new Option(`🗣 ${(a.titulo || a.idioma || `Pista ${n + 1}`).toUpperCase()}`, n)));
     barra.append(selAudio);
   }
-  barra.append(bPlay, bAtras, bAdelante, rango, tiempo, bSonido, bPantalla);
+  // Todos los botones a la izquierda y, detrás, la barra de progreso con el tiempo
+  barra.append(bPlay, bAtras, bAdelante, bSonido, bPantalla, rango, tiempo);
   const cargando = el('div', 'cargando', 'Preparando vídeo…');
   caja.append(v, bGrande, cargando, barra);
 
@@ -915,7 +916,7 @@ const visible = (x) => {
   const r = x.getBoundingClientRect();
   if (!r.width || !r.height) return false;
   const e = getComputedStyle(x);
-  return e.visibility !== 'hidden' && e.opacity !== '0' && e.pointerEvents !== 'none';
+  return e.visibility !== 'hidden' && e.pointerEvents !== 'none';
 };
 
 function moverFoco(dir) {
@@ -930,7 +931,10 @@ function moverFoco(dir) {
   const r = a.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
   let mejor = null, puntos = Infinity;
+  // En la fila de botones del reproductor, ← → solo pasan de un botón a otro
+  const fila = (dir === 'izq' || dir === 'der') && a.closest && a.closest('.controles');
   for (const c of cands) {
+    if (fila && !fila.contains(c)) continue;
     if (c === a) continue;
     const s = c.getBoundingClientRect();
     const x = s.left + s.width / 2, y = s.top + s.height / 2;
@@ -987,7 +991,11 @@ document.addEventListener('keydown', (e) => {
     return;
   }
   if (escribiendo) {
-    // En el buscador, ↑ ↓ salen hacia los botones o las tarjetas
+    const flecha = ['arriba', 'abajo', 'izq', 'der'].includes(k);
+    // En el selector de idioma del reproductor las flechas pasan a otro botón (si no, la tele
+    // cambiaría de idioma sin querer); OK abre la lista de idiomas
+    if (flecha && a.tagName === 'SELECT' && a.closest('.controles')) { e.preventDefault(); moverFoco(k); return; }
+    // En los campos de texto, ↑ ↓ salen hacia los botones o las tarjetas
     if (a.tagName === 'INPUT' && (k === 'arriba' || k === 'abajo')) { e.preventDefault(); moverFoco(k); }
     return;
   }
