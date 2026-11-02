@@ -447,13 +447,77 @@ const el = (etiqueta, clase, texto) => {
 // (Android, smart TV, ordenador) lo hace con hls.js
 const hlsNativo = (v) => !(window.Hls && Hls.isSupported()) && !!v.canPlayType('application/vnd.apple.mpegurl');
 
-function pantallaCompleta(caja, v) {
-  const fuera = document.exitFullscreen || document.webkitExitFullscreen;
-  if (document.fullscreenElement || document.webkitFullscreenElement) return fuera.call(document);
-  const entrar = caja.requestFullscreen || caja.webkitRequestFullscreen;
-  if (entrar) return entrar.call(caja);
-  if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); // iPhone: solo el vídeo puede ir a pantalla completa
+// ---------- Modo cine: el vídeo a pantalla completa nada más darle a reproducir ----------
+// Se pide la pantalla completa del navegador (o de la app Android) en el mismo toque/clic que
+// abre el vídeo, porque los navegadores solo la permiten en respuesta a una acción tuya. Donde
+// no existe (iPhone) el vídeo igualmente ocupa toda la pantalla. Al salir se vuelve a la ficha.
+let cineReal = false;
+const enPantallaCompleta = () => document.fullscreenElement || document.webkitFullscreenElement;
+
+function entrarCine() {
+  const visor = $('#visor');
+  visor.classList.add('cine');
+  despertar();
+  if (enPantallaCompleta()) return;
+  const pedir = visor.requestFullscreen || visor.webkitRequestFullscreen;
+  if (!pedir) return;
+  try {
+    const p = pedir.call(visor);
+    if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
 }
+
+function salirCine() {
+  const visor = $('#visor');
+  visor.classList.remove('cine', 'reposo');
+  if (enPantallaCompleta()) {
+    const salir = document.exitFullscreen || document.webkitExitFullscreen;
+    try { const p = salir.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+}
+
+// Esc, el botón Atrás de la app o el gesto del móvil sacan de la pantalla completa: se sale
+// también del modo cine y se ve la ficha
+function alCambiarPantalla() {
+  const giro = screen.orientation;
+  if (enPantallaCompleta()) {
+    cineReal = true;
+    // En el móvil, el vídeo se ve en horizontal (el navegador solo lo permite en pantalla completa)
+    if (giro && giro.lock && matchMedia('(pointer: coarse)').matches) giro.lock('landscape').catch(() => {});
+    return;
+  }
+  if (giro && giro.unlock) try { giro.unlock(); } catch (e) {}
+  if (cineReal) { cineReal = false; $('#visor').classList.remove('cine', 'reposo'); }
+}
+document.addEventListener('fullscreenchange', alCambiarPantalla);
+document.addEventListener('webkitfullscreenchange', alCambiarPantalla);
+
+// Los controles se esconden a los 3 s viendo el vídeo y vuelven al mover el ratón, tocar la
+// pantalla o pulsar el mando. Si estaban escondidos, el primer toque solo los enseña (no pausa).
+let reposo = null;
+let tocadoEnReposo = false;
+function despertar() {
+  const visor = $('#visor');
+  visor.classList.remove('reposo');
+  clearTimeout(reposo);
+  reposo = setTimeout(() => {
+    const v = document.querySelector('#vcontenido video');
+    if (visor.classList.contains('cine') && v && !v.paused) visor.classList.add('reposo');
+  }, 3000);
+}
+['mousemove', 'keydown'].forEach((ev) => document.addEventListener(ev, () => { if ($('#visor').classList.contains('cine')) despertar(); }, true));
+document.addEventListener('pointerdown', () => {
+  const visor = $('#visor');
+  if (!visor.classList.contains('cine')) return;
+  tocadoEnReposo = visor.classList.contains('reposo');
+  despertar();
+}, true);
+document.addEventListener('click', (e) => {
+  if (tocadoEnReposo && e.target.closest && e.target.closest('#visor')) { e.stopPropagation(); e.preventDefault(); }
+  tocadoEnReposo = false;
+}, true);
+document.addEventListener('play', (e) => { if (e.target.closest && e.target.closest('#vcontenido')) despertar(); }, true);
+document.addEventListener('pause', () => { clearTimeout(reposo); $('#visor').classList.remove('reposo'); }, true);
 
 // Reproductor del vídeo convertido: el servidor prepara HLS desde el segundo pedido, así que
 // la barra es propia. Saltar dentro de lo ya preparado es inmediato; más lejos, se pide de
@@ -568,7 +632,7 @@ function reproductor(key, m) {
   rango.onchange = () => { arrastrando = false; ir(Number(rango.value)); };
   if (selAudio) selAudio.onchange = () => { const t = ahora(); parar(sesion); sesion = null; ir(t); };
   bSonido.onclick = () => { v.muted = !v.muted; bSonido.textContent = v.muted ? '🔇' : '🔊'; };
-  bPantalla.onclick = () => pantallaCompleta(caja, v);
+  bPantalla.onclick = () => ($('#visor').classList.contains('cine') ? salirCine() : entrarCine());
   caja.irA = ir;
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
@@ -636,6 +700,8 @@ async function abrir(i) {
   const f = lista[i];
   const [, clase] = tipo(f.key);
   $('#visor').classList.add('abierto');
+  if (clase === 'video' || clase === 'video-raro') entrarCine();
+  else salirCine();
   $('#vtitulo').textContent = f.key;
   $('#vmeta').textContent = `${bytes(f.tamano)} · ${fecha(f.fecha)}`;
   $('#ant').hidden = i === 0; $('#sig').hidden = i === lista.length - 1;
@@ -685,6 +751,7 @@ async function abrir(i) {
 }
 
 function cerrar() {
+  salirCine();
   pararMedios();
   $('#visor').classList.remove('abierto');
   $('#vcontenido').innerHTML = '';
@@ -759,6 +826,7 @@ function enfocarVisor() {
 function atras() {
   if (window.morvehSaltarIntro && window.morvehSaltarIntro()) return true;
   if (!$('#dispositivos').hidden) { $('#dispositivos').hidden = true; return true; }
+  if ($('#visor').classList.contains('cine')) { salirCine(); return true; }
   if (actual >= 0) { cerrar(); return true; }
   if (estado.buscando) { $('#q').value = ''; buscar(''); return true; }
   if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }
@@ -781,7 +849,8 @@ document.addEventListener('keydown', (e) => {
 
   if (k === 'atras') {
     if (escribiendo && e.key === 'Backspace') return;
-    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    // Esc ya lo gestiona el navegador para salir de la pantalla completa
+    if (enPantallaCompleta() && (e.key === 'Escape' || e.key === 'Esc')) return;
     e.preventDefault();
     atras();
     return;
@@ -797,7 +866,8 @@ document.addEventListener('keydown', (e) => {
     const repro = document.querySelector('#vcontenido .repro');
     const video = document.querySelector('#vcontenido video');
     // «Libre» = el foco no está en un botón: ← → mueven el vídeo y OK pausa
-    const libre = !a || a === document.body || a.tagName === 'VIDEO';
+    // Con los controles escondidos, ← → siempre mueven el vídeo
+    const libre = !a || a === document.body || a.tagName === 'VIDEO' || $('#visor').classList.contains('reposo');
     const alternar = () => (repro ? repro.alternar() : video && (video.paused ? video.play() : video.pause()));
     const saltar = (s) => (repro ? repro.saltar(s) : video && (video.currentTime += s));
     if (k === 'play' || (k === 'ok' && libre) || (e.key === ' ' && libre)) { e.preventDefault(); return alternar(); }
@@ -818,6 +888,10 @@ document.addEventListener('keydown', (e) => {
   if (['arriba', 'abajo', 'izq', 'der'].includes(k)) { e.preventDefault(); moverFoco(k); }
 });
 $('#mas').onclick = () => cargar(true);
+$('#vcerrar').onclick = cerrar;
+$('#salircine').onclick = salirCine;
+$('#ant').onclick = () => abrir(actual - 1);
+$('#sig').onclick = () => abrir(actual + 1);
 
 let espera;
 $('#q').oninput = (e) => { clearTimeout(espera); espera = setTimeout(() => buscar(e.target.value.trim()), 400); };

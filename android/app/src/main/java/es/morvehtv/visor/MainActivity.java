@@ -5,6 +5,7 @@ import android.app.Activity;
 import android.app.UiModeManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -148,6 +149,8 @@ public class MainActivity extends Activity {
             raiz.addView(vista, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             web.setVisibility(View.GONE);
             ocultarBarras(true);
+            // En el móvil, el vídeo a pantalla completa se ve en horizontal (gira según cómo lo cojas)
+            if (!esTele()) setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
         }
 
         @Override
@@ -157,6 +160,7 @@ public class MainActivity extends Activity {
             vistaCompleta = null;
             web.setVisibility(View.VISIBLE);
             ocultarBarras(false);
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
             if (alSalirCompleta != null) alSalirCompleta.onCustomViewHidden();
             alSalirCompleta = null;
             web.requestFocus();

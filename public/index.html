@@ -109,6 +109,30 @@
   .controles input[type=range] { flex: 1; min-width: 140px; accent-color: var(--acento); }
   .controles .tiempo { color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .controles select { background: var(--panel2); border: 1px solid var(--borde); border-radius: 8px; padding: 6px; }
+  /* ---------- Modo cine: el vídeo ocupa toda la pantalla ---------- */
+  #salircine { display: none; }
+  #visor.cine { background: #000; }
+  #visor.cine .barra { position: fixed; top: 0; left: 0; right: 0; z-index: 3; background: linear-gradient(rgba(0,0,0,.8), transparent);
+    border: 0; padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 28px max(16px, env(safe-area-inset-left)); transition: opacity .3s; }
+  #visor.cine .barra > * { display: none; }
+  #visor.cine .barra #salircine, #visor.cine .barra #vtitulo { display: inline-flex; }
+  #visor.cine #salircine { order: -1; }
+  #visor.cine #vtitulo { flex: 1; text-shadow: 0 1px 4px #000; word-break: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #visor.cine .flecha, #visor.cine .ficha { display: none !important; }
+  #visor.cine .contenido { padding: 0; overflow: hidden; justify-content: center; }
+  #visor.cine .repro { position: fixed; top: 0; left: 0; right: 0; bottom: 0; max-width: none; z-index: 1; }
+  #visor.cine .repro video, #visor.cine .contenido > video {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; max-height: none; object-fit: contain; background: #000; }
+  #visor.cine .controles {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 2; border: 0; transition: opacity .3s;
+    background: linear-gradient(transparent, rgba(0,0,0,.88));
+    padding: 36px max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  #visor.cine .controles .boton, #visor.cine .controles select { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.22); }
+  #visor.cine .controles .tiempo { color: #e7e9ee; }
+  #visor.cine .cargando { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; padding: 10px 16px; z-index: 2; }
+  #visor.cine.reposo .controles, #visor.cine.reposo .barra { opacity: 0; pointer-events: none; }
+  #visor.cine.reposo { cursor: none; }
+  .tele #visor.cine .controles .boton { font-size: 24px; }
   .cargando { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,.7); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
   /* Metadatos */
   .item .mini.cartel { aspect-ratio: 2/3; }
@@ -222,6 +246,7 @@
     <div class="titulo" id="vtitulo"></div>
     <span id="vmeta" style="color:var(--suave)"></span>
     <button class="boton" id="vcerrar">✕</button>
+    <button class="boton" id="salircine" title="Salir de pantalla completa">‹ Volver</button>
   </div>
   <div class="contenido" id="vcontenido"></div>
   <button class="flecha" id="ant">‹</button>
