@@ -1,0 +1,73 @@
+# Compila el APK de MorvehTV (móvil y Android TV) en los servidores de GitHub y lo publica en
+# Releases → «apk». Descarga directa siempre en la misma dirección:
+#   https://github.com/saitamaeditor/morvehtv-visor/releases/latest/download/MorvehTV.apk
+name: APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      # Firma: la clave guardada en los secretos del repositorio (KEYSTORE_B64 y
+      # KEYSTORE_PASSWORD). Sin ellos se firma con una clave provisional: el APK funciona, pero
+      # cada versión habrá que instalarla desinstalando antes la anterior.
+      - name: Preparar la firma
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/firma.p12"
+            echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "FIRMA=definitiva" >> "$GITHUB_ENV"
+          else
+            CLAVE=$(openssl rand -hex 16)
+            echo "::add-mask::$CLAVE"
+            keytool -genkeypair -storetype pkcs12 -keystore "$RUNNER_TEMP/firma.p12" -alias morvehtv \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=MorvehTV" -storepass "$CLAVE" -keypass "$CLAVE"
+            echo "KEYSTORE_PASSWORD=$CLAVE" >> "$GITHUB_ENV"
+            echo "FIRMA=provisional" >> "$GITHUB_ENV"
+          fi
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/firma.p12" >> "$GITHUB_ENV"
+
+      - name: Compilar
+        env:
+          NUMERO_COMPILACION: ${{ github.run_number }}
+        run: |
+          gradle -p android assembleRelease --no-daemon
+          cp android/app/build/outputs/apk/release/app-release.apk MorvehTV.apk
+          # Comprobación: nombre, versión y que aparece en móvil y en Android TV
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          "$AAPT2" dump badging MorvehTV.apk | grep -E "^(package|application-label|sdkVersion|launchable-activity|leanback-launchable-activity)"
+          ls -la MorvehTV.apk
+
+      - name: Publicar en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTAS="MorvehTV para móvil Android y Android TV · compilación ${{ github.run_number }} · firma ${FIRMA}"
+          if gh release view apk > /dev/null 2>&1; then
+            gh release edit apk --title "MorvehTV (APK)" --notes "$NOTAS" --latest
+          else
+            gh release create apk --title "MorvehTV (APK)" --notes "$NOTAS" --latest
+          fi
+          gh release upload apk MorvehTV.apk --clobber

@@ -1,0 +1,50 @@
+// App MorvehTV para móvil y Android TV: una pantalla con el visor publicado en Render.
+// Sin librerías externas (solo el WebView del sistema), así compila rápido y pesa poco.
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'es.morvehtv.visor'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'es.morvehtv.visor'
+        minSdk 24
+        targetSdk 35
+        // GitHub Actions numera cada compilación; así cada APK nuevo se instala encima del anterior
+        versionCode Integer.parseInt(System.getenv('NUMERO_COMPILACION') ?: '1')
+        versionName "1.0.${System.getenv('NUMERO_COMPILACION') ?: '0'}"
+        buildConfigField 'String', 'SERVIDOR', '"https://morvehtv-visor.onrender.com/"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            // La clave de firma vive en los secretos de GitHub, nunca en el repositorio
+            def almacen = System.getenv('KEYSTORE_PATH')
+            if (almacen) {
+                storeFile file(almacen)
+                storeType 'pkcs12'
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias 'morvehtv'
+                keyPassword System.getenv('KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

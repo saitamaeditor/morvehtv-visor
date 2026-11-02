@@ -607,6 +607,8 @@ function videoDirecto(key, url, alFallar) {
 // navegadores que lo permiten; en el resto el propio vídeo suele evitarlo)
 let bloqueoPantalla = null;
 async function mantenerPantalla(si) {
+  // Dentro de la app de Android lo hace la propia app
+  if (window.MorvehApp) { try { window.MorvehApp.pantalla(si); } catch (e) {} return; }
   try {
     if (si && !bloqueoPantalla && navigator.wakeLock) {
       bloqueoPantalla = await navigator.wakeLock.request('screen');
@@ -752,6 +754,17 @@ function enfocarVisor() {
   if (b) b.focus();
 }
 
+// Un paso atrás: cerrar panel o vídeo, quitar la búsqueda o subir de carpeta. Devuelve false
+// si ya está en la portada (la app de Android usa eso para salir con el botón Atrás).
+function atras() {
+  if (!$('#dispositivos').hidden) { $('#dispositivos').hidden = true; return true; }
+  if (actual >= 0) { cerrar(); return true; }
+  if (estado.buscando) { $('#q').value = ''; buscar(''); return true; }
+  if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }
+  return false;
+}
+window.morvehAtras = atras;
+
 function padre(p) {
   const partes = p.split('/').filter(Boolean);
   partes.pop();
@@ -767,12 +780,9 @@ document.addEventListener('keydown', (e) => {
 
   if (k === 'atras') {
     if (escribiendo && e.key === 'Backspace') return;
-    if (!$('#dispositivos').hidden) { $('#dispositivos').hidden = true; return; }
     if (document.fullscreenElement || document.webkitFullscreenElement) return;
     e.preventDefault();
-    if (actual >= 0) cerrar();
-    else if (estado.buscando) { $('#q').value = ''; buscar(''); }
-    else if (estado.prefijo) irA(padre(estado.prefijo));
+    atras();
     return;
   }
   if (escribiendo) {
