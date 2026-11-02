@@ -58,6 +58,9 @@ jobs:
           # Comprobación: nombre, versión y que aparece en móvil y en Android TV
           AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
           "$AAPT2" dump badging MorvehTV.apk | grep -E "^(package|application-label|sdkVersion|launchable-activity|leanback-launchable-activity)"
+          # Huella del certificado: tiene que ser siempre la misma para que las versiones se instalen encima
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs MorvehTV.apk | grep -E "SHA-256"
           ls -la MorvehTV.apk
 
       - name: Publicar en Releases
