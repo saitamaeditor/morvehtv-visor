@@ -22,11 +22,14 @@ const LIMITE_GLOBAL = 30;
 export async function iniciar(dir) {
   await mkdir(path.join(dir, 'data'), { recursive: true });
   if (NUBE) {
-    secreto = process.env.VISOR_CLAVE?.trim();
-    if (!secreto || secreto.length < 4) {
+    // Sin espacios ni comillas alrededor, por si se pegaron al escribirlo en el panel de Render
+    secreto = String(process.env.VISOR_CLAVE ?? '').trim().replace(/^["'](.*)["']$/, '$1').trim();
+    if (secreto.length < 4) {
       console.error('En la nube hace falta la variable VISOR_CLAVE (PIN de al menos 4 caracteres).');
       process.exit(1);
     }
+    // Pista para el registro de Render, sin revelar el PIN
+    console.log(`PIN de entrada configurado: ${secreto.length} caracteres${/^\d+$/.test(secreto) ? ', solo números' : ', NO son solo números'}`);
     return;
   }
   const archivoPin = path.join(dir, 'data', 'pin.txt');
@@ -99,6 +102,7 @@ export async function entrar(req, res) {
   if (!igual(dado, secreto)) {
     fallos.set(ip, { n: (f?.hasta > Date.now() ? f.n : 0) + 1, hasta: Date.now() + 10 * 60000 });
     fallosGlobales.push(Date.now());
+    if (NUBE) console.log(`PIN incorrecto: se escribieron ${dado.length} caracteres${/^\d*$/.test(dado) ? ' (solo números)' : ''}`);
     res.writeHead(401, { 'content-type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify({ error: 'PIN incorrecto' }));
   }
