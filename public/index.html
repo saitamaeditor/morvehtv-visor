@@ -243,16 +243,157 @@
   @media (max-width: 700px) and (pointer: coarse) {
     .controles .sonido { display: none; }
   }
+  /* ================= Estilo de plataforma de streaming =================
+     Fondo casi negro, barra de arriba transparente sobre el destacado, carátulas sin marcos
+     y filas que se desplazan en horizontal. Los colores de marca siguen siendo los de MorvehTV. */
+  :root { --fondo: #0b0b0f; --panel: #16161d; --panel2: #23232c; --borde: #2c2c36; --margen: 4vw; --ancho-cartel: 158px; }
+  body { background: var(--fondo); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { padding: 76px var(--margen) 40px; }
+  body.en-inicio main { padding-top: 0; }
+
+  /* Barra de arriba */
+  header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 6; border: 0; gap: 22px; flex-wrap: nowrap;
+    padding: 14px var(--margen); background: linear-gradient(rgba(0,0,0,.75), rgba(0,0,0,0)); transition: background .35s;
+  }
+  header.solida, body:not(.en-inicio) header { background: rgba(11,11,15,.97); box-shadow: 0 2px 12px rgba(0,0,0,.5); }
+  .logo { font-size: 22px; font-weight: 800; letter-spacing: .02em; color: #fff; text-decoration: none; white-space: nowrap; }
+  #nav { display: flex; gap: 18px; align-items: center; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  #nav::-webkit-scrollbar { display: none; }
+  #nav a { color: #d6d6dc; text-decoration: none; font-size: 14px; white-space: nowrap; transition: color .2s; padding: 4px 0; }
+  #nav a:hover { color: #fff; }
+  #nav a.activo { color: #fff; font-weight: 700; }
+  #directo { flex: none; }
+  #migas { margin: 4px 0 14px; flex: none; min-width: 0; }
+
+  /* Destacado */
+  .portada { display: block; }
+  .heroe {
+    position: relative; margin: 0 calc(var(--margen) * -1); min-height: 78vh; display: flex; align-items: flex-end;
+    padding: 0 var(--margen) 9vh; overflow: hidden; background: #000;
+  }
+  .heroe-imagen {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0; transition: opacity .9s ease;
+    background: var(--fondo-heroe) center 20% / cover no-repeat;
+  }
+  .heroe.con-imagen .heroe-imagen { opacity: 1; }
+  .heroe::after {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none;
+    background: linear-gradient(77deg, rgba(0,0,0,.88) 0, rgba(0,0,0,.45) 42%, rgba(0,0,0,0) 70%),
+      linear-gradient(0deg, var(--fondo) 0, rgba(11,11,15,.6) 14%, rgba(11,11,15,0) 38%);
+  }
+  .heroe-info { position: relative; z-index: 1; max-width: 600px; }
+  .heroe-tipo { color: #c9b8ff; font-size: 13px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
+  .heroe h1 { margin: 8px 0 10px; font-size: 52px; font-size: clamp(30px, 4.8vw, 70px); font-weight: 900; line-height: 1.02; text-shadow: 0 2px 16px rgba(0,0,0,.6); }
+  .heroe-datos { color: #e3e3e8; font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+  .heroe-sinopsis { margin: 0 0 20px; font-size: 16px; line-height: 1.45; color: #ececf1; text-shadow: 0 1px 8px rgba(0,0,0,.7);
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .heroe-botones { display: flex; gap: 12px; flex-wrap: wrap; }
+  .boton-blanco, .boton-gris { border: 0; border-radius: 6px; padding: 11px 26px; font-size: 17px; font-weight: 700; }
+  .boton-blanco { background: #fff; color: #000; }
+  .boton-blanco:hover, .boton-blanco:focus { background: rgba(255,255,255,.78); }
+  .boton-gris { background: rgba(109,109,118,.62); color: #fff; }
+  .boton-gris:hover, .boton-gris:focus { background: rgba(109,109,118,.42); }
+
+  /* Filas */
+  .filas { position: relative; z-index: 1; margin-top: -4vh; }
+  .fila { margin: 0 0 28px; }
+  .fila-titulo { margin: 0 0 8px; font-size: 20px; font-weight: 800; }
+  .fila-titulo a { color: #ececf1; text-decoration: none; display: inline-flex; align-items: baseline; gap: 10px; }
+  .ver-todo { font-size: 13px; font-weight: 700; color: #8fb4ff; opacity: 0; transform: translateX(-6px); transition: opacity .25s, transform .25s; }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { opacity: 1; transform: none; }
+  .carrusel {
+    display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x proximity; scroll-behavior: smooth;
+    margin: 0 calc(var(--margen) * -1); padding: 8px var(--margen) 18px; scroll-padding: 0 var(--margen); scrollbar-width: none;
+  }
+  .carrusel::-webkit-scrollbar { display: none; }
+  .carrusel .item { flex: 0 0 var(--ancho-cartel); scroll-snap-align: start; }
+
+  /* Carátulas (filas y cuadrícula) */
+  .item { background: none; border: 0; border-radius: 6px; overflow: visible; transition: transform .2s ease, box-shadow .2s ease; }
+  .item:hover { border-color: transparent; }
+  .item .mini { border-radius: 6px; background: linear-gradient(145deg, #1d1d26, #121218); position: relative; }
+  .item .mini.cartel { aspect-ratio: 2/3; }
+  .item .mini.ancha { aspect-ratio: 16/9; }
+  .item .mini img { opacity: 1; }
+  .item .mini .provisional { padding: 10px; font-size: 13px; font-weight: 700; color: #b8b8c4; text-align: center; word-break: break-word; }
+  .item .nombre { padding: 7px 2px 0; font-size: 13px; font-weight: 600; color: #dcdce2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item .meta { padding: 2px 2px 0; font-size: 12px; color: #8d8d99; }
+  .item .meta:empty { display: none; }
+  .item .nuevo { top: 6px; left: 6px; background: linear-gradient(135deg, #4f8cff, #8e4ec6 55%, #d6409f); border-radius: 3px; font-size: 10px; letter-spacing: .06em; padding: 3px 6px; }
+  @media (hover: hover) and (pointer: fine) {
+    .item:hover { transform: scale(1.06); z-index: 3; }
+    .item:hover .mini { box-shadow: 0 10px 28px rgba(0,0,0,.7); }
+  }
+  .item:focus { outline: none; }
+  .item:focus .mini { box-shadow: 0 0 0 3px #fff, 0 10px 28px rgba(0,0,0,.7); }
+  .tele .item:focus { transform: scale(1.08); box-shadow: none; }
+  .rejilla { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 12px; }
+  .pagina-titulo { grid-column: 1 / -1; margin: 6px 0 4px; font-size: 32px; font-weight: 900; }
+
+  /* Episodios en lista: imagen, número, título, duración y sinopsis */
+  .rejilla.episodios { grid-template-columns: 1fr; gap: 0; max-width: 1100px; }
+  .episodios .item { flex-direction: row; align-items: flex-start; gap: 18px; padding: 16px 10px; border-bottom: 1px solid #22222a; border-radius: 0; }
+  .episodios .item:hover { transform: none; background: #15151c; }
+  .episodios .item .mini { width: 240px; flex: none; }
+  .episodios .item .nombre { font-size: 16px; padding: 4px 0 0; white-space: normal; flex: 1; }
+  .episodios .item { display: grid; grid-template-columns: 240px 1fr; grid-template-rows: auto auto 1fr; column-gap: 18px; }
+  .episodios .item .mini { grid-row: 1 / span 3; }
+  .episodios .item .meta { padding: 4px 0 0; }
+  .episodios .item .sinopsis { margin: 6px 0 0; color: #a9a9b4; font-size: 13.5px; line-height: 1.45;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+  /* Cabecera de serie a lo ancho, como el destacado */
+  #cabecera { margin: -76px calc(var(--margen) * -1) 18px; border: 0; border-radius: 0; padding: 90px var(--margen) 30px; background-size: cover; background-position: center 20%; }
+  #cabecera .ficha h2 { font-size: 38px; font-weight: 900; }
+
+  /* Visor y ficha con el mismo tono */
+  #visor { background: rgba(0,0,0,.96); }
+  .ficha { background: #15151c; border-color: #23232c; }
+
+  @media (max-width: 600px) {
+    :root { --margen: 14px; --ancho-cartel: 112px; }
+    main { padding-top: 96px; }
+    header { flex-wrap: wrap; row-gap: 6px; padding: 10px var(--margen) 8px; }
+    .logo { font-size: 19px; }
+    #nav { order: 3; flex-basis: 100%; gap: 16px; }
+    #nav a { font-size: 13.5px; }
+    .heroe { min-height: 70vh; padding-bottom: 7vh; }
+    .heroe-sinopsis { font-size: 14px; -webkit-line-clamp: 3; }
+    .heroe-datos { font-size: 13px; }
+    .boton-blanco, .boton-gris { padding: 10px 18px; font-size: 15px; flex: 1; justify-content: center; }
+    .fila-titulo { font-size: 17px; }
+    .ver-todo { opacity: 1; transform: none; }
+    .rejilla { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 8px; }
+    .episodios .item { grid-template-columns: 132px 1fr; column-gap: 12px; padding: 12px 0; }
+    .episodios .item .mini { width: 132px; }
+    .episodios .item .nombre { font-size: 14px; }
+    .episodios .item .sinopsis { grid-column: 1 / -1; font-size: 13px; }
+    .pagina-titulo { font-size: 24px; }
+    #cabecera { margin-top: -96px; padding-top: 104px; }
+  }
+  /* En la tele: todo más grande y la flecha de «Ver todo» siempre visible */
+  .tele { --margen: 48px; --ancho-cartel: 210px; }
+  .tele .heroe h1 { font-size: 64px; }
+  .tele .heroe-sinopsis { font-size: 20px; }
+  .tele .fila-titulo { font-size: 26px; }
+  .tele .ver-todo { opacity: 1; transform: none; }
+  .tele .boton-blanco, .tele .boton-gris { font-size: 22px; padding: 14px 34px; }
+  .tele .boton-blanco:focus, .tele .boton-gris:focus { outline: 3px solid #fff; outline-offset: 3px; }
+  .tele #nav a { font-size: 19px; }
+  .tele #nav a:focus { color: #fff; outline: none; text-decoration: underline; text-underline-offset: 6px; }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
 <body>
 <script src="intro.js"></script>
 <header>
-  <div class="logo">☁️ <span>Morveh<span class="tv">TV</span></span> <small id="bucket"></small> <span id="directo" title="Se actualiza solo cuando subes algo a e2">sin conexión</span></div>
-  <nav id="migas"></nav>
+  <a class="logo" href="#">☁️ Morveh<span class="tv">TV</span></a><small id="bucket"></small>
+  <nav id="nav"></nav>
+  <span id="directo" title="Se actualiza solo cuando subes algo a e2">sin conexión</span>
 </header>
 <main>
+  <nav id="migas" hidden></nav>
   <div id="cabecera" hidden></div>
   <div id="items" class="rejilla"></div>
   <button class="boton" id="mas" hidden>Cargar más</button>

@@ -284,6 +284,46 @@ async function vigilar() {
   setTimeout(vigilar, SEGUNDOS_ESCANEO * 1000);
 }
 
+// ---------- Catálogo para la portada ----------
+// Por cada carpeta de primer nivel, sus títulos del más nuevo al más antiguo: los vídeos
+// sueltos son películas; lo que va en subcarpetas («SERIES/Serie/Temporada 1/…») es la serie.
+// Sale de la foto del último repaso del bucket (o de un repaso nuevo si aún no hay).
+async function catalogo() {
+  let objetos;
+  if (foto) {
+    objetos = [...foto].map(([key, v]) => {
+      const [tam, ms] = v.split(':');
+      return { key, tamano: Number(tam), fecha: new Date(Number(ms)) };
+    });
+  } else {
+    objetos = [];
+    for await (const o of recorrer('')) if (!esInterna(o.Key)) objetos.push(archivo(o));
+  }
+  const carpetas = new Map();
+  for (const o of objetos) {
+    if (!esVideo(o.key) || prohibido(o.key)) continue;
+    const partes = o.key.split('/');
+    if (partes.length < 2) continue;
+    const raiz = `${partes[0]}/`;
+    const esSerie = partes.length >= 3;
+    const clave = esSerie ? `${partes[0]}/${partes[1]}/` : o.key;
+    if (!carpetas.has(raiz)) carpetas.set(raiz, new Map());
+    const titulos = carpetas.get(raiz);
+    const previo = titulos.get(clave);
+    if (!previo || previo.fecha < o.fecha) {
+      titulos.set(clave, esSerie
+        ? { tipo: 'carpeta', key: clave, fecha: o.fecha, ultimo: o.key }
+        : { tipo: 'archivo', key: o.key, fecha: o.fecha, tamano: o.tamano });
+    }
+  }
+  return {
+    carpetas: [...carpetas].map(([carpeta, titulos]) => ({
+      carpeta,
+      titulos: [...titulos.values()].sort((a, b) => b.fecha - a.fecha),
+    })),
+  };
+}
+
 function eventos(req, res) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
   res.write('retry: 3000\n\n');
@@ -296,6 +336,7 @@ const rutas = {
   '/api/meta': (p) => meta.deArchivo(p.get('key')),
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo')),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
+  '/api/catalogo': () => catalogo(),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
   '/api/hls': (p) => hlsIniciar(p),
