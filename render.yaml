@@ -1,0 +1,27 @@
+# Despliegue en Render (https://render.com): New → Blueprint → elige este repositorio.
+# Las claves se rellenan en el panel de Render (sync: false = no se guardan en el repositorio).
+services:
+  - type: web
+    name: morvehtv-visor
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /api/salud
+    envVars:
+      # Contraseña para entrar desde el móvil, la tele o cualquier navegador
+      - key: VISOR_CLAVE
+        sync: false
+      - key: E2_ENDPOINT
+        sync: false
+      - key: E2_REGION
+        sync: false
+      - key: E2_BUCKET
+        sync: false
+      - key: E2_ACCESS_KEY_ID
+        sync: false
+      - key: E2_SECRET_ACCESS_KEY
+        sync: false
+      - key: TMDB_KEY
+        sync: false
+      - key: TMDB_IDIOMA
+        value: es-ES

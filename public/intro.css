@@ -1,0 +1,86 @@
+/* Intro de la app: viaje por las estrellas, la nube se dibuja, destello y título */
+#intro {
+  position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 100; background: #000; overflow: hidden;
+  display: grid; place-items: center; cursor: pointer; user-select: none;
+  transition: opacity .7s ease;
+}
+#intro.fuera { opacity: 0; pointer-events: none; }
+#intro canvas { position: absolute; top: 0; right: 0; bottom: 0; left: 0; width: 100%; height: 100%; }
+#intro::after { /* viñeta */
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.85) 100%);
+}
+
+.intro-centro {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center;
+  text-align: center; padding: 16px; transition: transform 1s cubic-bezier(.6,0,.9,.4), filter 1s ease, opacity .9s ease;
+}
+#intro.salto .intro-centro { transform: scale(2.6); filter: blur(10px); opacity: 0; }
+
+/* Logo: la nube se traza, se rellena y aparece el botón de play */
+.intro-logo { width: 160px; width: min(180px, 40vw); overflow: visible; filter: drop-shadow(0 0 18px rgba(79,140,255,.55)); }
+.intro-logo .nube {
+  fill: url(#intro-relleno); fill-opacity: 0; stroke: #8fb4ff; stroke-width: 2.5; stroke-linejoin: round;
+  stroke-dasharray: 400; stroke-dashoffset: 400;
+  animation: intro-trazo 1s .4s cubic-bezier(.65,0,.35,1) forwards, intro-relleno .6s 1.25s ease forwards;
+}
+.intro-logo .play {
+  fill: #fff; transform-origin: 64px 50px; transform: scale(0);
+  animation: intro-pop .5s 1.3s cubic-bezier(.34,1.8,.64,1) forwards;
+}
+@keyframes intro-trazo { to { stroke-dashoffset: 0; } }
+@keyframes intro-relleno { to { fill-opacity: 1; stroke: #fff; } }
+@keyframes intro-pop { to { transform: scale(1); } }
+
+/* Destello y onda expansiva cuando el logo se completa */
+.intro-anillo, .intro-destello { position: absolute; left: 50%; top: min(90px, 20vw); pointer-events: none; border-radius: 50%; }
+.intro-anillo {
+  width: 40px; height: 40px; margin: -20px; border: 2px solid rgba(143,180,255,.9); opacity: 0;
+  animation: intro-onda 1.1s 1.2s cubic-bezier(.2,.6,.3,1) forwards;
+}
+.intro-anillo.dos { animation-delay: 1.35s; border-color: rgba(214,64,159,.8); }
+.intro-destello {
+  width: 300px; height: 300px; margin: -150px; opacity: 0;
+  background: radial-gradient(circle, rgba(255,255,255,.95), rgba(79,140,255,.4) 35%, transparent 70%);
+  animation: intro-flash .7s 1.2s ease-out forwards;
+}
+@keyframes intro-onda { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(18); } }
+@keyframes intro-flash { 0% { opacity: 0; transform: scale(.3); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.6); } }
+
+/* Título letra a letra con barrido de luz */
+.intro-titulo {
+  margin: 22px 0 0; font: 900 64px/1 system-ui, "Segoe UI", sans-serif; font-size: clamp(44px, 12vw, 104px);
+  letter-spacing: .08em; display: flex; gap: .02em; position: relative;
+}
+/* Cada letra lleva dos capas recortadas al texto: el destello que la cruza y su color */
+.intro-titulo span {
+  --color: linear-gradient(180deg, #fff 30%, #9fb6d8 70%, #5b6f8f);
+  display: inline-block; opacity: 0; transform: translateY(40px) scale(1.4); filter: blur(12px);
+  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.95) 50%, transparent 65%) no-repeat, var(--color);
+  background-size: 300% 100%, 100% 100%; background-position: 150% 0, 0 0;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.intro-titulo span.tv { --color: linear-gradient(135deg, #4f8cff, #8e4ec6 50%, #d6409f); margin-left: .12em; }
+@keyframes intro-letra { to { opacity: 1; transform: none; filter: blur(0) drop-shadow(0 0 14px rgba(79,140,255,.45)); } }
+@keyframes intro-barrido { to { background-position: -50% 0, 0 0; } }
+
+.intro-sub {
+  margin-top: 18px; color: #c9d4e8; font: 600 13px/1.4 system-ui, sans-serif; font-size: clamp(11px, 2.6vw, 15px);
+  letter-spacing: .1em; opacity: 0; animation: intro-sub 1.2s 2.4s ease-out forwards;
+}
+@keyframes intro-sub { to { opacity: 1; letter-spacing: .45em; } }
+@keyframes intro-aparece { to { opacity: 1; transform: none; } }
+
+.intro-saltar {
+  position: absolute; z-index: 2; right: 16px; bottom: 16px; background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 999px; padding: 8px 16px;
+  font: 600 13px system-ui, sans-serif; cursor: pointer; opacity: 0; animation: intro-aparece .4s .8s forwards;
+}
+.intro-saltar:hover { background: rgba(255,255,255,.18); }
+
+/* Con «reducir movimiento» activado: solo aparece el logo y se funde */
+@media (prefers-reduced-motion: reduce) {
+  #intro *, #intro *::before { animation-duration: .01s !important; animation-delay: 0s !important; }
+  .intro-centro { transition: opacity .5s ease; }
+  #intro.salto .intro-centro { transform: none; filter: none; }
+}

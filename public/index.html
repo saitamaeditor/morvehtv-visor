@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MorvehTV</title>
+<meta name="theme-color" content="#0f1115">
+<!-- Para añadirla a la pantalla de inicio del móvil como si fuera una app -->
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MorvehTV">
+<script src="polyfills.js"></script>
+<style>
+  :root {
+    --fondo: #0f1115; --panel: #171a21; --panel2: #1f232c; --borde: #2a2f3a;
+    --texto: #e7e9ee; --suave: #9aa1ad; --acento: #4f8cff; --peligro: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--fondo); color: var(--texto); }
+  button, input, select { font: inherit; color: inherit; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--borde); padding: 10px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .logo { font-weight: 700; display: flex; gap: 8px; align-items: center; }
+  .logo small { color: var(--suave); font-weight: 400; }
+  .logo .tv { background: linear-gradient(135deg, #4f8cff, #8e4ec6 50%, #d6409f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #migas { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; flex: 1; min-width: 200px; }
+  #migas a { color: var(--texto); text-decoration: none; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+  #migas a:hover { background: var(--panel2); }
+  #migas span { color: var(--suave); }
+  .herr { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  input[type=search], select { background: var(--panel2); border: 1px solid var(--borde); border-radius: 8px; padding: 7px 10px; }
+  input[type=search] { width: 240px; max-width: 100%; }
+  .boton { background: var(--panel2); border: 1px solid var(--borde); border-radius: 8px; padding: 7px 10px; cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--texto); display: inline-flex; gap: 6px; align-items: center; }
+  .boton:hover { border-color: var(--acento); }
+  .boton.activo { background: var(--acento); border-color: var(--acento); color: #fff; }
+  main { padding: 16px; }
+  #estado { color: var(--suave); margin-bottom: 12px; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .item { background: var(--panel); border: 1px solid var(--borde); border-radius: 10px; overflow: hidden; cursor: pointer; display: flex; flex-direction: column; }
+  .item:hover { border-color: var(--acento); }
+  .item { position: relative; }
+  .item .nuevo { position: absolute; top: 6px; left: 6px; z-index: 1; background: var(--acento); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+  .lista .item .nuevo { top: 2px; left: 2px; font-size: 9px; padding: 1px 4px; }
+  #directo { font-size: 12px; color: var(--suave); display: inline-flex; gap: 5px; align-items: center; }
+  #directo::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--suave); }
+  #directo.vivo::before { background: #30a46c; box-shadow: 0 0 6px #30a46c; }
+  .item .mini { aspect-ratio: 4/3; display: grid; place-items: center; background: var(--panel2); font-size: 40px; overflow: hidden; }
+  .item .mini img { width: 100%; height: 100%; object-fit: cover; }
+  .item .nombre { padding: 8px; word-break: break-word; font-size: 13px; }
+  .item .meta { padding: 0 8px 8px; color: var(--suave); font-size: 12px; }
+  .lista .item { flex-direction: row; align-items: center; }
+  .lista { display: flex; flex-direction: column; gap: 4px; }
+  .lista .item .mini { width: 44px; aspect-ratio: 1; font-size: 22px; flex: none; }
+  .lista .item .nombre { flex: 1; }
+  .lista .item .meta { padding: 0 12px; white-space: nowrap; }
+  .vacio { color: var(--suave); padding: 40px; text-align: center; }
+  .error { color: var(--peligro); }
+  #mas { margin: 16px auto; display: block; }
+  /* Vista previa */
+  #visor { position: fixed; top: 0; right: 0; bottom: 0; left: 0; background: rgba(0,0,0,.92); z-index: 10; display: none; flex-direction: column; }
+  #visor.abierto { display: flex; }
+  #visor .barra { display: flex; gap: 8px; align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--borde); flex-wrap: wrap; }
+  #visor .titulo { flex: 1; min-width: 150px; word-break: break-all; }
+  #visor .contenido { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: safe center; gap: 16px; overflow: auto; padding: 16px; position: relative; }
+  #visor .contenido > video, #visor .contenido > img { max-width: 100%; max-height: calc(100vh - 110px); }
+  #visor .contenido > video { max-height: 68vh; }
+  #visor iframe { width: 100%; height: calc(100vh - 110px); border: 0; background: #fff; }
+  #visor pre { white-space: pre-wrap; word-break: break-word; background: var(--panel); padding: 16px; border-radius: 8px; max-width: 1000px; width: 100%; margin: 0; align-self: start; }
+  #visor audio { width: min(600px, 100%); }
+  .flecha { position: absolute; top: 50%; transform: translateY(-50%); font-size: 28px; background: rgba(0,0,0,.5); border: 0; color: #fff; width: 44px; height: 64px; cursor: pointer; border-radius: 8px; }
+  .flecha:hover { background: rgba(79,140,255,.6); }
+  #ant { left: 8px; } #sig { right: 8px; }
+  .categorias { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+  .lista .categorias { margin-bottom: 8px; }
+  .cat { --c: var(--acento); border-radius: 14px; padding: 18px; cursor: pointer; border: 1px solid var(--borde);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c) 35%, var(--panel)), var(--panel) 70%); transition: transform .12s, border-color .12s; }
+  .cat:hover { transform: translateY(-2px); border-color: var(--c); }
+  .cat .icono { font-size: 34px; }
+  .cat .nombre { font-size: 17px; font-weight: 700; margin-top: 8px; }
+  .cat .meta { color: var(--suave); font-size: 12px; margin-top: 4px; }
+  .cat.vacia { opacity: .4; cursor: default; }
+  .cat.vacia:hover { transform: none; border-color: var(--borde); }
+  .seccion { grid-column: 1 / -1; font-size: 15px; color: var(--suave); margin: 16px 0 0; font-weight: 600; }
+  .repro { position: relative; display: flex; flex-direction: column; width: 100%; max-width: 1400px; background: #000; }
+  .repro video { width: 100%; max-height: 62vh; cursor: pointer; }
+  .repro:fullscreen video { max-height: calc(100vh - 56px); flex: 1; }
+  .controles { display: flex; gap: 8px; align-items: center; padding: 8px; background: var(--panel); flex-wrap: wrap; }
+  .controles input[type=range] { flex: 1; min-width: 140px; accent-color: var(--acento); }
+  .controles .tiempo { color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .controles select { background: var(--panel2); border: 1px solid var(--borde); border-radius: 8px; padding: 6px; }
+  .cargando { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,.7); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
+  /* Metadatos */
+  .item .mini.cartel { aspect-ratio: 2/3; }
+  .item .mini.ancha { aspect-ratio: 16/9; }
+  .lista .item .mini.cartel, .lista .item .mini.ancha { aspect-ratio: 1; }
+  #cabecera { border-radius: 14px; margin-bottom: 16px; background-size: cover; background-position: center; border: 1px solid var(--borde); }
+  .ficha { display: flex; gap: 20px; width: 100%; max-width: 1400px; background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; padding: 16px; text-align: left; }
+  #cabecera .ficha { background: transparent; border: 0; }
+  .ficha img.cartel { width: 170px; height: auto; max-height: none; border-radius: 8px; align-self: flex-start; flex: none; }
+  .ficha .cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .ficha h2 { margin: 0; font-size: 22px; }
+  .ficha h3 { margin: 6px 0 0; font-size: 16px; }
+  .ficha p { margin: 0; line-height: 1.55; max-width: 80ch; }
+  .suave { color: var(--suave); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip { background: var(--panel2); border: 1px solid var(--borde); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .linea { font-size: 13px; }
+  .tecnico { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--suave); border-top: 1px solid var(--borde); padding-top: 8px; word-break: break-all; }
+  .corrector summary { cursor: pointer; color: var(--suave); font-size: 13px; }
+  .corrector .chips { margin-top: 8px; }
+  .resultados { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 6px; margin-top: 8px; }
+  .resultado { display: flex; gap: 8px; align-items: center; text-align: left; background: var(--panel2); border: 1px solid var(--borde); border-radius: 8px; padding: 6px; cursor: pointer; }
+  .resultado:hover { border-color: var(--acento); }
+  .resultado img { width: 40px; border-radius: 4px; }
+  /* ---------- Mando de la tele ---------- */
+  .item:focus, .cat:focus, .boton:focus, #migas a:focus, select:focus, input:focus, summary:focus, .flecha:focus, #vcontenido > video:focus {
+    outline: 3px solid var(--acento); outline-offset: 2px;
+  }
+  html:not(.usa-mando):not(.tele) .item:focus:not(:focus-visible), html:not(.usa-mando):not(.tele) .cat:focus:not(:focus-visible),
+  html:not(.usa-mando):not(.tele) .boton:focus:not(:focus-visible) { outline: none; }
+  .tele body, .usa-mando body { scroll-behavior: smooth; }
+  .tele .item:focus, .tele .cat:focus { transform: scale(1.06); box-shadow: 0 10px 30px rgba(79,140,255,.45); z-index: 2; }
+  .item, .cat { transition: transform .12s, box-shadow .12s, border-color .12s; }
+  /* En la tele todo más grande: se ve desde el sofá */
+  .tele body { font-size: 20px; }
+  .tele header { padding: 16px 40px; }
+  .tele main { padding: 24px 40px; }
+  .tele .rejilla { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 22px; }
+  .tele .categorias { grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .tele .cat { padding: 26px; }
+  .tele .cat .nombre { font-size: 24px; }
+  .tele .item .nombre { font-size: 18px; }
+  .tele .item .meta, .tele .cat .meta { font-size: 15px; }
+  .tele .boton, .tele select, .tele input[type=search] { padding: 10px 16px; }
+  .tele .controles .boton { padding: 12px 20px; font-size: 22px; }
+  .tele #internas { display: none; }
+  /* ---------- Móvil y tablet (táctil) ---------- */
+  @media (pointer: coarse) {
+    .boton, select, input[type=search] { min-height: 42px; }
+    .controles .boton { min-width: 48px; justify-content: center; }
+    .controles input[type=range] { height: 32px; }
+    .flecha { width: 40px; height: 56px; }
+  }
+  body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  #visor .barra { padding-top: max(10px, env(safe-area-inset-top)); }
+  /* Navegadores antiguos (teles de 2017-2020): sin color-mix ni aspect-ratio */
+  @supports not (background: color-mix(in srgb, red 50%, blue)) {
+    .cat { background: var(--panel); border-top: 4px solid var(--c); }
+  }
+  @supports not (aspect-ratio: 1) {
+    .item .mini { height: 120px; }
+    .item .mini.cartel { height: 260px; }
+    .tele .item .mini.cartel { height: 340px; }
+  }
+  /* Panel «Ver en otros dispositivos» */
+  #dispositivos { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 30; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #dispositivos .caja { background: var(--panel); border: 1px solid var(--borde); border-radius: 14px; padding: 22px; max-width: 460px; width: 100%; }
+  #dispositivos h2 { margin: 0 0 6px; font-size: 20px; }
+  #dispositivos ol { padding-left: 20px; line-height: 1.6; margin: 10px 0; }
+  #dispositivos .url { font: 600 17px ui-monospace, Consolas, monospace; color: #8fb4ff; word-break: break-all; }
+  #dispositivos .pin { font: 800 30px ui-monospace, Consolas, monospace; letter-spacing: .3em; color: #fff; }
+  #dispositivos .qr { background: #fff; border-radius: 10px; padding: 10px; width: 200px; margin: 10px auto; }
+  #dispositivos .qr img { width: 100%; display: block; image-rendering: pixelated; }
+  .aviso { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--acento); color: #fff; padding: 8px 14px; border-radius: 8px; z-index: 20; display: none; }
+  @media (max-width: 600px) {
+    input[type=search] { width: 100%; }
+    .herr { width: 100%; }
+    .lista .item .meta { display: none; }
+    .ficha { flex-direction: column; }
+    .ficha img.cartel { width: 120px; }
+  }
+</style>
+<link rel="stylesheet" href="intro.css">
+</head>
+<body>
+<script src="intro.js"></script>
+<header>
+  <div class="logo">☁️ <span>Morveh<span class="tv">TV</span></span> <small id="bucket"></small> <span id="directo" title="Se actualiza solo cuando subes algo a e2">sin conexión</span></div>
+  <nav id="migas"></nav>
+  <div class="herr">
+    <input type="search" id="q" placeholder="Buscar en esta carpeta…">
+    <select id="orden" title="Ordenar">
+      <option value="nombre">Nombre</option>
+      <option value="fecha">Más recientes</option>
+      <option value="tamano">Más grandes</option>
+    </select>
+    <button class="boton" id="vista" title="Cambiar vista">☷ Lista</button>
+    <button class="boton" id="internas" title="Mostrar las carpetas internas que empiezan por _">_ Ocultas</button>
+    <button class="boton" id="otros" title="Abrir MorvehTV en el móvil, la tablet o la smart TV" hidden>📱 Otros dispositivos</button>
+  </div>
+</header>
+<main>
+  <div id="cabecera" hidden></div>
+  <div id="estado"></div>
+  <div id="items" class="rejilla"></div>
+  <button class="boton" id="mas" hidden>Cargar más</button>
+</main>
+
+<div id="visor">
+  <div class="barra">
+    <div class="titulo" id="vtitulo"></div>
+    <span id="vmeta" style="color:var(--suave)"></span>
+    <button class="boton" id="vcerrar">✕</button>
+  </div>
+  <div class="contenido" id="vcontenido"></div>
+  <button class="flecha" id="ant">‹</button>
+  <button class="flecha" id="sig">›</button>
+</div>
+<div class="aviso" id="aviso"></div>
+<div id="dispositivos" hidden>
+  <div class="caja">
+    <h2>📱 Ver en el móvil o la tele</h2>
+    <div class="suave">Tienen que estar en la misma wifi que este ordenador, y el ordenador encendido con MorvehTV abierto.</div>
+    <div class="qr" id="qr"></div>
+    <ol>
+      <li>Escanea el código con el móvil, o escribe en el navegador del móvil o de la tele:<br><span class="url" id="urlred"></span></li>
+      <li>Pon este PIN (solo la primera vez): <span class="pin" id="pinred"></span></li>
+      <li>En el móvil, «Añadir a pantalla de inicio» la deja como una app más.</li>
+    </ol>
+    <button class="boton" id="cerrarotros">Cerrar</button>
+  </div>
+</div>
+
+<script src="/vendor/hls.min.js"></script>
+<script src="/vendor/qrcode.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

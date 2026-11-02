@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MorvehTV</title>
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MorvehTV">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: radial-gradient(ellipse at top, #1a2340, #000 70%); color: #e7e9ee; font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .caja { width: 100%; max-width: 380px; text-align: center; }
+  img { width: 110px; filter: drop-shadow(0 0 18px rgba(79,140,255,.55)); }
+  h1 { margin: 10px 0 4px; font-size: 34px; letter-spacing: .06em; }
+  h1 span { color: #b26bff; }
+  p { color: #9aa1ad; margin: 0 0 22px; }
+  input { width: 100%; font: 800 34px ui-monospace, Consolas, monospace; letter-spacing: .4em; text-align: center; padding: 14px 10px 14px 24px;
+    background: #171a21; border: 2px solid #2a2f3a; border-radius: 12px; color: #fff; }
+  input:focus, button:focus { outline: 3px solid #4f8cff; outline-offset: 2px; }
+  button { margin-top: 14px; width: 100%; padding: 14px; font: 700 18px system-ui, sans-serif; color: #fff; border: 0; border-radius: 12px; cursor: pointer;
+    background: linear-gradient(135deg, #4f8cff, #8e4ec6 55%, #d6409f); }
+  input.clave { font: 600 20px system-ui, sans-serif; letter-spacing: normal; padding: 16px; }
+  .error { color: #ff6b6b; min-height: 1.4em; margin-top: 12px; }
+</style>
+</head>
+<body>
+<form class="caja" id="f">
+  <img src="/icono.svg" alt="">
+  <h1>MORVEH<span>TV</span></h1>
+  <p id="ayuda">Pon el PIN que aparece en el ordenador<br>(botón «📱 Otros dispositivos»)</p>
+  <input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="64" placeholder="••••••" autofocus>
+  <button type="submit">Entrar</button>
+  <div class="error" id="error"></div>
+</form>
+<script>
+  // Escrito sin sintaxis moderna: tiene que funcionar en teles antiguas
+  // En la nube se entra con contraseña en vez de PIN
+  fetch('/api/modo').then(function (r) { return r.json(); }).then(function (d) {
+    if (!d.nube) return;
+    var pin = document.getElementById('pin');
+    pin.type = 'password';
+    pin.removeAttribute('inputmode');
+    pin.setAttribute('autocomplete', 'current-password');
+    pin.placeholder = 'Contraseña';
+    pin.className = 'clave';
+    document.getElementById('ayuda').textContent = 'Escribe tu contraseña de MorvehTV';
+  }).catch(function () {});
+  document.getElementById('f').onsubmit = function (e) {
+    e.preventDefault();
+    var error = document.getElementById('error');
+    error.textContent = '';
+    fetch('/api/entrar', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'pin=' + encodeURIComponent(document.getElementById('pin').value)
+    }).then(function (r) {
+      return r.json().then(function (d) {
+        if (r.ok) location.href = '/';
+        else error.textContent = d.error || 'No se pudo entrar';
+      });
+    }).catch(function () { error.textContent = 'No se pudo conectar con el ordenador'; });
+  };
+</script>
+</body>
+</html>
