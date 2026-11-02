@@ -1,9 +1,10 @@
 // Quién puede entrar.
 //  · En casa (tu PC): el propio ordenador entra directo; móvil, tablet y tele tienen que estar
 //    en la red local y poner el PIN una vez. Desde internet no se puede entrar.
-//  · En la nube (Render): todo el mundo necesita la contraseña VISOR_CLAVE.
-// Al acertar se guarda una cookie firmada con el PIN/contraseña: cambiarlo cierra todas las
-// sesiones abiertas.
+//  · En la nube (Render): todo el mundo necesita el PIN guardado en la variable VISOR_CLAVE
+//    (nunca en el código: el repositorio es público).
+// Al acertar se guarda una cookie firmada con el PIN: cambiarlo cierra todas las sesiones.
+// Como un PIN corto se puede adivinar, además del límite por dispositivo hay uno global.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import os from 'node:os';
@@ -13,13 +14,17 @@ const COOKIE = 'morvehtv';
 export const NUBE = Boolean(process.env.RENDER || process.env.VISOR_NUBE === '1');
 let secreto;
 const fallos = new Map(); // ip → { n, hasta }
+// Fallos de todo el mundo en los últimos 10 minutos: con más de 30 se cierra la entrada un
+// rato (frena a quien pruebe PINs desde muchas conexiones distintas)
+let fallosGlobales = [];
+const LIMITE_GLOBAL = 30;
 
 export async function iniciar(dir) {
   await mkdir(path.join(dir, 'data'), { recursive: true });
   if (NUBE) {
     secreto = process.env.VISOR_CLAVE?.trim();
-    if (!secreto || secreto.length < 10) {
-      console.error('En la nube hace falta la variable VISOR_CLAVE (contraseña de al menos 10 caracteres).');
+    if (!secreto || secreto.length < 4) {
+      console.error('En la nube hace falta la variable VISOR_CLAVE (PIN de al menos 4 caracteres).');
       process.exit(1);
     }
     return;
@@ -76,6 +81,11 @@ export function permiso(req) {
 export async function entrar(req, res) {
   const ip = ipDe(req);
   const f = fallos.get(ip);
+  fallosGlobales = fallosGlobales.filter((t) => t > Date.now() - 10 * 60000);
+  if (fallosGlobales.length >= LIMITE_GLOBAL) {
+    res.writeHead(429, { 'content-type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ error: 'Demasiados intentos fallidos. Prueba dentro de 10 minutos.' }));
+  }
   if (f && f.n >= 5 && f.hasta > Date.now()) {
     res.writeHead(429, { 'content-type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify({ error: 'Demasiados intentos. Espera 10 minutos.' }));
@@ -88,8 +98,9 @@ export async function entrar(req, res) {
   const dado = String(new URLSearchParams(cuerpo).get('pin') ?? '').trim();
   if (!igual(dado, secreto)) {
     fallos.set(ip, { n: (f?.hasta > Date.now() ? f.n : 0) + 1, hasta: Date.now() + 10 * 60000 });
+    fallosGlobales.push(Date.now());
     res.writeHead(401, { 'content-type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify({ error: NUBE ? 'Contraseña incorrecta' : 'PIN incorrecto' }));
+    return res.end(JSON.stringify({ error: 'PIN incorrecto' }));
   }
   fallos.delete(ip);
   const id = randomBytes(16).toString('hex');

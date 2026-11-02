@@ -8,7 +8,7 @@ services:
     region: frankfurt
     healthCheckPath: /api/salud
     envVars:
-      # Contraseña para entrar desde el móvil, la tele o cualquier navegador
+      # PIN para entrar desde el móvil, la tele o cualquier navegador (no va en el código)
       - key: VISOR_CLAVE
         sync: false
       - key: E2_ENDPOINT

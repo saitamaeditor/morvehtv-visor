@@ -52,6 +52,10 @@ function firmar(key, { segundos = 4 * 3600 } = {}) {
 
 const archivo = (o) => ({ key: o.Key, tamano: o.Size, fecha: o.LastModified });
 
+// En internet nunca se enseñan las carpetas internas («_fotograma» guarda las cuentas de
+// morvehtv.es y «_hls» las claves de los vídeos cifrados), ni con el botón «Ocultas»
+const prohibido = (k) => acceso.NUBE && String(k ?? '').split('/').some((p) => p.startsWith('_'));
+
 // Un nivel de carpeta: subcarpetas + archivos, paginado de 1000 en 1000
 async function listarNivel(prefijo, token) {
   const r = await s3.send(
@@ -59,11 +63,11 @@ async function listarNivel(prefijo, token) {
   );
   const archivos = await Promise.all(
     (r.Contents ?? [])
-      .filter((o) => !o.Key.endsWith('/'))
+      .filter((o) => !o.Key.endsWith('/') && !prohibido(o.Key))
       .map(async (o) => ({ ...archivo(o), ...(esImagen(o.Key) && { miniatura: await firmar(o.Key) }) })),
   );
   return {
-    carpetas: (r.CommonPrefixes ?? []).map((p) => p.Prefix),
+    carpetas: (r.CommonPrefixes ?? []).map((p) => p.Prefix).filter((p) => !prohibido(p)),
     archivos,
     siguiente: r.IsTruncated ? r.NextContinuationToken : null,
   };
@@ -85,7 +89,7 @@ async function buscar(prefijo, q) {
   const terminos = normalizar(q).split(/\s+/).filter(Boolean);
   const resultados = [];
   for await (const o of recorrer(prefijo)) {
-    if (o.Key.endsWith('/')) continue;
+    if (o.Key.endsWith('/') || prohibido(o.Key)) continue;
     const nombre = normalizar(o.Key.slice(prefijo.length));
     if (terminos.every((t) => nombre.includes(t))) {
       resultados.push({ ...archivo(o), ...(esImagen(o.Key) && { miniatura: await firmar(o.Key) }) });
@@ -99,7 +103,7 @@ async function tamano(prefijo) {
   let objetos = 0;
   let bytes = 0;
   for await (const o of recorrer(prefijo)) {
-    if (o.Key.endsWith('/')) continue;
+    if (o.Key.endsWith('/') || prohibido(o.Key)) continue;
     objetos++;
     bytes += o.Size;
   }
@@ -359,6 +363,9 @@ http
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
       const ruta = rutas[url.pathname];
+      if (ruta && (prohibido(url.searchParams.get('key')) || prohibido(url.searchParams.get('prefijo')))) {
+        return json(res, 403, { error: 'Esta carpeta no se puede ver desde internet' });
+      }
       if (ruta) return json(res, 200, await ruta(url.searchParams, req));
 
       if (VENDOR[url.pathname]) {

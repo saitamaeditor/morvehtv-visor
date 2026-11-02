@@ -859,3 +859,6 @@ api('/api/red').then((d) => {
 }).catch(() => {});
 $('#cerrarotros').onclick = () => { $('#dispositivos').hidden = true; };
 $('#dispositivos').onclick = (e) => { if (e.target.id === 'dispositivos') $('#dispositivos').hidden = true; };
+
+// En internet las carpetas internas no se pueden ver: sobra el botón «Ocultas»
+fetch('/api/modo').then((r) => r.json()).then((d) => { if (d.nube) $('#internas').hidden = true; }).catch(() => {});
