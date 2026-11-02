@@ -218,6 +218,17 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> startActivity(new Intent(MainActivity.this, ReproductorActivity.class).putExtra("datos", datos)));
         }
 
+        // Botón «Salir» de la web: pregunta y cierra la app del todo
+        @JavascriptInterface
+        public void salir() {
+            runOnUiThread(() -> new android.app.AlertDialog.Builder(MainActivity.this, android.R.style.Theme_Material_Dialog_Alert)
+                    .setTitle("Salir de MorvehTV")
+                    .setMessage("¿Quieres cerrar la app?")
+                    .setPositiveButton("Salir", (d, w) -> finishAndRemoveTask())
+                    .setNegativeButton("Cancelar", null)
+                    .show());
+        }
+
         @JavascriptInterface
         public void introEmpieza() {
             runOnUiThread(MainActivity.this::mostrarWeb);

@@ -290,6 +290,8 @@
   .rejilla > .vacio strong { color: #e0e0e8; font-size: 18px; }
   .tele .proximamente { min-height: 170px; font-size: 18px; }
   #directo { flex: none; }
+  #salir-app { flex: none; padding: 6px 12px; background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.18); }
+  #salir-app:hover, #salir-app:focus { background: rgba(229,72,77,.85); border-color: #e5484d; color: #fff; outline: none; }
   #migas { margin: 4px 0 14px; flex: none; min-width: 0; }
 
   /* Destacado */
@@ -417,6 +419,10 @@
   <a class="logo" href="#">☁️ Morveh<span class="tv">TV</span></a><small id="bucket"></small>
   <nav id="nav"></nav>
   <span id="directo" title="Se actualiza solo cuando subes algo a e2">sin conexión</span>
+  <!-- Solo dentro de la app de Android -->
+  <button class="boton" id="salir-app" title="Salir de MorvehTV" hidden>
+    <svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg><span class="txt">Salir</span>
+  </button>
 </header>
 <main>
   <nav id="migas" hidden></nav>

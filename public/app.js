@@ -644,20 +644,25 @@ function boton(clase, html, titulo) {
   return b;
 }
 
-function reproductor(key, m) {
+// Un solo reproductor para todo el contenido. Con «urlDirecto» lee el archivo tal cual de e2
+// (MP4 que cualquier aparato abre: saltos instantáneos); sin él, el servidor lo prepara en HLS.
+function reproductor(key, m, urlDirecto = null) {
+  const directo = !!urlDirecto;
   const caja = el('div', 'repro');
   // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
   const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
   v.tabIndex = -1; // puede recibir el foco del mando
   const barra = el('div', 'controles');
   const bGrande = boton('gran-play', icono('play'), 'Reproducir');
-  cargarHls(); // se adelanta mientras el servidor prepara el vídeo
+  if (!directo) cargarHls(); // se adelanta mientras el servidor prepara el vídeo
   bGrande.setAttribute('aria-label', 'Reproducir');
   const bPlay = boton('boton', icono('play'), 'Reproducir o pausar');
   const bAtras = boton('boton', `${icono('atras')}<span>10</span>`, 'Retroceder 10 segundos');
   const bAdelante = boton('boton', `<span>10</span>${icono('adelante')}`, 'Adelantar 10 segundos');
-  const rango = el('input'); rango.type = 'range'; rango.min = 0; rango.max = Math.floor(m.duracion) || 0; rango.step = 10; rango.value = 0;
-  const tiempo = el('span', 'tiempo', `0:00 / ${hms(m.duracion)}`);
+  // Duración: la de ffprobe o, si no la hay, la que dé el propio vídeo
+  const total = () => m.duracion || (isFinite(v.duration) ? v.duration : 0);
+  const rango = el('input'); rango.type = 'range'; rango.min = 0; rango.max = Math.floor(total()) || 0; rango.step = 10; rango.value = 0;
+  const tiempo = el('span', 'tiempo', `0:00 / ${hms(total())}`);
   const bSonido = el('button', 'boton sonido', '🔊');
   const bPantalla = boton('boton', icono('pantalla'), 'Pantalla completa');
   // El idioma del audio va el primero, a la izquierda
@@ -713,7 +718,13 @@ function reproductor(key, m) {
 
   // Saltar de minuto o cambiar de idioma mantiene el estado: si estaba en pausa, sigue en pausa
   async function ir(t, reproducir = !v.paused) {
-    t = Math.min(Math.max(0, t), Math.max(0, m.duracion - 5));
+    t = Math.min(Math.max(0, t), Math.max(0, total() - 5));
+    if (directo) {
+      rango.value = t; pintarTiempo(t);
+      v.currentTime = t;
+      if (reproducir && v.paused) v.play().catch(() => {});
+      return;
+    }
     if (sesion && t >= desde && t - desde < preparado() - 2) { v.currentTime = t - desde; return; }
     const mio = ++turno;
     // El reloj y la barra marcan ya el minuto elegido mientras se prepara
@@ -733,32 +744,48 @@ function reproductor(key, m) {
       if (mio === turno) cargando.textContent = e.message;
     }
   }
-  const pintarTiempo = (t) => (tiempo.textContent = `${hms(t)} / ${hms(m.duracion)}`);
+  const pintarTiempo = (t) => (tiempo.textContent = `${hms(t)} / ${hms(total())}`);
+  v.onloadedmetadata = () => { rango.max = Math.floor(total()) || 0; pintarTiempo(ahora()); };
 
   v.ontimeupdate = () => { if (!arrastrando) { rango.value = ahora(); pintarTiempo(ahora()); } };
   // Si se queda esperando más de 15 s (corte de red, servidor reiniciado…), retoma solo
   // desde el mismo segundo en vez de quedarse parado
   let vigia = null;
-  function retomar() {
+  let intentos = 0;
+  async function retomar() {
     clearTimeout(vigia);
     const t = ahora();
     const seguir = !v.paused;
+    if (directo) {
+      // Enlace nuevo de e2 (el anterior pudo caducar) y se sigue desde el mismo segundo
+      if (intentos++ > 5) return;
+      const r = await api('/api/url', { key }).catch(() => null);
+      if (!r || !caja.isConnected) return;
+      v.src = r.url;
+      v.addEventListener('loadedmetadata', () => { v.currentTime = t; if (seguir) v.play().catch(() => {}); }, { once: true });
+      return;
+    }
     parar(sesion); sesion = null;
     ir(t, seguir);
   }
+  v.onerror = () => {
+    if (!directo || !v.getAttribute('src')) return;
+    if (v.error && v.error.code === 2) return retomar(); // error de red
+    cargando.hidden = false; cargando.textContent = 'Este dispositivo no puede reproducir este formato.';
+  };
   v.onwaiting = () => {
     cargando.hidden = false; cargando.textContent = 'Cargando…';
     clearTimeout(vigia);
     vigia = setTimeout(() => { if (caja.isConnected && !v.paused && v.readyState < 3) retomar(); }, 15000);
   };
-  v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); };
+  v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); intentos = 0; };
   v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; mantenerPantalla(true); };
   v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); };
   // Listo para empezar: se quita «Preparando vídeo…» aunque aún no se haya pulsado ▶
   v.oncanplay = () => { if (v.paused) cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide
   // más desde ese punto
-  v.onended = () => { if (ahora() < m.duracion - 10) ir(ahora(), true); };
+  v.onended = () => { if (!directo && ahora() < total() - 10) ir(ahora(), true); };
   const alternar = () => {
     if (v.paused) { quiere = true; v.play().catch(() => {}); } else { quiere = false; v.pause(); }
   };
@@ -776,34 +803,8 @@ function reproductor(key, m) {
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
   caja.parar = () => { turno++; clearTimeout(vigia); mantenerPantalla(false); if (hls) hls.destroy(); hls = null; parar(sesion); sesion = null; };
-  ir(0, false);
+  if (directo) { v.preload = 'auto'; v.src = urlDirecto; } else ir(0, false);
   return caja;
-}
-
-// Vídeo MP4 que va directo desde e2. Si la red se corta, vuelve a pedirlo (con un enlace
-// nuevo) desde el mismo segundo en vez de quedarse parado.
-function videoDirecto(key, url, alFallar) {
-  const v = el('video'); v.controls = true; v.preload = 'auto'; v.playsInline = true; v.setAttribute('playsinline', '');
-  let intentos = 0;
-  let vigia = null;
-  async function retomar() {
-    if (!v.isConnected || intentos++ > 5) return;
-    const t = v.currentTime;
-    const r = await api('/api/url', { key }).catch(() => null);
-    if (!r || !v.isConnected) return;
-    v.src = r.url;
-    v.addEventListener('loadedmetadata', () => { v.currentTime = t; v.play().catch(() => {}); }, { once: true });
-  }
-  v.onerror = () => (v.error && v.error.code === 2 ? retomar() : alFallar()); // 2 = error de red
-  v.onwaiting = () => {
-    clearTimeout(vigia);
-    vigia = setTimeout(() => { if (!v.paused && v.readyState < 3) retomar(); }, 15000);
-  };
-  v.onplaying = () => { clearTimeout(vigia); intentos = 0; };
-  v.onplay = () => mantenerPantalla(true);
-  v.onpause = () => mantenerPantalla(false);
-  v.src = url;
-  return v;
 }
 
 // Que la pantalla del móvil o la tablet no se apague mientras se ve algo (solo funciona en
@@ -869,12 +870,8 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       // audio compatible. Lo demás (.mkv, .ts, AC3, varios idiomas…) pasa por el servidor.
       const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
         && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec));
-      if (m && !directo) c.append(reproductor(f.key, m));
-      else {
-        c.append(videoDirecto(f.key, url, () => {
-          c.innerHTML = '<div class="vacio">Este dispositivo no puede reproducir este formato.</div>';
-        }));
-      }
+      // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
+      c.append(reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null));
       enfocarVisor();
       const d = await pedirMeta('archivo', f.key);
       if (actual === i) c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key }));
@@ -931,7 +928,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#nav a, #migas a, #cabecera summary, #cabecera a, .heroe .boton, .fila-titulo a, #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#salir-app, #nav a, #migas a, #cabecera summary, #cabecera a, .heroe .boton, .fila-titulo a, #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, #vcontenido .ver-nativo, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
@@ -1114,6 +1111,12 @@ function aplicarPendientes() {
   const p = pendientes;
   pendientes = null;
   refrescar(p).catch(() => {});
+}
+
+// Botón para salir de la app (solo en la app de Android, que es quien sabe cerrarse)
+if (window.MorvehApp && typeof window.MorvehApp.salir === 'function') {
+  $('#salir-app').hidden = false;
+  $('#salir-app').onclick = () => window.MorvehApp.salir();
 }
 
 const eventos = new EventSource('/api/eventos');
