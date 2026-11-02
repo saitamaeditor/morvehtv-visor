@@ -105,7 +105,14 @@ function pintar() {
   const profundidad = estado.prefijo.split('/').filter(Boolean).length;
   const episodios = profundidad >= 2 && archivos.length > 0;
   items.className = episodios ? 'rejilla episodios' : 'rejilla';
-  if (profundidad === 1) items.append(el('h1', 'pagina-titulo', nombreCarpeta(estado.prefijo)));
+  if (profundidad === 1) {
+    const categoria = categoriaDe(estado.prefijo);
+    const cab = aplicarTema(el('div', 'categoria-cabecera'), categoria);
+    cab.append(el('span', 'categoria-icono', (categoria || TEMA_MARCA).icono), el('h1', 'pagina-titulo', nombreCarpeta(estado.prefijo)),
+      el('span', 'categoria-cuenta', `${carpetas.length + archivos.length} título${carpetas.length + archivos.length === 1 ? '' : 's'}`));
+    items.append(cab);
+    aplicarTema(items, categoria);
+  } else aplicarTema(items, categoriaDe(`${estado.prefijo.split('/')[0]}/`)); // series y temporadas: el color de su categoría
   for (const c of carpetas) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: '', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     t.querySelector('.mini').classList.add('cartel');
@@ -187,20 +194,39 @@ function gruposCatalogo(cat) {
   return grupos.concat(otras);
 }
 
-// Menú de arriba: Inicio y todas las categorías (las vacías, más apagadas)
+// Cada categoría con su color (Películas rojo, Series azul…): marco, selección y cabecera.
+// Se pasa como variables CSS ya calculadas (las teles antiguas no saben mezclar colores).
+const TEMA_MARCA = { color: '#8e4ec6', icono: '✨' };
+function aplicarTema(nodo, categoria) {
+  const c = (categoria || TEMA_MARCA).color;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  nodo.style.setProperty('--c', c);
+  nodo.style.setProperty('--c-suave', `rgba(${r},${g},${b},.13)`);
+  nodo.style.setProperty('--c-medio', `rgba(${r},${g},${b},.45)`);
+  nodo.style.setProperty('--c-brillo', `rgba(${r},${g},${b},.6)`);
+  return nodo;
+}
+
+// Menú de arriba: Inicio y todas las categorías con su icono y su color (las vacías, apagadas)
 function pintarNav(cat) {
   const nav = $('#nav');
   nav.innerHTML = '';
-  const enlace = (texto, carpeta, vacia) => {
-    const a = el('a', vacia ? 'vacia' : null, texto);
+  const enlace = (texto, carpeta, vacia, categoria) => {
+    const a = el('a', vacia ? 'vacia' : null);
     a.href = `#${encodeURIComponent(carpeta)}`;
+    if (categoria) a.append(el('span', 'nav-icono', categoria.icono));
+    a.append(texto);
+    aplicarTema(a, categoria);
     if (carpeta ? estado.prefijo.startsWith(carpeta) : !estado.prefijo) a.classList.add('activo');
     nav.append(a);
   };
   enlace('Inicio', '');
   for (const g of gruposCatalogo(cat)) {
-    if (g.carpeta) enlace(g.nombre, g.carpeta, !g.titulos.length);
+    if (g.carpeta) enlace(g.nombre, g.carpeta, !g.titulos.length, g.categoria);
   }
+  // La categoría activa, a la vista en el menú (en el móvil el menú se desliza)
+  const activo = nav.querySelector('.activo');
+  if (activo && activo.scrollIntoView) activo.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function inicio() {
@@ -217,10 +243,10 @@ function inicio() {
       .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
     if (todos.length) {
       pintarHeroe(heroe, todos);
-      filas.append(fila('Novedades', null, todos.slice(0, 20)));
+      filas.append(fila('Novedades', null, todos.slice(0, 20), null));
     } else heroe.hidden = true;
     // Todas las categorías: las que tienen algo con sus carátulas y las vacías con «Próximamente»
-    for (const g of grupos) filas.append(fila(g.nombre, g.carpeta, g.titulos));
+    for (const g of grupos) filas.append(fila(g.nombre, g.carpeta, g.titulos, g.categoria));
     enfocarInicio();
   }).catch((e) => {
     heroe.hidden = true;
@@ -229,16 +255,28 @@ function inicio() {
   return caja;
 }
 
-function fila(titulo, carpeta, titulos) {
-  const s = el('section', 'fila');
+function fila(titulo, carpeta, titulos, categoria) {
+  const s = aplicarTema(el('section', 'fila'), categoria);
   const h = el('h2', 'fila-titulo');
+  const icono = el('span', 'fila-icono', (categoria || TEMA_MARCA).icono);
   if (carpeta) {
-    const a = el('a', null, titulo);
+    const a = el('a');
     a.href = `#${encodeURIComponent(carpeta)}`;
-    a.append(el('span', 'ver-todo', 'Ver todo ›'));
+    a.append(icono, titulo, el('span', 'ver-todo', 'Ver todo ›'));
     h.append(a);
-  } else h.textContent = titulo;
+  } else h.append(icono, titulo);
   const carrusel = el('div', 'carrusel');
+  // Flechas ‹ › para desplazar la fila con el ratón (en táctil y con mando no hacen falta)
+  if (titulos.length) {
+    const flecha = (dir, texto) => {
+      const b = el('button', `fila-flecha ${dir}`, texto);
+      b.tabIndex = -1;
+      b.setAttribute('aria-label', dir === 'izq' ? 'Anteriores' : 'Siguientes');
+      b.onclick = () => carrusel.scrollBy({ left: (dir === 'izq' ? -1 : 1) * carrusel.clientWidth * 0.85, behavior: 'smooth' });
+      return b;
+    };
+    s.append(flecha('izq', '‹'), flecha('der', '›'));
+  }
   const archivos = titulos.filter((t) => t.tipo === 'archivo');
   for (const t of titulos) carrusel.append(cartel(t, archivos));
   if (!titulos.length) {
@@ -267,7 +305,7 @@ function cartel(t, archivos) {
   pedirMeta(t.tipo, t.key).then((m) => {
     if (!m || !m.encontrado || !d.isConnected) return;
     if (m.poster) {
-      const img = el('img'); img.loading = 'lazy'; img.alt = ''; img.src = m.poster;
+      const img = el('img'); img.loading = 'lazy'; img.decoding = 'async'; img.alt = ''; img.src = m.poster;
       img.onload = () => mini.classList.add('lista');
       mini.replaceChildren(img);
     }
@@ -969,7 +1007,8 @@ function moverFoco(dir) {
     mejor.focus();
     // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
     if (mejor.closest('header')) scrollTo({ top: 0, behavior: 'smooth' });
-    else mejor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    else if (mejor.closest('.carrusel')) mejor.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+    else mejor.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   }
 }
 

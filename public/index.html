@@ -416,6 +416,87 @@
   .tele .boton-blanco:focus, .tele .boton-gris:focus { outline: 3px solid #fff; outline-offset: 3px; }
   .tele #nav a { font-size: 19px; }
   .tele #nav a:focus { color: #fff; outline: none; text-decoration: underline; text-underline-offset: 6px; }
+  /* ================= Color de cada categoría: marco, selección y desplazamiento =================
+     Cada menú, fila y página recibe --c (su color), --c-suave, --c-medio y --c-brillo. */
+  :root { --c: #8e4ec6; --c-suave: rgba(142,78,198,.13); --c-medio: rgba(142,78,198,.45); --c-brillo: rgba(142,78,198,.6); }
+
+  /* Menú de arriba: pastillas con el icono y el color de cada categoría */
+  #nav { gap: 8px; padding: 2px 2px; scroll-behavior: smooth; }
+  #nav a {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px;
+    border: 1px solid transparent; transition: background .2s, border-color .2s, color .2s, box-shadow .2s;
+  }
+  #nav a .nav-icono { font-size: 15px; line-height: 1; }
+  #nav a:hover { background: var(--c-suave); border-color: var(--c-medio); color: #fff; }
+  #nav a.activo { background: linear-gradient(135deg, var(--c), var(--c-medio)); border-color: var(--c); color: #fff; box-shadow: 0 2px 14px var(--c-medio); }
+  #nav a:focus { text-decoration: none; background: var(--c-suave); border-color: #fff; color: #fff; box-shadow: 0 0 0 2px var(--c), 0 0 16px var(--c-brillo); }
+  #nav a.vacia:not(.activo) .nav-icono { opacity: .5; filter: grayscale(.6); }
+  .tele #nav a { padding: 8px 18px; }
+  .tele #nav a:focus { text-decoration: none; }
+
+  /* Filas: franja y tono del color de su categoría */
+  .fila {
+    position: relative; padding: 14px 0 4px; margin-bottom: 18px; border-radius: 12px;
+    background: linear-gradient(90deg, var(--c-suave), rgba(0,0,0,0) 55%);
+  }
+  .fila::before {
+    content: ''; position: absolute; left: calc(var(--margen) * -1); top: 14px; width: 4px; height: 28px;
+    border-radius: 0 4px 4px 0; background: var(--c); box-shadow: 0 0 12px var(--c-brillo);
+  }
+  .fila-titulo { display: flex; align-items: center; gap: 10px; padding-left: 4px; }
+  .fila-titulo a { align-items: center; }
+  .fila-icono {
+    display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; font-size: 17px;
+    background: var(--c-suave); border: 1px solid var(--c-medio);
+  }
+  .fila-titulo a:focus { text-decoration: none; }
+  .fila-titulo a:focus .fila-icono { box-shadow: 0 0 0 2px #fff, 0 0 14px var(--c-brillo); }
+  .ver-todo { color: var(--c); filter: brightness(1.35); }
+  .proximamente { border-color: var(--c-medio); background: linear-gradient(135deg, var(--c-suave), rgba(0,0,0,0)); }
+
+  /* Selección de una carátula: marco del color de su categoría */
+  .item:focus .mini { box-shadow: 0 0 0 3px var(--c), 0 0 22px var(--c-brillo), 0 10px 28px rgba(0,0,0,.7); }
+  @media (hover: hover) and (pointer: fine) {
+    .item:hover .mini { box-shadow: 0 0 0 2px var(--c-medio), 0 12px 30px rgba(0,0,0,.7); }
+  }
+  .tele .item:focus .mini { box-shadow: 0 0 0 4px var(--c), 0 0 30px var(--c-brillo); }
+  .item .nuevo { background: var(--c); }
+
+  /* Desplazamiento de las filas: suave, que no arrastre la página y sin saltos al pasar el ratón */
+  .carrusel { overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scroll-snap-type: x mandatory; }
+  .carrusel .item { backface-visibility: hidden; }
+  .item, .item .mini { transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s ease; }
+  /* Flechas ‹ › en el ordenador */
+  .fila-flecha {
+    position: absolute; z-index: 4; top: 56px; bottom: 30px; width: 46px; border: 0; cursor: pointer;
+    font-size: 34px; color: #fff; opacity: 0; transition: opacity .2s, background .2s; display: none;
+  }
+  .fila-flecha.izq { left: calc(var(--margen) * -1); background: linear-gradient(90deg, rgba(11,11,15,.9), rgba(11,11,15,0)); }
+  .fila-flecha.der { right: calc(var(--margen) * -1); background: linear-gradient(270deg, rgba(11,11,15,.9), rgba(11,11,15,0)); }
+  @media (hover: hover) and (pointer: fine) {
+    .fila-flecha { display: block; }
+    .fila:hover .fila-flecha { opacity: .85; }
+    .fila-flecha:hover { opacity: 1 !important; color: var(--c); }
+  }
+  .tele .fila-flecha { display: none !important; }
+  /* En la tele, sin «snap» obligatorio: el mando centra la carátula con un desplazamiento suave */
+  .tele .carrusel { scroll-snap-type: none; }
+
+  /* Página de una categoría: cabecera con su color */
+  .categoria-cabecera {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 18px 20px; margin: 4px 0 6px;
+    border-radius: 14px; border: 1px solid var(--c-medio); background: linear-gradient(110deg, var(--c-suave), rgba(0,0,0,0) 70%);
+    box-shadow: inset 4px 0 0 var(--c);
+  }
+  .categoria-cabecera .pagina-titulo { margin: 0; flex: 1; }
+  .categoria-icono { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 14px; font-size: 28px; background: var(--c-suave); border: 1px solid var(--c-medio); }
+  .categoria-cuenta { color: #b6b6c2; font-size: 14px; white-space: nowrap; }
+  @media (max-width: 600px) {
+    .fila-icono { width: 28px; height: 28px; font-size: 15px; }
+    .categoria-icono { width: 42px; height: 42px; font-size: 22px; }
+    .categoria-cabecera { padding: 14px; gap: 10px; }
+    #nav a { padding: 5px 11px; }
+  }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
