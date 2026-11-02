@@ -209,6 +209,31 @@ export async function deCarpeta(prefijo) {
   return id ? { encontrado: true, ...(await ficha(id.tmdbId, id.tipo)) } : { encontrado: false };
 }
 
+// Imágenes de fondo para las categorías de la portada que aún no tienen vídeos con ficha:
+// lo más popular de ese tipo en TMDB (una vez al día como mucho)
+const DESCUBRIR = {
+  pelicula: ['/discover/movie', { without_genres: '16,99' }],
+  serie: ['/discover/tv', { without_genres: '16,99,10764,10767' }],
+  documental: ['/discover/movie', { with_genres: '99' }],
+  docuserie: ['/discover/tv', { with_genres: '99' }],
+  'anime-pelicula': ['/discover/movie', { with_genres: '16', with_original_language: 'ja' }],
+  'anime-serie': ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
+  programa: ['/discover/tv', { with_genres: '10764' }],
+  'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
+};
+const portadas = new Map(); // categoría → { hasta, fondos }
+
+export async function portadaCategoria(id) {
+  if (!DESCUBRIR[id]) throw Object.assign(new Error('Categoría desconocida'), { status: 400 });
+  const c = portadas.get(id);
+  if (c && c.hasta > Date.now()) return { fondos: c.fondos };
+  const [ruta, filtro] = DESCUBRIR[id];
+  const { results = [] } = await pedir(ruta, { sort_by: 'popularity.desc', 'vote_count.gte': '100', include_adult: 'false', ...filtro });
+  const fondos = results.filter((r) => r.backdrop_path).slice(0, 8).map((r) => img(r.backdrop_path, 'w780'));
+  portadas.set(id, { hasta: Date.now() + 24 * 3600000, fondos });
+  return { fondos };
+}
+
 // Elegir a mano el título correcto cuando la búsqueda automática se equivoca
 export function corregir(clave, tmdbId, tipo) {
   if (tmdbId) cache.correcciones[clave] = { tmdbId: Number(tmdbId), tipo: tipo === 'serie' ? 'serie' : 'pelicula' };

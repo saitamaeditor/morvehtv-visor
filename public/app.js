@@ -187,6 +187,27 @@ function categoriaDe(carpeta) {
 
 const tamanos = new Map();
 
+// Imagen de fondo de cada categoría: la de uno de tus títulos (su ficha de TMDB) y, si aún
+// no hay ninguno, la de algo popular de ese tipo. Se elige una vez por visita.
+const fondos = new Map();
+function fondoCategoria(cat, suyas) {
+  if (!fondos.has(cat.id)) {
+    const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
+    fondos.set(cat.id, (async () => {
+      for (const c of suyas) {
+        const d = await api('/api/buscar', { prefijo: c, q: '' }).catch(() => null);
+        const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video')).slice(0, 4);
+        const metas = await Promise.all(videos.map((f) => pedirMeta('archivo', f.key)));
+        const suyos = metas.filter((m) => m && m.encontrado && m.fondo).map((m) => m.fondo);
+        if (suyos.length) return azar(suyos);
+      }
+      const r = await api('/api/portada', { cat: cat.id }).catch(() => null);
+      return r && r.fondos.length ? azar(r.fondos) : null;
+    })());
+  }
+  return fondos.get(cat.id);
+}
+
 function portada(carpetas) {
   const caja = el('div', 'categorias');
   for (const cat of CATEGORIAS) {
@@ -196,6 +217,13 @@ function portada(carpetas) {
     t.style.setProperty('--c', cat.color);
     const meta = el('div', 'meta', suyas.length ? 'Contando…' : 'Sin contenido aún');
     t.append(el('div', 'icono', cat.icono), el('div', 'nombre', cat.nombre), meta);
+    fondoCategoria(cat, suyas).then((url) => {
+      if (!url) return;
+      // Se precarga para que aparezca de golpe con un fundido, no a trozos
+      const img = new Image();
+      img.onload = () => { t.style.setProperty('--img', `url("${url}")`); t.classList.add('con-imagen'); };
+      img.src = url;
+    });
     if (suyas.length) {
       t.title = suyas.map(nombre).join(', ');
       t.onclick = () => irA(suyas[0]);

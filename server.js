@@ -295,6 +295,7 @@ function eventos(req, res) {
 const rutas = {
   '/api/meta': (p) => meta.deArchivo(p.get('key')),
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo')),
+  '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
   '/api/hls': (p) => hlsIniciar(p),
