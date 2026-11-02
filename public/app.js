@@ -111,6 +111,7 @@ function pintar() {
     t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
     t.dataset.key = f.key;
     t.dataset.tamano = f.tamano;
+    barraVisto(t);
     items.append(t);
     if (clase.startsWith('video')) conMeta(t, 'archivo', f.key);
   });
@@ -256,7 +257,9 @@ async function conMeta(t, clase, clave) {
   const mini = t.querySelector('.mini');
   if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
+    const visto = mini.querySelector('.visto'); // la barra de lo que ya has visto se queda
     mini.replaceChildren(img);
+    if (visto) mini.append(visto);
     mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
   }
   const meta = t.querySelector('.meta');
@@ -544,6 +547,42 @@ function boton(clase, html, titulo) {
 
 // Un solo reproductor para todo el contenido. Con «urlDirecto» lee el archivo tal cual de e2
 // (MP4 que cualquier aparato abre: saltos instantáneos); sin él, el servidor lo prepara en HLS.
+// ---------- Seguir viendo ----------
+// Cada dispositivo recuerda por dónde ibas en cada vídeo (se guarda en el propio navegador o
+// en la app). Al terminarlo (últimos 2 min o el 95 %) se olvida y vuelve a empezar de cero.
+const POSICIONES = 'morveh-posiciones';
+function posiciones() {
+  try { return JSON.parse(localStorage.getItem(POSICIONES)) || {}; } catch (e) { return {}; }
+}
+function posicionDe(key) {
+  const p = posiciones()[key];
+  return p && p.t > 0 ? p : null;
+}
+function guardarPosicion(key, t, total) {
+  const todas = posiciones();
+  const acabado = total > 0 && (t > total - 120 || t > total * 0.95);
+  if (t < 15 || acabado) delete todas[key];
+  else todas[key] = { t: Math.floor(t), total: Math.floor(total || 0), cuando: Date.now() };
+  // Como mucho los 300 vídeos más recientes
+  const claves = Object.keys(todas).sort((a, b) => todas[b].cuando - todas[a].cuando);
+  claves.slice(300).forEach((k) => delete todas[k]);
+  try { localStorage.setItem(POSICIONES, JSON.stringify(todas)); } catch (e) {}
+}
+
+// Barra roja bajo la carátula con lo que ya has visto de ese vídeo
+function barraVisto(t) {
+  const mini = t.querySelector('.mini');
+  const vieja = mini.querySelector('.visto');
+  if (vieja) vieja.remove();
+  const visto = posicionDe(t.dataset.key);
+  if (!visto || !visto.total) return;
+  const barra = el('div', 'visto');
+  const lleno = el('span');
+  lleno.style.width = `${Math.min(100, (visto.t / visto.total) * 100)}%`;
+  barra.append(lleno);
+  mini.append(barra);
+}
+
 function reproductor(key, m, urlDirecto = null) {
   const directo = !!urlDirecto;
   const caja = el('div', 'repro');
@@ -577,6 +616,15 @@ function reproductor(key, m, urlDirecto = null) {
   const cargando = el('div', 'cargando');
   cargando.hidden = true;
   caja.append(v, bGrande, cargando, barra);
+  // Si ya lo habías empezado, sigue por donde te quedaste (con opción de empezar de cero)
+  const guardada = posicionDe(key);
+  const inicio = guardada ? guardada.t : 0;
+  let bDeCero = null;
+  if (guardada) {
+    bDeCero = el('button', 'boton de-cero', `Seguir desde ${hms(inicio)} · ↺ Empezar de cero`);
+    bDeCero.onclick = () => { bDeCero.remove(); guardarPosicion(key, 0, total()); ir(0, !v.paused); };
+    caja.append(bDeCero);
+  }
 
   let desde = 0;
   let sesion = null;
@@ -646,7 +694,13 @@ function reproductor(key, m, urlDirecto = null) {
   const pintarTiempo = (t) => (tiempo.textContent = `${hms(t)} / ${hms(total())}`);
   v.onloadedmetadata = () => { rango.max = Math.floor(total()) || 0; pintarTiempo(ahora()); };
 
-  v.ontimeupdate = () => { if (!arrastrando) { rango.value = ahora(); pintarTiempo(ahora()); } };
+  // Se guarda por dónde vas cada 5 s, al pausar y al cerrar
+  let ultimoGuardado = 0;
+  const guardar = () => { if (ahora() > 0) guardarPosicion(key, ahora(), total()); };
+  v.ontimeupdate = () => {
+    if (!arrastrando) { rango.value = ahora(); pintarTiempo(ahora()); }
+    if (!v.paused && Date.now() - ultimoGuardado > 5000) { ultimoGuardado = Date.now(); guardar(); }
+  };
   // Si se queda esperando más de 15 s (corte de red, servidor reiniciado…), retoma solo
   // desde el mismo segundo en vez de quedarse parado
   let vigia = null;
@@ -677,8 +731,8 @@ function reproductor(key, m, urlDirecto = null) {
     vigia = setTimeout(() => { if (caja.isConnected && !v.paused && v.readyState < 3) retomar(); }, 15000);
   };
   v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); intentos = 0; };
-  v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; mantenerPantalla(true); };
-  v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); };
+  v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; if (bDeCero) { bDeCero.remove(); bDeCero = null; } mantenerPantalla(true); };
+  v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); guardar(); };
   v.oncanplay = () => { cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide
   // más desde ese punto
@@ -706,8 +760,11 @@ function reproductor(key, m, urlDirecto = null) {
   caja.irA = ir;
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
-  caja.parar = () => { turno++; clearTimeout(vigia); mantenerPantalla(false); if (hls) hls.destroy(); hls = null; parar(sesion); sesion = null; };
-  if (directo) { v.preload = 'auto'; v.src = urlDirecto; } else ir(0, false);
+  caja.parar = () => { if (v.currentTime > 0) guardar(); turno++; clearTimeout(vigia); mantenerPantalla(false); if (hls) hls.destroy(); hls = null; parar(sesion); sesion = null; };
+  if (directo) {
+    v.preload = 'auto'; v.src = urlDirecto;
+    if (inicio) v.addEventListener('loadedmetadata', () => { v.currentTime = inicio; }, { once: true });
+  } else ir(inicio, false);
   return caja;
 }
 
@@ -801,6 +858,7 @@ function cerrar() {
   $('#vcontenido').innerHTML = '';
   if (actual >= 0) {
     actual = -1;
+    document.querySelectorAll('#items .item[data-key]').forEach(barraVisto);
     // Con el mando, el foco vuelve a la tarjeta del archivo que se estaba viendo
     const t = [...document.querySelectorAll('#items .item')].find((x) => x.dataset.key === actualKey);
     if (t) t.focus();
@@ -827,7 +885,7 @@ const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
 const ENFOCABLES_APP = '#salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '#visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
+const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
@@ -970,10 +1028,6 @@ async function refrescar({ nuevos, cambiados, borrados }) {
     pendientes = pendientes || { nuevos: [], cambiados: [], borrados: [] };
     pendientes.nuevos.push(...nuevos); pendientes.cambiados.push(...cambiados); pendientes.borrados.push(...borrados);
     return;
-  }
-  const archivosNuevos = nuevos.filter((k) => !k.endsWith('/'));
-  if (archivosNuevos.length) {
-    aviso(archivosNuevos.length === 1 ? `Nuevo: ${nombre(archivosNuevos[0])}` : `${archivosNuevos.length} archivos nuevos`, 5000);
   }
   tamanos.clear();
   if (![...nuevos, ...cambiados, ...borrados].some((k) => k.startsWith(estado.prefijo))) return;
