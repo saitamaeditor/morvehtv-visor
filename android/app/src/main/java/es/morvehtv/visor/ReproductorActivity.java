@@ -12,6 +12,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
@@ -67,7 +68,8 @@ public class ReproductorActivity extends Activity {
     private ExoPlayer player;
     private PlayerView vista;
     private View arriba, controles;
-    private Button bGrande, bAudio, bPlay, bAtras, bAdelante, bSalir, bVolver;
+    private ImageButton bGrande, bPlay, bSalir;
+    private Button bAudio, bAtras, bAdelante, bVolver;
     private ProgressBar cargando;
     private SeekBar barra;
     private TextView tiempo, titulo, mensaje;
@@ -218,11 +220,20 @@ public class ReproductorActivity extends Activity {
     // ---------- Reproducir, pausar, saltar ----------
     private void alternar() {
         if (player.getPlayWhenReady()) player.pause();
-        else {
-            if (player.getPlaybackState() == Player.STATE_ENDED) ir(0, true);
-            else player.play();
-        }
+        else if (player.getPlaybackState() == Player.STATE_ENDED) ir(0, true);
+        else if (player.getPlaybackState() == Player.STATE_IDLE && player.getMediaItemCount() > 0) {
+            // Tras un error: se vuelve a intentar desde el mismo punto
+            mensaje.setVisibility(View.GONE);
+            if (directo) { player.prepare(); player.play(); }
+            else retomarYReproducir();
+        } else player.play();
+        pintarPlay();
         mostrar();
+    }
+
+    private void retomarYReproducir() {
+        player.setPlayWhenReady(true);
+        retomar();
     }
 
     private void saltar(double s) {
@@ -275,9 +286,11 @@ public class ReproductorActivity extends Activity {
                             .setLiveConfiguration(new MediaItem.LiveConfiguration.Builder()
                                     .setMinPlaybackSpeed(1f).setMaxPlaybackSpeed(1f).build())
                             .build();
+                    // Se conserva lo que haya pulsado el usuario mientras se preparaba (▶ o pausa);
+                    // solo se fuerza a reproducir al seguir tras el final provisional de la lista
                     player.setMediaItem(item, (long) ((objetivo - desde) * 1000));
                     player.prepare();
-                    player.setPlayWhenReady(reproducir);
+                    if (reproducir) player.setPlayWhenReady(true);
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
@@ -324,9 +337,9 @@ public class ReproductorActivity extends Activity {
         if (directo) {
             List<Tracks.Group> g = gruposAudio();
             bAudio.setVisibility(g.size() > 1 ? View.VISIBLE : View.GONE);
-            for (Tracks.Group grupo : g) if (grupo.isSelected()) bAudio.setText("🗣 " + nombrePista(grupo.getTrackFormat(0), 0));
+            for (Tracks.Group grupo : g) if (grupo.isSelected()) bAudio.setText(nombrePista(grupo.getTrackFormat(0), 0));
         } else if (audios.length() > 1) {
-            bAudio.setText("🗣 " + nombrePista(audios.optJSONObject(audio), audio));
+            bAudio.setText(nombrePista(audios.optJSONObject(audio), audio));
         }
     }
 
@@ -476,7 +489,7 @@ public class ReproductorActivity extends Activity {
     // ---------- Estado del reproductor ----------
     private class Escucha implements Player.Listener {
         @Override public void onIsPlayingChanged(boolean reproduciendo) {
-            bPlay.setText(reproduciendo ? "❚❚" : "▶");
+            pintarPlay();
             boolean enPausa = !player.getPlayWhenReady();
             bGrande.setVisibility(enPausa ? View.VISIBLE : View.GONE);
             if (reproduciendo) mostrar();
@@ -485,7 +498,7 @@ public class ReproductorActivity extends Activity {
 
         @Override public void onPlayWhenReadyChanged(boolean playWhenReady, int razon) {
             bGrande.setVisibility(playWhenReady ? View.GONE : View.VISIBLE);
-            bPlay.setText(playWhenReady ? "❚❚" : "▶");
+            pintarPlay();
         }
 
         @Override public void onPlaybackStateChanged(int estado) {
@@ -507,6 +520,11 @@ public class ReproductorActivity extends Activity {
             }
             avisar("No se pudo reproducir este vídeo en este aparato.");
         }
+    }
+
+    // ▶ si está en pausa; pausa si va a reproducirse (aunque aún se esté preparando)
+    private void pintarPlay() {
+        bPlay.setImageResource(player != null && player.getPlayWhenReady() ? R.drawable.ic_pausa : R.drawable.ic_play);
     }
 
     private void avisar(String texto) {

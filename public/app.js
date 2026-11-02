@@ -628,22 +628,38 @@ document.addEventListener('pause', () => { clearTimeout(reposo); $('#visor').cla
 // Reproductor del vídeo convertido: el servidor prepara HLS desde el segundo pedido, así que
 // la barra es propia. Saltar dentro de lo ya preparado es inmediato; más lejos, se pide de
 // nuevo desde ese punto.
+// Iconos dibujados (SVG) en vez de símbolos de texto: muchas teles y móviles no tienen ⟲ ⟳ ⛶ ❚❚
+const ICONOS = {
+  play: '<path d="M8 5v14l11-7z"/>',
+  pausa: '<path d="M6 19h4V5H6v14zM14 5v14h4V5h-4z"/>',
+  atras: '<path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>',
+  adelante: '<g transform="matrix(-1 0 0 1 24 0)"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></g>',
+  pantalla: '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>',
+};
+const icono = (n) => `<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONOS[n]}</svg>`;
+function boton(clase, html, titulo) {
+  const b = el('button', clase);
+  b.innerHTML = html;
+  if (titulo) { b.title = titulo; b.setAttribute('aria-label', titulo); }
+  return b;
+}
+
 function reproductor(key, m) {
   const caja = el('div', 'repro');
   // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
   const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
   v.tabIndex = -1; // puede recibir el foco del mando
   const barra = el('div', 'controles');
-  const bGrande = el('button', 'gran-play', '▶');
+  const bGrande = boton('gran-play', icono('play'), 'Reproducir');
   cargarHls(); // se adelanta mientras el servidor prepara el vídeo
   bGrande.setAttribute('aria-label', 'Reproducir');
-  const bPlay = el('button', 'boton', '▶');
-  const bAtras = el('button', 'boton', '⟲ 10');
-  const bAdelante = el('button', 'boton', '10 ⟳');
+  const bPlay = boton('boton', icono('play'), 'Reproducir o pausar');
+  const bAtras = boton('boton', `${icono('atras')}<span>10</span>`, 'Retroceder 10 segundos');
+  const bAdelante = boton('boton', `<span>10</span>${icono('adelante')}`, 'Adelantar 10 segundos');
   const rango = el('input'); rango.type = 'range'; rango.min = 0; rango.max = Math.floor(m.duracion) || 0; rango.step = 10; rango.value = 0;
   const tiempo = el('span', 'tiempo', `0:00 / ${hms(m.duracion)}`);
   const bSonido = el('button', 'boton sonido', '🔊');
-  const bPantalla = el('button', 'boton', '⛶');
+  const bPantalla = boton('boton', icono('pantalla'), 'Pantalla completa');
   // El idioma del audio va el primero, a la izquierda
   let selAudio = null;
   if (m.audios.length > 1) {
@@ -736,8 +752,8 @@ function reproductor(key, m) {
     vigia = setTimeout(() => { if (caja.isConnected && !v.paused && v.readyState < 3) retomar(); }, 15000);
   };
   v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); };
-  v.onplay = () => { bPlay.textContent = '❚❚'; bGrande.hidden = true; mantenerPantalla(true); };
-  v.onpause = () => { quiere = false; bPlay.textContent = '▶'; bGrande.hidden = false; mantenerPantalla(false); };
+  v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; mantenerPantalla(true); };
+  v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); };
   // Listo para empezar: se quita «Preparando vídeo…» aunque aún no se haya pulsado ▶
   v.oncanplay = () => { if (v.paused) cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide

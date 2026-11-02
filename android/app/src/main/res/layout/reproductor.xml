@@ -21,18 +21,17 @@
         android:indeterminateTint="#8E4EC6"
         android:visibility="gone" />
 
-    <Button
+    <ImageButton
         android:id="@+id/grande"
         android:layout_width="96dp"
         android:layout_height="96dp"
         android:layout_gravity="center"
         android:background="@drawable/boton_grande"
         android:contentDescription="Reproducir"
-        android:paddingStart="8dp"
-        android:stateListAnimator="@null"
-        android:text="▶"
-        android:textColor="#FFFFFF"
-        android:textSize="38sp" />
+        android:padding="24dp"
+        android:paddingStart="28dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_play" />
 
     <TextView
         android:id="@+id/mensaje"
@@ -93,11 +92,29 @@
         android:paddingEnd="16dp"
         android:paddingBottom="14dp">
 
-        <Button android:id="@+id/audio" style="@style/BotonReproductor" android:text="🗣" />
-        <Button android:id="@+id/play" style="@style/BotonReproductor" android:text="▶" />
-        <Button android:id="@+id/atras" style="@style/BotonReproductor" android:text="⟲ 10" />
-        <Button android:id="@+id/adelante" style="@style/BotonReproductor" android:text="10 ⟳" />
-        <Button android:id="@+id/salir" style="@style/BotonReproductor" android:text="⛶" />
+        <!-- Iconos dibujados (no símbolos de texto: muchas teles no tienen esas letras) -->
+        <Button
+            android:id="@+id/audio"
+            style="@style/BotonReproductor"
+            android:drawableStart="@drawable/ic_audio"
+            android:drawablePadding="6dp"
+            android:text="SPA" />
+        <ImageButton android:id="@+id/play" style="@style/BotonIcono" android:contentDescription="Reproducir o pausar" android:src="@drawable/ic_play" />
+        <Button
+            android:id="@+id/atras"
+            style="@style/BotonReproductor"
+            android:contentDescription="Retroceder 10 segundos"
+            android:drawableStart="@drawable/ic_atras"
+            android:drawablePadding="4dp"
+            android:text="10" />
+        <Button
+            android:id="@+id/adelante"
+            style="@style/BotonReproductor"
+            android:contentDescription="Adelantar 10 segundos"
+            android:drawableEnd="@drawable/ic_adelante"
+            android:drawablePadding="4dp"
+            android:text="10" />
+        <ImageButton android:id="@+id/salir" style="@style/BotonIcono" android:contentDescription="Salir de pantalla completa" android:src="@drawable/ic_salir_pantalla" />
 
         <SeekBar
             android:id="@+id/barra"
