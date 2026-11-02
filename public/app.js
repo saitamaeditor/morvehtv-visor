@@ -961,7 +961,9 @@ function moverFoco(dir) {
   }
   if (mejor) {
     mejor.focus();
-    mejor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
+    if (mejor.closest('header')) scrollTo({ top: 0, behavior: 'smooth' });
+    else mejor.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 }
 

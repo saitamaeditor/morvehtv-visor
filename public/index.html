@@ -20,6 +20,11 @@
     --texto: #e7e9ee; --suave: #9aa1ad; --acento: #4f8cff; --peligro: #ff6b6b;
   }
   * { box-sizing: border-box; }
+  /* Sin el recuadro naranja/amarillo que Android (Chrome y la app) pinta al tocar o enfocar algo:
+     el foco se marca solo con los estilos propios de más abajo */
+  html { -webkit-tap-highlight-color: transparent; }
+  :focus { outline: none; }
+  video:focus { outline: none !important; }
   [hidden] { display: none !important; }
   body { margin: 0; font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--fondo); color: var(--texto); }
   button, input, select { font: inherit; color: inherit; }
@@ -171,9 +176,11 @@
   .resultado:hover { border-color: var(--acento); }
   .resultado img { width: 40px; border-radius: 4px; }
   /* ---------- Mando de la tele ---------- */
-  .item:focus, .cat:focus, .boton:focus, #migas a:focus, select:focus, input:focus, summary:focus, .flecha:focus, #vcontenido > video:focus {
+  .item:focus, .cat:focus, .boton:focus, #migas a:focus, select:focus, input:focus, summary:focus, .flecha:focus {
     outline: 3px solid var(--acento); outline-offset: 2px;
   }
+  /* Menú de arriba y «Ver todo ›»: subrayado en vez de recuadro */
+  #nav a:focus, .fila-titulo a:focus, .logo:focus { color: #fff; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 6px; }
   html:not(.usa-mando):not(.tele) .item:focus:not(:focus-visible), html:not(.usa-mando):not(.tele) .cat:focus:not(:focus-visible),
   html:not(.usa-mando):not(.tele) .boton:focus:not(:focus-visible) { outline: none; }
   .tele body, .usa-mando body { scroll-behavior: smooth; }

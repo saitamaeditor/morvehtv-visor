@@ -84,6 +84,8 @@ public class MainActivity extends Activity {
         web.setWebChromeClient(cromo);
         web.setFocusable(true);
         web.setFocusableInTouchMode(true);
+        // Sin el resaltado que Android 8+ pinta sobre toda la vista web al enfocarla con el mando
+        if (android.os.Build.VERSION.SDK_INT >= 26) web.setDefaultFocusHighlightEnabled(false);
 
         reintentar.setOnClickListener(v -> abrir());
 
