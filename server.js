@@ -335,6 +335,9 @@ async function js(fichero) {
   return code;
 }
 
+// Hora a la que arrancó el servidor (para saber si Render ya ha cargado la última versión)
+const ARRANQUE = new Date().toISOString();
+
 const json = (res, status, datos) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
   res.end(JSON.stringify(datos));
@@ -352,7 +355,7 @@ http
       if (url.pathname === '/api/entrar' && req.method === 'POST') return await acceso.entrar(req, res);
       // Para la pantalla de entrada (¿PIN o contraseña?) y para que Render sepa que está viva
       if (url.pathname === '/api/modo') return json(res, 200, { nube: acceso.NUBE });
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, arranque: ARRANQUE });
       if (permiso === 'pin' && !PUBLICO.includes(url.pathname)) {
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Falta el PIN' });
         res.writeHead(302, { location: '/entrar.html' });
