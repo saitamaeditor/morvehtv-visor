@@ -212,6 +212,12 @@ public class MainActivity extends Activity {
 
     // Lo que la web puede pedir a la app
     private class Puente {
+        // La web pide ver un vídeo con el reproductor nativo (ExoPlayer)
+        @JavascriptInterface
+        public void reproducir(String datos) {
+            runOnUiThread(() -> startActivity(new Intent(MainActivity.this, ReproductorActivity.class).putExtra("datos", datos)));
+        }
+
         @JavascriptInterface
         public void introEmpieza() {
             runOnUiThread(MainActivity.this::mostrarWeb);

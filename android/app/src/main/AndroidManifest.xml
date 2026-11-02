@@ -33,5 +33,13 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Reproductor nativo (ExoPlayer): siempre a pantalla completa y en horizontal -->
+        <activity
+            android:name=".ReproductorActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Tema"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode" />
     </application>
 </manifest>
