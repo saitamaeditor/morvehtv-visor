@@ -197,11 +197,25 @@
   .tele main { padding: 2.5vh 4vw; }
   /* Las teles muestran la web a poca resolución (unos 960×540): las carátulas se miden por el
      alto de la pantalla para que quepa una fila entera con su texto, unas 6 por fila */
-  .tele .rejilla { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-template-columns: repeat(auto-fill, minmax(24vh, 1fr)); gap: 3vh 2vw; }
+  .tele .rejilla { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); grid-template-columns: repeat(auto-fill, minmax(21vh, 1fr)); gap: 3vh 1.8vw; }
   .tele .item .nombre { padding: 6px 8px 2px; }
   .tele .item .resumen { -webkit-line-clamp: 2; }
   .tele .ficha img.cartel { width: 26vh; }
-  .tele #cabecera .ficha p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  /* Cabecera de serie o temporada en la tele: compacta (unos 40 % de la pantalla) para que debajo
+     se vean ya las temporadas y los episodios */
+  .tele #cabecera { margin-bottom: 2.5vh; }
+  .tele #cabecera .ficha { padding: 2vh 2vw; gap: 2vw; font-size: 14px; }
+  .tele #cabecera .ficha img.cartel { width: 15vh; }
+  .tele #cabecera .ficha .cuerpo { gap: 5px; }
+  .tele #cabecera .ficha h2 { font-size: 24px; }
+  .tele #cabecera .ficha h3 { font-size: 16px; margin: 2px 0 0; }
+  .tele #cabecera .ficha p { font-size: 14px; line-height: 1.4; -webkit-line-clamp: 2; max-width: none;
+    display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+  .tele #cabecera .ficha p.suave { display: none; }
+  .tele #cabecera .chip { font-size: 12px; }
+  .tele #cabecera .linea { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tele #cabecera .boton { padding: 4px 12px; font-size: 14px; }
+  .tele #cabecera .corrector summary { font-size: 12px; }
   .tele .categorias { grid-template-columns: repeat(4, 1fr); gap: 22px; }
   .tele .cat { padding: 26px; }
   .tele .cat .nombre { font-size: 24px; }
