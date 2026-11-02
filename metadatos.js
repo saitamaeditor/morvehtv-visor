@@ -20,6 +20,10 @@ export async function iniciar(dir) {
   try {
     cache = { ...cache, ...JSON.parse(await readFile(archivoCache, 'utf8')) };
   } catch {}
+  // Los «no encontrado» de antes se vuelven a buscar (ahora se busca mejor)
+  for (const seccion of ['archivos', 'carpetas']) {
+    for (const [clave, valor] of Object.entries(cache[seccion])) if (!valor) delete cache[seccion][clave];
+  }
 }
 
 function guardar() {
@@ -101,6 +105,7 @@ export async function buscar(q, tipo, anio) {
       tmdbId: r.id,
       tipo: tipo === 'serie' || r.media_type === 'tv' ? 'serie' : 'pelicula',
       titulo: r.title ?? r.name,
+      original: r.original_title ?? r.original_name ?? '',
       anio: (r.release_date ?? r.first_air_date ?? '').slice(0, 4),
       poster: img(r.poster_path, 'w185'),
     }));
@@ -114,6 +119,8 @@ function limpiarNombre(texto) {
     .replace(/[._]+/g, ' ')
     .replace(/\[[^\]]*\]/g, ' ')
     .replace(/\b(2160p|1080p|720p|480p|4k|uhd|hdr|web[- ]?dl|webrip|bluray|brrip|hdtv|x264|x265|h264|h265|hevc|aac|ac3|dual|castellano|español|spanish|latino|vose|subs?)\b.*$/i, '')
+    // Etiquetas de webs de descarga pegadas al título: «Mi mejor amiga Cinubo» → «Mi mejor amiga»
+    .replace(/\b(cinubo|cinecalidad|pelisplus|pelis ?24|gnula|mejortorrent|dontorrent|divxtotal|elitetorrent|grantorrent|pctfenix|pctmix|newpct\d*|yts|yify|rarbg|cuevana\d*|repelis|pelismart|zonaleros|hdfull|tioanime|animeflv|jkanime)\b.*$/i, '')
     .replace(/^\d+(?:[.,]\d+)?\s+(?=\S)/, '') // numeración delante: «0.56 Qué le pasó…»
     .replace(/\s+/g, ' ')
     .trim();
@@ -154,9 +161,52 @@ export function analizar(key) {
   return nombre ? { tipo: 'pelicula', nombre, anio } : null;
 }
 
+// Si el nombre completo no aparece en TMDB, se prueba quitando palabras del final (suelen ser
+// etiquetas de la web de descarga o del grupo que lo subió) y, por último, sin fijar el tipo
+function variantes(nombre) {
+  const palabras = nombre.split(/\s+/).filter(Boolean);
+  const lista = [nombre];
+  for (let n = palabras.length - 1; n >= 1 && lista.length < 4; n--) {
+    const v = palabras.slice(0, n).join(' ');
+    if (v.length >= 4) lista.push(v);
+  }
+  return [...new Set(lista)];
+}
+
+// TMDB ordena por popularidad: con «Mi mejor amiga» sale antes «La boda de mi mejor amiga».
+// Entre los resultados se prefiere el que se llama exactamente igual (en español o en el
+// original) y el del año del archivo; a igualdad, el más popular.
+const comparable = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+
+function mejor(lista, nombre, anio) {
+  const buscado = comparable(nombre);
+  let elegido = null;
+  let puntos = -1;
+  lista.slice(0, 10).forEach((r, i) => {
+    const titulos = [comparable(r.titulo), comparable(r.original)];
+    let p = 0;
+    if (titulos.includes(buscado)) p += 4;
+    else if (titulos.some((t) => t.startsWith(buscado) || buscado.startsWith(t))) p += 1;
+    if (anio && r.anio === String(anio)) p += 3;
+    p -= i * 0.01; // a igualdad, el que TMDB pone antes
+    if (p > puntos) { puntos = p; elegido = r; }
+  });
+  return elegido;
+}
+
 async function encontrar({ nombre, tipo, anio }) {
-  const conAnio = anio ? await buscar(nombre, tipo, anio) : [];
-  return conAnio[0] ?? (await buscar(nombre, tipo))[0] ?? null;
+  for (const n of variantes(nombre)) {
+    const conAnio = anio ? await buscar(n, tipo, anio) : [];
+    const lista = conAnio.length ? conAnio : await buscar(n, tipo);
+    const r = mejor(lista, n, anio);
+    if (r) return r;
+  }
+  if (tipo) {
+    const r = mejor(await buscar(nombre), nombre, anio);
+    if (r) return r;
+  }
+  return null;
 }
 
 // ---------- Lo que pide la interfaz ----------
@@ -165,7 +215,9 @@ async function identificar(clave, seccion, datos) {
   if (cache.correcciones[clave]) return cache.correcciones[clave];
   if (clave in cache[seccion]) return cache[seccion][clave];
   const r = await encontrar(datos);
-  cache[seccion][clave] = r && { tmdbId: r.tmdbId, tipo: r.tipo };
+  // Solo se guarda lo encontrado: lo que no aparece se vuelve a buscar la próxima vez
+  if (!r) return null;
+  cache[seccion][clave] = { tmdbId: r.tmdbId, tipo: r.tipo };
   guardar();
   return cache[seccion][clave];
 }
