@@ -133,12 +133,25 @@ public class MainActivity extends Activity {
         reintentar.requestFocus();
     }
 
+    // Quita la pantalla de «Conectando…». Se hace en cuanto la página empieza a verse (o la
+    // intro avisa de que arranca), no al terminar de cargar todo: si no, la intro empezaba
+    // tapada y se veía a medias
+    private void mostrarWeb() {
+        if (reintentar.getVisibility() == View.VISIBLE) return;
+        carga.setVisibility(View.GONE);
+    }
+
     private class Cliente extends WebViewClient {
+        @Override
+        public void onPageCommitVisible(WebView vista, String url) {
+            mostrarWeb();
+        }
+
         @Override
         public void onPageFinished(WebView vista, String url) {
             if (reintentar.getVisibility() == View.VISIBLE) return;
             cargada = true;
-            carga.setVisibility(View.GONE);
+            mostrarWeb();
             web.requestFocus();
             CookieManager.getInstance().flush();
             // Una vez por apertura, cuando ya se ve la app: ¿hay un APK más nuevo?
@@ -199,6 +212,11 @@ public class MainActivity extends Activity {
 
     // Lo que la web puede pedir a la app
     private class Puente {
+        @JavascriptInterface
+        public void introEmpieza() {
+            runOnUiThread(MainActivity.this::mostrarWeb);
+        }
+
         @JavascriptInterface
         public void pantalla(boolean encendida) {
             runOnUiThread(() -> {

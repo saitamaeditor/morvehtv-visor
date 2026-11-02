@@ -4,8 +4,12 @@
 // Tres niveles de calidad para que vaya fluida en todas partes:
 //   alta  → ordenador: más estrellas, resolución completa y brillos
 //   media → móvil, tablet y app: resolución completa (nítida en pantallas densas) y sin desenfoques
-//   baja  → smart TV y aparatos modestos: lienzo a 3/4 de resolución y menos estrellas
+//   baja  → smart TV y aparatos modestos: menos estrellas y capas, sin barrido de luz en el texto
 // Si aun así va a tirones (se mide en los primeros fotogramas), baja un nivel sola.
+//
+// No empieza hasta que la página ha terminado de arrancar (se queda en negro, en pausa): así el
+// primer segundo no compite con la carga y en la app de Android no se pierde el principio.
+// Mientras suena, la app no dibuja la portada (window.morvehIntroFin).
 (() => {
   let vista = false;
   try { vista = sessionStorage.getItem('intro') === '1'; sessionStorage.setItem('intro', '1'); } catch (e) {}
@@ -19,13 +23,13 @@
   const AJUSTES = {
     alta: { estrellas: 520, escala: 1, maxPixeles: 3e6, chispas: 22 },
     media: { estrellas: 340, escala: 1, maxPixeles: 2.6e6, chispas: 18 },
-    baja: { estrellas: 200, escala: 0.75, maxPixeles: 0.9e6, chispas: 12 },
+    baja: { estrellas: 220, escala: 1, maxPixeles: 2.1e6, chispas: 10 },
   };
   const DURACION = reducir ? 1500 : 3900;
 
   const intro = document.createElement('div');
   intro.id = 'intro';
-  intro.className = `calidad-${calidad}${esTele ? ' en-tele' : ''}`;
+  intro.className = `calidad-${calidad}${esTele ? ' en-tele' : ''} esperando`;
   intro.innerHTML = `
     <canvas></canvas>
     <div class="intro-nebulosa"></div>
@@ -89,7 +93,8 @@
 
   // ---------- Campo de estrellas en 3D: lento al principio, salto a la velocidad de la luz al final ----------
   const lienzo = intro.querySelector('canvas');
-  const ctx = lienzo.getContext('2d', { alpha: false });
+  // desynchronized: en Android el lienzo se presenta sin esperar al resto de la página
+  const ctx = lienzo.getContext('2d', { alpha: false, desynchronized: true });
   const COLORES = ['#ffffff', '#cfe0ff', '#8fb4ff', '#d6a8ff', '#ff9fd2'];
   const NIVELES = 3; // lejos / medio / cerca: cada uno con su grosor y brillo
   let ancho = 0, alto = 0, px = 1;
@@ -110,7 +115,7 @@
     alto = lienzo.height = Math.max(1, Math.round(innerHeight * px));
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, ancho, alto);
-    ctx.lineCap = 'round';
+    ctx.lineCap = calidad === 'baja' ? 'butt' : 'round';
     const n = reducir ? 0 : a.estrellas;
     while (estrellas.length < n) estrellas.push(nueva(true));
     estrellas.length = n;
@@ -118,8 +123,11 @@
   preparar();
   addEventListener('resize', preparar);
 
-  const inicio = performance.now();
+  let inicio = performance.now();
   let saliendo = null;
+  let empezada = false;
+  let avisarFin;
+  window.morvehIntroFin = new Promise((ok) => (avisarFin = ok));
   // Velocidad según el momento: deriva suave, frenazo en el destello y aceleración final
   function velocidad(t) {
     if (saliendo) return 0.02 + Math.min(1, (t - saliendo) / 600) * 0.09;
@@ -132,13 +140,13 @@
   // Las estrellas se agrupan por color y distancia: unas pocas pinceladas por fotograma en vez
   // de una por estrella (lo que más cuesta en los navegadores de teles y móviles)
   const grupos = Array.from({ length: COLORES.length * NIVELES }, () => []);
-  let anterior = inicio;
+  let anterior = 0;
   const tiempos = [];
 
   function cuadro(ahora) {
     if (!intro.parentNode) return;
     const t = ahora - inicio;
-    medirFluidez(ahora - anterior);
+    if (anterior) medirFluidez(ahora - anterior);
     anterior = ahora;
     const v = velocidad(t);
     ctx.globalAlpha = 1;
@@ -182,12 +190,28 @@
       }
     }
   }
-  requestAnimationFrame(cuadro);
+  // ---------- Arranque: cuando la página ya está lista ----------
+  function empezar() {
+    if (empezada || !intro.parentNode) return;
+    empezada = true;
+    inicio = performance.now();
+    intro.classList.remove('esperando');
+    // La app de Android quita entonces su pantalla de «Conectando…»
+    try { if (window.MorvehApp && window.MorvehApp.introEmpieza) window.MorvehApp.introEmpieza(); } catch (e) {}
+    requestAnimationFrame(cuadro);
+    setTimeout(() => terminar(false), DURACION - 700);
+  }
+  const trasDosFotogramas = () => requestAnimationFrame(() => requestAnimationFrame(empezar));
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', trasDosFotogramas);
+  else trasDosFotogramas();
+  setTimeout(empezar, 2500); // por si algo tarda demasiado
 
   // ---------- Final ----------
   function terminar(rapido) {
     if (saliendo) return;
+    if (!empezada) { empezada = true; inicio = performance.now(); }
     saliendo = performance.now() - inicio;
+    avisarFin(); // la portada se dibuja mientras la intro se funde
     intro.classList.add('salto');
     setTimeout(() => intro.classList.add('fuera'), rapido ? 150 : 450);
     setTimeout(() => {
@@ -199,7 +223,6 @@
   }
   function alTeclear(e) { e.preventDefault(); e.stopPropagation(); terminar(true); }
 
-  setTimeout(() => terminar(false), DURACION - 700);
   // pointerdown responde al instante al tocar la pantalla (el «click» del móvil llega tarde)
   intro.addEventListener(window.PointerEvent ? 'pointerdown' : 'click', () => terminar(true));
   addEventListener('keydown', alTeclear, true);

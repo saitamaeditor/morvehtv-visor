@@ -12,6 +12,8 @@
   transition: opacity .7s ease;
 }
 #intro.fuera { opacity: 0; pointer-events: none; }
+/* En negro y quieta hasta que la página está lista */
+#intro.esperando *, #intro.esperando *::before, #intro.esperando *::after { animation-play-state: paused !important; }
 #intro canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 #intro::after { /* viñeta */
   content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none;
@@ -89,7 +91,7 @@
 .intro-chispas { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; margin: -50% 0 0 -50%; pointer-events: none; }
 .intro-chispas i {
   position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%;
-  box-shadow: 0 0 6px currentColor; opacity: 0; will-change: transform, opacity;
+  box-shadow: 0 0 6px currentColor; opacity: 0;
   animation: intro-chispa .9s cubic-bezier(.1,.7,.3,1) forwards;
 }
 @keyframes intro-chispa {
@@ -115,7 +117,7 @@
 /* Cada letra lleva dos capas recortadas al texto: el destello que la cruza y su color */
 .intro-titulo span {
   --color: linear-gradient(180deg, #fff 30%, #a9bddc 70%, #5b6f8f);
-  display: inline-block; opacity: 0; transform: translateY(.45em) scale(1.35); will-change: transform, opacity;
+  display: inline-block; opacity: 0; transform: translateY(.45em) scale(1.35);
   background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.95) 50%, transparent 65%) no-repeat, var(--color);
   background-size: 300% 100%, 100% 100%; background-position: 150% 0, 0 0;
   -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
@@ -129,6 +131,9 @@
 @keyframes intro-barrido { to { background-position: -50% 0, 0 0; } }
 /* En ordenador, además, las letras llegan desenfocadas y con brillo */
 #intro.calidad-alta .intro-titulo span { filter: blur(10px); animation-name: intro-letra-alta, intro-barrido; }
+/* En la tele, sin barrido de luz: repintar el texto degradado en cada fotograma es lo que más le cuesta */
+#intro.calidad-baja .intro-titulo span { animation-name: intro-letra; }
+#intro.calidad-baja .intro-chispas i { box-shadow: none; }
 @keyframes intro-letra-alta { to { opacity: 1; transform: none; filter: blur(0) drop-shadow(0 0 14px rgba(79,140,255,.45)); } }
 
 .intro-sub {

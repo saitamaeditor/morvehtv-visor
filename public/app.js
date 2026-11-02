@@ -55,6 +55,9 @@ async function cargar(mas = false) {
     estado.carpetas.push(...d.carpetas);
     estado.archivos.push(...d.archivos);
     estado.token = d.siguiente;
+    // Mientras suena la intro no se dibuja la portada (los datos ya se han pedido): así la
+    // intro va fluida en la tele y el móvil
+    if (window.morvehIntroFin) { await window.morvehIntroFin; window.morvehIntroFin = null; }
     pintar();
   } catch (e) {
     items.innerHTML = `<div class="vacio error">No se pudo leer el bucket: ${e.message}</div>`;
@@ -397,6 +400,22 @@ const el = (etiqueta, clase, texto) => {
   return e;
 };
 
+// La librería de vídeo (hls.js, ~400 KB) se carga al abrir el primer vídeo, no al arrancar
+let hlsCargando = null;
+function cargarHls() {
+  if (window.Hls) return Promise.resolve();
+  if (!hlsCargando) {
+    hlsCargando = new Promise((ok) => {
+      const s = document.createElement('script');
+      s.src = '/vendor/hls.min.js';
+      s.onload = ok;
+      s.onerror = () => { hlsCargando = null; ok(); };
+      document.head.appendChild(s);
+    });
+  }
+  return hlsCargando;
+}
+
 // iPhone/iPad (Safari sin MediaSource clásico) reproducen HLS por sí mismos; el resto
 // (Android, smart TV, ordenador) lo hace con hls.js
 const hlsNativo = (v) => !(window.Hls && Hls.isSupported()) && !!v.canPlayType('application/vnd.apple.mpegurl');
@@ -482,6 +501,7 @@ function reproductor(key, m) {
   const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
   const barra = el('div', 'controles');
   const bGrande = el('button', 'gran-play', '▶');
+  cargarHls(); // se adelanta mientras el servidor prepara el vídeo
   bGrande.setAttribute('aria-label', 'Reproducir');
   const bPlay = el('button', 'boton', '▶');
   const bAtras = el('button', 'boton', '⟲ 10');
@@ -555,6 +575,8 @@ function reproductor(key, m) {
       if (mio !== turno || !caja.isConnected) return parar(r.id);
       parar(sesion);
       sesion = r.id; desde = r.desde;
+      await cargarHls();
+      if (mio !== turno || !caja.isConnected) return;
       fuente(r.url, t - r.desde, reproducir);
     } catch (e) {
       if (mio === turno) cargando.textContent = e.message;
