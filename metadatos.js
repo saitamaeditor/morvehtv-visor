@@ -250,11 +250,32 @@ export async function deArchivo(key) {
   };
 }
 
-// Carpeta de una serie («SERIES ANIME/¡A por Jiro!/»). Las de categoría y temporada no tienen.
+// Carpeta de una serie («SERIES ANIME/¡A por Jiro!/») o de una de sus temporadas
+// («…/Temporada 2/»: la ficha de la serie más el póster, la sinopsis y los episodios de esa
+// temporada). Las de categoría no tienen.
 export async function deCarpeta(prefijo) {
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
-  if (partes.length < 2 || CARPETA_TEMPORADA.test(n)) return null;
+  if (partes.length < 2) return null;
+  const numero = n.match(CARPETA_TEMPORADA)?.[1];
+  if (numero) {
+    if (partes.length < 3) return null;
+    const serie = await deCarpeta(partes.slice(0, -1).join('/') + '/');
+    if (!serie?.encontrado || serie.tipo !== 'serie') return serie;
+    const s = await temporada(serie.tmdbId, Number(numero)).catch(() => null);
+    return {
+      ...serie,
+      temporada: {
+        numero: Number(numero),
+        nombre: s?.name || `Temporada ${Number(numero)}`,
+        sinopsis: s?.overview ?? '',
+        poster: img(s?.poster_path, 'w342'),
+        anio: (s?.air_date ?? '').slice(0, 4),
+        episodios: s?.episodes?.length ?? null,
+        valoracion: s?.vote_average ? Math.round(s.vote_average * 10) / 10 : null,
+      },
+    };
+  }
   const { anio, antes } = separarAnio(n);
   const tipo = partes.slice(0, -1).some((c) => CARPETA_SERIE.test(c)) ? 'serie' : null;
   const id = await identificar(prefijo, 'carpetas', { nombre: limpiarNombre(antes.replace(/^[¡¿]/, '')), tipo, anio });

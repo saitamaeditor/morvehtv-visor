@@ -110,6 +110,7 @@ function pintar() {
     const t = tarjeta({ icono, titulo: nombre(f.key), miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i, archivos), nuevo: nuevas.has(f.key) });
     t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
     t.dataset.key = f.key;
+    t.dataset.tamano = f.tamano;
     items.append(t);
     if (clase.startsWith('video')) conMeta(t, 'archivo', f.key);
   });
@@ -250,26 +251,48 @@ const tituloDe = (d) => d.episodio
 async function conMeta(t, clase, clave) {
   const d = await pedirMeta(clase, clave);
   if (!d?.encontrado || !t.isConnected) return;
-  const imagen = d.episodio?.imagen ?? d.poster;
+  const temp = d.temporada;
+  const imagen = d.episodio?.imagen ?? temp?.poster ?? d.poster;
   const mini = t.querySelector('.mini');
   if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
     mini.replaceChildren(img);
     mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
   }
+  const meta = t.querySelector('.meta');
+  const tam = t.dataset.tamano && bytes(Number(t.dataset.tamano));
+  if (temp) {
+    // Temporada: su póster, su nombre y cuántos episodios tiene
+    t.querySelector('.nombre').textContent = temp.nombre;
+    meta.textContent = [temp.valoracion && `★ ${temp.valoracion}`, temp.anio,
+      temp.episodios && `${temp.episodios} episodios`].filter(Boolean).join(' · ');
+    if (temp.sinopsis) meta.after(el('p', 'resumen', temp.sinopsis));
+    return;
+  }
   t.querySelector('.nombre').textContent = tituloDe(d);
-  if (d.valoracion) t.querySelector('.meta').prepend(`★ ${d.valoracion} · `);
+  if (d.episodio) {
+    // Episodio: duración, fecha de emisión y de qué va
+    meta.textContent = [d.episodio.duracion && `${d.episodio.duracion} min`,
+      d.episodio.fecha && new Date(d.episodio.fecha).toLocaleDateString('es-ES'), tam].filter(Boolean).join(' · ');
+    if (d.episodio.sinopsis) meta.after(el('p', 'resumen', d.episodio.sinopsis));
+    return;
+  }
+  // Película o serie: nota, año, duración o temporadas y géneros
+  meta.textContent = [d.valoracion && `★ ${d.valoracion}`,
+    d.tipo === 'serie' ? (d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`) : d.duracion && `${d.duracion} min`,
+    d.generos.slice(0, 2).join(', '), tam].filter(Boolean).join(' · ');
+  if (d.sinopsis) meta.after(el('p', 'resumen', d.sinopsis));
 }
 
 // Cabecera con fondo, cartel y sinopsis al entrar en la carpeta de una serie
 async function pintarCabecera(prefijo) {
   const c = $('#cabecera');
   c.hidden = true; c.innerHTML = '';
-  // En «Serie/Temporada 2/» la cabecera es la de la serie
+  // En «Serie/Temporada 2/» la cabecera es la de la serie con el póster y los datos de esa temporada
   const partes = prefijo.split('/').filter(Boolean);
   if (/^(?:temporada|season|temp|t|s)\s*\d{1,2}$/i.test(partes.at(-1) ?? '')) partes.pop();
   if (partes.length < 2) return;
-  const d = await pedirMeta('carpeta', partes.join('/') + '/');
+  const d = await pedirMeta('carpeta', partes.length < prefijo.split('/').filter(Boolean).length ? prefijo : partes.join('/') + '/');
   if (!d?.encontrado || estado.prefijo !== prefijo) return;
   c.append(fichaHtml(d, { clave: partes.join('/') + '/' }));
   if (d.fondo) c.style.backgroundImage = `linear-gradient(90deg, var(--fondo) 30%, rgba(15,17,21,.75)), url("${d.fondo}")`;
@@ -281,8 +304,9 @@ const pista = (p, n) => [(p.titulo || p.idioma || `Pista ${n + 1}`).toUpperCase(
 // Ficha completa: datos de TMDB + datos técnicos del archivo (si se pasan)
 function fichaHtml(d, { archivo, medio, clave } = {}) {
   const f = el('div', 'ficha');
-  if (d?.encontrado && (d.episodio?.imagen || d.poster)) {
-    const img = el('img', 'cartel'); img.src = d.poster ?? d.episodio.imagen; img.alt = ''; f.append(img);
+  const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen);
+  if (poster) {
+    const img = el('img', 'cartel'); img.src = poster; img.alt = ''; f.append(img);
   }
   const cuerpo = el('div', 'cuerpo');
   f.append(cuerpo);
@@ -297,12 +321,17 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     chip((d.episodio?.duracion ?? d.duracion) && `${d.episodio?.duracion ?? d.duracion} min`);
     d.generos.forEach(chip);
     cuerpo.append(chips);
+    if (d.temporada) {
+      const t = d.temporada;
+      cuerpo.append(el('h3', null, [t.nombre, t.anio, t.episodios && `${t.episodios} episodios`, t.valoracion && `★ ${t.valoracion}`].filter(Boolean).join(' · ')));
+      if (t.sinopsis) cuerpo.append(el('p', null, t.sinopsis));
+    }
     if (d.episodio) {
       cuerpo.append(el('h3', null, `Temporada ${d.episodio.temporada} · Episodio ${d.episodio.numero}: ${d.episodio.titulo}`));
       if (d.episodio.fecha) cuerpo.append(el('div', 'suave', `Emitido el ${new Date(d.episodio.fecha).toLocaleDateString('es-ES')}`));
       if (d.episodio.sinopsis) cuerpo.append(el('p', null, d.episodio.sinopsis));
     }
-    if (d.sinopsis) cuerpo.append(el('p', d.episodio ? 'suave' : null, d.sinopsis));
+    if (d.sinopsis) cuerpo.append(el('p', d.episodio || (d.temporada && d.temporada.sinopsis) ? 'suave' : null, d.sinopsis));
     const linea = (t, v) => {
       if (!v?.length) return;
       const l = el('div', 'linea');
