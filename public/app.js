@@ -859,6 +859,7 @@ function cerrar() {
   $('#vcontenido').innerHTML = '';
   if (actual >= 0) {
     actual = -1;
+    if (recargarAlCerrar) return location.reload();
     if (!estado.prefijo) pintar();
     document.querySelectorAll('#items .item[data-key]').forEach(barraVisto);
     // Con el mando, el foco vuelve a la tarjeta del archivo que se estaba viendo
@@ -1058,6 +1059,19 @@ const eventos = new EventSource('/api/eventos');
 eventos.onopen = () => { $('#directo').classList.add('vivo'); $('#directo').textContent = 'en directo'; };
 eventos.onerror = () => { $('#directo').classList.remove('vivo'); $('#directo').textContent = 'sin conexión'; };
 eventos.addEventListener('cambios', (e) => refrescar(JSON.parse(e.data)).catch(() => {}));
+// Al publicar una versión nueva el servidor se reinicia y la conexión vuelve con otra versión:
+// la app se recarga sola para usarla (la tele y el móvil no se quedan con la antigua). Si estás
+// viendo algo, espera a que cierres el vídeo.
+let versionServidor = null;
+let recargarAlCerrar = false;
+eventos.addEventListener('version', (e) => {
+  const v = JSON.parse(e.data);
+  if (versionServidor && v !== versionServidor) {
+    if (actual >= 0) recargarAlCerrar = true;
+    else location.reload();
+  }
+  versionServidor = v;
+});
 
 window.addEventListener('hashchange', () => {
   estado.prefijo = decodeURIComponent(location.hash.slice(1));

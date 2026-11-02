@@ -336,6 +336,8 @@ async function catalogo() {
 function eventos(req, res) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
   res.write('retry: 3000\n\n');
+  // Versión del servidor: si cambia (se publicó algo nuevo), la app se recarga sola
+  res.write(`event: version\ndata: ${JSON.stringify(ARRANQUE)}\n\n`);
   oyentes.add(res);
   const latido = setInterval(() => res.write(': latido\n\n'), 25000);
   res.on('close', () => { clearInterval(latido); oyentes.delete(res); });
