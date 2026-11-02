@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Para instalar las versiones nuevas de la propia app (Android pide confirmación) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Funciona sin pantalla táctil (tele con mando) y sin ser obligatorio Android TV -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

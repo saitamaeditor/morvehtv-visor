@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.UiModeManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -42,6 +43,8 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback alSalirCompleta;
     private boolean cargada = false;
     private final Cromo cromo = new Cromo();
+    private Actualizador actualizador;
+    private boolean actualizacionMirada = false;
     private final Handler hilo = new Handler(Looper.getMainLooper());
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -77,6 +80,7 @@ public class MainActivity extends Activity {
         web.setFocusableInTouchMode(true);
 
         reintentar.setOnClickListener(v -> abrir());
+        actualizador = new Actualizador(this);
 
         if (guardado != null) web.restoreState(guardado);
         else abrir();
@@ -115,6 +119,11 @@ public class MainActivity extends Activity {
             carga.setVisibility(View.GONE);
             web.requestFocus();
             CookieManager.getInstance().flush();
+            // Una vez por apertura, cuando ya se ve la app: ¿hay un APK más nuevo?
+            if (!actualizacionMirada) {
+                actualizacionMirada = true;
+                actualizador.comprobar();
+            }
         }
 
         @Override
@@ -206,6 +215,19 @@ public class MainActivity extends Activity {
     protected void onSaveInstanceState(Bundle estado) {
         super.onSaveInstanceState(estado);
         web.saveState(estado);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        actualizador.alVolver();
+    }
+
+    // Respuesta del instalador de Android al actualizar
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        if (Actualizador.ACCION_RESULTADO.equals(intent.getAction())) actualizador.resultado(intent);
     }
 
     @Override
