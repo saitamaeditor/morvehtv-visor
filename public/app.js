@@ -93,13 +93,41 @@ function pintarMigas() {
   });
 }
 
-// Por nombre (con números en orden natural: «Episodio 2» antes que «Episodio 10») y sin las
-// carpetas internas que empiezan por «_»
+// Orden natural hecho a mano («Episodio 2» antes que «Episodio 10»): el { numeric: true } de
+// localeCompare no existe en los navegadores de muchas teles y allí salía E1, E10, E11, E2…
+const trozos = (s) => s.toLowerCase().match(/\d+|\D+/g) ?? [];
+function natural(a, b) {
+  const x = trozos(a), y = trozos(b);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    const nx = /^\d/.test(x[i]), ny = /^\d/.test(y[i]);
+    const d = nx && ny ? Number(x[i]) - Number(y[i]) : nx !== ny ? (nx ? -1 : 1) : x[i] < y[i] ? -1 : x[i] > y[i] ? 1 : 0;
+    if (d) return d;
+  }
+  return x.length - y.length;
+}
+
+// Temporada y episodio sacados del nombre («S01E02», «1x02», «T1E2»): ordenan los capítulos
+// aunque cada archivo esté nombrado de una forma
+function capitulo(k) {
+  const m = nombre(k).match(/(?:^|[^a-z0-9])(?:s(\d{1,2})[ ._-]?e(\d{1,3})|(\d{1,2})x(\d{2,3})(?!\d)|t(\d{1,2})[ ._-]?e(\d{1,3}))/i);
+  if (!m) return null;
+  const n = m.slice(1).filter(Boolean).map(Number);
+  return n[0] * 1000 + n[1];
+}
+
+function porCapitulo(a, b) {
+  const x = capitulo(a), y = capitulo(b);
+  if (x !== null && y !== null && x !== y) return x - y;
+  if ((x === null) !== (y === null)) return x === null ? 1 : -1;
+  return natural(a, b);
+}
+
+// Por temporada y episodio, si no por nombre en orden natural, y sin las carpetas internas
+// que empiezan por «_»
 function visibles() {
   const interna = (k) => k.slice(estado.prefijo.length).split('/').some((p) => p.startsWith('_'));
-  const carpetas = estado.carpetas.filter((c) => !nombre(c).startsWith('_'));
-  const archivos = estado.archivos.filter((f) => !interna(f.key))
-    .sort((x, y) => x.key.localeCompare(y.key, 'es', { numeric: true }));
+  const carpetas = estado.carpetas.filter((c) => !nombre(c).startsWith('_')).sort(natural);
+  const archivos = estado.archivos.filter((f) => !interna(f.key)).sort((x, y) => porCapitulo(x.key, y.key));
   return { carpetas, archivos };
 }
 
