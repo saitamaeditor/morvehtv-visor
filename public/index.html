@@ -396,6 +396,42 @@
     .avatar { width: 88px; height: 88px; font-size: 46px; }
     #perfil-actual { padding: 3px; }
   }
+
+  /* ---------- Tarjetas de categoría: el mismo aspecto en móvil, tablet, ordenador y tele ----------
+     Todas con la misma proporción y el texto abajo; columnas según el ancho (8 categorías = 2
+     filas de 4 en pantallas grandes) y letra que crece con la pantalla */
+  .categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 22px); }
+  .cat { display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 16 / 9; min-height: 0; padding: clamp(12px, 1.5vw, 24px); }
+  /* (sin esto, la regla de los iconos del reproductor encogía el emoji y tapaba el nombre) */
+  .cat .icono { width: auto; height: auto; line-height: 1; font-size: clamp(24px, 2.4vw, 40px); }
+  .cat .nombre, .cat.con-imagen .nombre { font-size: clamp(15px, 1.6vw, 26px); line-height: 1.15; margin-top: .35em; }
+  .cat .meta { font-size: clamp(11px, .9vw, 14px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  @media (max-width: 1100px) { .categorias { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (max-width: 820px) {
+    .categorias { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cat .icono { font-size: clamp(24px, 4.4vw, 34px); }
+    .cat .nombre, .cat.con-imagen .nombre { font-size: clamp(15px, 3vw, 22px); }
+    .cat .meta { font-size: clamp(11px, 1.8vw, 13px); }
+  }
+  /* Móvil en vertical: un poco más altas, para que quepan el icono, el nombre y los datos */
+  @media (max-width: 600px) { .cat { aspect-ratio: 4 / 3; } }
+  /* Móvil en horizontal: pantalla ancha y baja, 4 por fila */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cat { aspect-ratio: 16 / 9; padding: 10px 12px; }
+    .cat .icono { font-size: 22px; }
+    .cat .nombre, .cat.con-imagen .nombre { font-size: 15px; }
+  }
+  /* Tele: medidas por el alto de la pantalla (las teles muestran la web a unos 960×540) */
+  .tele .categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2.6vh 1.6vw; }
+  .tele .cat { aspect-ratio: 4 / 3; padding: 2.6vh 1.4vw; }
+  .tele .cat .icono { font-size: 5.2vh; }
+  .tele .cat .nombre, .tele .cat.con-imagen .nombre { font-size: 3.6vh; }
+  .tele .cat .meta { font-size: 2.2vh; }
+  @supports not (aspect-ratio: 1) {
+    .cat { min-height: 130px; }
+    .tele .cat { min-height: 24vh; }
+  }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
