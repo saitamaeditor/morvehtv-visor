@@ -98,26 +98,31 @@ const temporadas = new Map();
 function ficha(tmdbId, tipo) {
   const clave = `${tipo}:${tmdbId}`;
   if (!fichas.has(clave)) {
-    const p = pedir(`/${tipo === 'serie' ? 'tv' : 'movie'}/${tmdbId}`, { append_to_response: 'videos,credits' }).then((d) => {
+    const ruta = `/${tipo === 'serie' ? 'tv' : 'movie'}/${tmdbId}`;
+    const p = pedir(ruta, { append_to_response: 'videos,credits' }).then(async (d) => {
       const trailer = (d.videos?.results ?? []).find((v) => v.site === 'YouTube' && v.type === 'Trailer');
+      // Sin sinopsis o cartel en español: los de la ficha en inglés
+      const en = !d.overview || !d.poster_path ? await pedir(ruta, { language: 'en-US' }).catch(() => null) : null;
       return {
         tmdbId: d.id,
         tipo,
+        fuente: 'TMDB',
         titulo: d.title ?? d.name,
         tituloOriginal: d.original_title ?? d.original_name,
-        sinopsis: d.overview,
+        sinopsis: d.overview || en?.overview || '',
         anio: (d.release_date ?? d.first_air_date ?? '').slice(0, 4),
         duracion: d.runtime ?? d.episode_run_time?.[0] ?? null,
         generos: (d.genres ?? []).map((g) => g.name),
         valoracion: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
-        poster: img(d.poster_path, 'w342'),
-        fondo: img(d.backdrop_path, 'w1280'),
+        poster: img(d.poster_path || en?.poster_path, 'w342'),
+        fondo: img(d.backdrop_path || en?.backdrop_path, 'w1280'),
         reparto: (d.credits?.cast ?? []).slice(0, 8).map((c) => c.name),
         direccion: (d.credits?.crew ?? []).filter((c) => c.job === 'Director').map((c) => c.name),
         creadores: (d.created_by ?? []).map((c) => c.name),
         temporadas: d.number_of_seasons ?? null,
         trailer: trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null,
         tmdb: `https://www.themoviedb.org/${tipo === 'serie' ? 'tv' : 'movie'}/${d.id}`,
+        web: `https://www.themoviedb.org/${tipo === 'serie' ? 'tv' : 'movie'}/${d.id}`,
       };
     });
     p.catch(() => fichas.delete(clave));
@@ -134,6 +139,195 @@ function temporada(tmdbId, numero) {
     temporadas.set(clave, p);
   }
   return temporadas.get(clave);
+}
+
+// ---------- Otras fuentes (gratis y sin clave) ----------
+// Si TMDB no encuentra un título, o lo encuentra a medias (episodios sin nombre, sin resumen o
+// sin imagen), se completa con TVmaze (series y programas), AniList (anime) y Wikipedia.
+async function pedirJson(url, opciones = {}) {
+  const r = await fetch(url, { ...opciones, headers: { 'user-agent': 'MorvehTV/1.0 (visor privado)', ...opciones.headers }, signal: AbortSignal.timeout(10000) });
+  if (!r.ok) throw Object.assign(new Error(`${new URL(url).host} respondió ${r.status}`), { status: 502 });
+  return r.json();
+}
+const sinHtml = (s) => String(s ?? '').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
+  .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/\n{3,}/g, '\n\n').trim();
+const recordar = (clave, crear) => {
+  if (!fichas.has(clave)) { const p = crear(); p.catch(() => fichas.delete(clave)); fichas.set(clave, p); }
+  return fichas.get(clave);
+};
+
+// TVmaze
+async function buscarTvmaze(q) {
+  const lista = await pedirJson(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(q)}`);
+  return lista.map(({ show: s }) => ({ fuente: 'tvmaze', id: s.id, tipo: 'serie', titulo: s.name, original: s.name, anio: (s.premiered ?? '').slice(0, 4) }));
+}
+const showTvmaze = (id) => recordar(`tvmaze-show:${id}`, () =>
+  pedirJson(`https://api.tvmaze.com/shows/${id}?embed[]=episodes&embed[]=cast&embed[]=seasons&embed[]=images`));
+async function fichaTvmaze(id) {
+  const s = await showTvmaze(id);
+  const imagenes = s._embedded?.images ?? [];
+  const fondo = imagenes.find((i) => i.type === 'background') ?? imagenes.find((i) => i.type === 'banner');
+  return {
+    tipo: 'serie', fuente: 'TVmaze', id,
+    titulo: s.name, tituloOriginal: s.name, sinopsis: sinHtml(s.summary),
+    anio: (s.premiered ?? '').slice(0, 4), duracion: s.averageRuntime ?? s.runtime ?? null,
+    generos: s.genres ?? [], valoracion: s.rating?.average ?? null,
+    poster: s.image?.original ?? s.image?.medium ?? null, fondo: fondo?.resolutions?.original?.url ?? null,
+    reparto: (s._embedded?.cast ?? []).slice(0, 8).map((c) => c.person.name), direccion: [], creadores: [],
+    temporadas: (s._embedded?.seasons ?? []).filter((t) => t.number > 0).length || null,
+    trailer: null, web: s.url,
+  };
+}
+async function temporadaTvmaze(id, numero) {
+  const s = await showTvmaze(id);
+  const t = (s._embedded?.seasons ?? []).find((x) => x.number === numero);
+  return {
+    nombre: t?.name || null, sinopsis: sinHtml(t?.summary), poster: t?.image?.original ?? null,
+    anio: (t?.premiereDate ?? '').slice(0, 4), valoracion: null,
+    episodios: (s._embedded?.episodes ?? []).filter((e) => e.season === numero).map((e) => ({
+      numero: e.number, titulo: GENERICO.test(e.name ?? '') ? '' : e.name, sinopsis: sinHtml(e.summary), imagen: e.image?.original ?? e.image?.medium ?? null,
+      fecha: e.airdate || null, duracion: e.runtime ?? null,
+    })),
+  };
+}
+// La serie de TMDB en TVmaze: por su código de IMDb o TheTVDB y, si no, por su título original
+const tvmazeDeTmdb = (tmdbId) => recordar(`tvmaze-de:${tmdbId}`, async () => {
+  const ext = await pedir(`/tv/${tmdbId}/external_ids`).catch(() => ({}));
+  for (const [k, v] of [['imdb', ext.imdb_id], ['thetvdb', ext.tvdb_id]]) {
+    if (!v) continue;
+    const s = await pedirJson(`https://api.tvmaze.com/lookup/shows?${k}=${v}`).catch(() => null);
+    if (s?.id) return s.id;
+  }
+  const f = await ficha(tmdbId, 'serie');
+  for (const n of new Set([f.tituloOriginal, f.titulo])) {
+    const r = mejor(await buscarTvmaze(n).catch(() => []), n, f.anio, true);
+    if (r) return r.id;
+  }
+  return null;
+});
+
+// AniList (anime)
+const CAMPOS_ANILIST = `id format title { romaji english native } synonyms startDate { year } description(asHtml: false)
+  genres averageScore duration episodes coverImage { extraLarge } bannerImage siteUrl trailer { id site }
+  streamingEpisodes { title thumbnail } studios(isMain: true) { nodes { name } }`;
+const anilist = (query, variables) => pedirJson('https://graphql.anilist.co', {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query, variables }),
+}).then((d) => d.data);
+async function buscarAnilist(q, tipo) {
+  const d = await anilist(`query($q: String) { Page(perPage: 10) { media(search: $q, type: ANIME) { ${CAMPOS_ANILIST} } } }`, { q });
+  return (d?.Page?.media ?? []).map((m) => {
+    recordar(`anilist-media:${m.id}`, () => Promise.resolve(m));
+    const serie = !['MOVIE', 'SPECIAL', 'MUSIC'].includes(m.format);
+    return { fuente: 'anilist', id: m.id, tipo: serie ? 'serie' : 'pelicula', titulo: m.title.english || m.title.romaji,
+      original: m.title.romaji, otros: [m.title.native, ...(m.synonyms ?? [])], anio: String(m.startDate?.year ?? '') };
+  }).filter((r) => !tipo || r.tipo === tipo);
+}
+const mediaAnilist = (id) => recordar(`anilist-media:${id}`, () =>
+  anilist(`query($id: Int) { Media(id: $id) { ${CAMPOS_ANILIST} } }`, { id: Number(id) }).then((d) => d.Media));
+async function fichaAnilist(id, tipo) {
+  const m = await mediaAnilist(id);
+  return {
+    tipo, fuente: 'AniList', id,
+    titulo: m.title.english || m.title.romaji, tituloOriginal: m.title.native || m.title.romaji,
+    sinopsis: sinHtml(m.description), anio: String(m.startDate?.year ?? ''), duracion: m.duration ?? null,
+    generos: m.genres ?? [], valoracion: m.averageScore ? m.averageScore / 10 : null,
+    poster: m.coverImage?.extraLarge ?? null, fondo: m.bannerImage ?? null,
+    reparto: [], direccion: (m.studios?.nodes ?? []).map((s) => s.name), creadores: [],
+    temporadas: tipo === 'serie' ? 1 : null,
+    trailer: m.trailer?.site === 'youtube' ? `https://www.youtube.com/watch?v=${m.trailer.id}` : null, web: m.siteUrl,
+  };
+}
+async function temporadaAnilist(id) {
+  const m = await mediaAnilist(id);
+  // «Episode 3 - Título»: el número sale del propio título
+  const episodios = (m.streamingEpisodes ?? []).map((e, i) => {
+    const r = e.title?.match(/^Episode\s+(\d+)\s*-\s*(.*)$/i);
+    return { numero: r ? Number(r[1]) : i + 1, titulo: r ? r[2] : e.title, sinopsis: '', imagen: e.thumbnail ?? null, fecha: null, duracion: m.duration ?? null };
+  });
+  return { nombre: null, sinopsis: '', poster: null, anio: '', valoracion: null, episodios };
+}
+
+// Wikipedia en español (lo último: documentales, programas, estrenos que aún no están en otras)
+const PISTA_WIKI = { serie: 'serie', pelicula: 'película' };
+async function buscarWikipedia(q, tipo) {
+  const d = await pedirJson(`https://es.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=8&srsearch=${encodeURIComponent(`${q} ${PISTA_WIKI[tipo] ?? ''}`.trim())}`);
+  return (d.query?.search ?? []).map((r) => {
+    const aclaracion = r.title.match(/\(([^)]*)\)\s*$/)?.[1] ?? '';
+    const deQue = /serie|programa|telenovela|anime|docuserie|reality|concurso/i.test(aclaracion) ? 'serie'
+      : /pel[ií]cula|film|documental/i.test(aclaracion) ? 'pelicula' : (tipo ?? 'pelicula');
+    return { fuente: 'wikipedia', id: r.title, tipo: deQue, titulo: r.title.replace(/\s*\([^)]*\)\s*$/, ''), original: '', anio: aclaracion.match(/(?:19|20)\d{2}/)?.[0] ?? '' };
+  }).filter((r) => !tipo || r.tipo === tipo);
+}
+async function fichaWikipedia(titulo, tipo) {
+  const d = await pedirJson(`https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(titulo.replace(/ /g, '_'))}`);
+  return {
+    tipo, fuente: 'Wikipedia', id: titulo,
+    titulo: d.title.replace(/\s*\([^)]*\)\s*$/, ''), tituloOriginal: null, sinopsis: d.extract ?? '',
+    anio: (d.description ?? '').match(/(?:19|20)\d{2}/)?.[0] ?? '', duracion: null, generos: [], valoracion: null,
+    poster: d.originalimage?.source ?? d.thumbnail?.source ?? null, fondo: null,
+    reparto: [], direccion: [], creadores: [], temporadas: null, trailer: null, web: d.content_urls?.desktop?.page ?? null,
+  };
+}
+
+const RESPALDO = {
+  tvmaze: { buscar: async (q, tipo) => (tipo === 'pelicula' ? [] : buscarTvmaze(q)), ficha: (id) => fichaTvmaze(id) },
+  anilist: { buscar: buscarAnilist, ficha: fichaAnilist },
+  wikipedia: { buscar: buscarWikipedia, ficha: fichaWikipedia },
+};
+// Anime → AniList primero; series y programas → TVmaze; lo demás → Wikipedia
+const ordenRespaldo = ({ tipo, anime }) => (anime ? ['anilist', 'tvmaze', 'wikipedia'] : tipo === 'pelicula' ? ['wikipedia'] : ['tvmaze', 'wikipedia']);
+
+// La ficha de un título, venga de donde venga
+function fichaDe(id) {
+  if (!id.fuente) return ficha(id.tmdbId, id.tipo);
+  return recordar(`${id.fuente}:${id.tipo}:${id.id}`, () => RESPALDO[id.fuente].ficha(id.id, id.tipo));
+}
+
+// Una temporada con sus episodios. Con TMDB: el español, y lo que falte (nombre «Episodio 3»,
+// sin resumen, sin imagen), del inglés y, si aún falta, de TVmaze.
+const GENERICO = /^(?:episodio|episode|cap[ií]tulo|ep\.?)\s*\d+$/i;
+const tmdbEpisodio = (e) => ({
+  numero: e.episode_number, titulo: GENERICO.test(e.name ?? '') ? '' : e.name ?? '', sinopsis: e.overview ?? '',
+  imagen: img(e.still_path, 'w300'), fecha: e.air_date ?? null, duracion: e.runtime ?? null,
+});
+function temporadaDe(id, numero) {
+  if (id.fuente === 'tvmaze') return recordar(`tvmaze-temp:${id.id}:${numero}`, () => temporadaTvmaze(id.id, numero));
+  if (id.fuente === 'anilist') return recordar(`anilist-temp:${id.id}`, () => temporadaAnilist(id.id));
+  if (id.fuente) return Promise.resolve(null);
+  return recordar(`tmdb-temp:${id.tmdbId}:${numero}`, async () => {
+    const es = await temporada(id.tmdbId, numero).catch(() => null);
+    const t = {
+      nombre: es?.name || null, sinopsis: es?.overview ?? '', poster: img(es?.poster_path, 'w342'),
+      anio: (es?.air_date ?? '').slice(0, 4), valoracion: es?.vote_average ? Math.round(es.vote_average * 10) / 10 : null,
+      episodios: (es?.episodes ?? []).map(tmdbEpisodio),
+    };
+    const incompleto = () => !t.episodios.length || t.episodios.some((e) => !e.titulo || !e.sinopsis || !e.imagen);
+    const completar = (otros) => {
+      for (const o of otros) {
+        const e = t.episodios.find((x) => x.numero === o.numero);
+        if (!e) { t.episodios.push({ ...o, titulo: GENERICO.test(o.titulo ?? '') ? '' : o.titulo }); continue; }
+        for (const k of ['titulo', 'sinopsis', 'imagen', 'fecha', 'duracion']) {
+          if (!e[k] && o[k] && !(k === 'titulo' && GENERICO.test(o[k]))) e[k] = o[k];
+        }
+      }
+      t.episodios.sort((a, b) => a.numero - b.numero);
+    };
+    if (incompleto()) {
+      const en = await pedir(`/tv/${id.tmdbId}/season/${numero}`, { language: 'en-US' }).catch(() => null);
+      if (en) {
+        completar((en.episodes ?? []).map(tmdbEpisodio));
+        if (!t.sinopsis) t.sinopsis = en.overview ?? '';
+        if (!t.poster) t.poster = img(en.poster_path, 'w342');
+      }
+    }
+    if (incompleto()) {
+      const tv = await tvmazeDeTmdb(id.tmdbId).catch(() => null);
+      const otra = tv && await temporadaTvmaze(tv, numero).catch(() => null);
+      if (otra) { completar(otra.episodios); if (!t.poster) t.poster = otra.poster; }
+    }
+    return t;
+  });
 }
 
 export async function buscar(q, tipo, anio) {
@@ -164,6 +358,7 @@ function limpiarNombre(texto) {
     .replace(/\b(cinubo|cinecalidad|pelisplus|pelis ?24|gnula|mejortorrent|dontorrent|divxtotal|elitetorrent|grantorrent|pctfenix|pctmix|newpct\d*|yts|yify|rarbg|cuevana\d*|repelis|pelismart|zonaleros|hdfull|tioanime|animeflv|jkanime)\b.*$/i, '')
     .replace(/^\d+(?:[.,]\d+)?\s+(?=\S)/, '') // numeración delante: «0.56 Qué le pasó…»
     .replace(/\s+/g, ' ')
+    .replace(/[\s\-–—:,.]+$/, '') // el « - » que queda al quitar el año: «Circe - 2026»
     .trim();
 }
 
@@ -204,6 +399,9 @@ export function analizar(key) {
 
 // Si el nombre completo no aparece en TMDB, se prueba quitando palabras del final (suelen ser
 // etiquetas de la web de descarga o del grupo que lo subió) y, por último, sin fijar el tipo
+// También la parte de antes de « - » o «:» («A rienda suelta - Día de San Valentín») y, en los
+// títulos largos, cada vez más corto hasta 3 palabras («Mobile Suit Gundam Hathaway La
+// hechicería de la ninfa Circe» → … → «Mobile Suit Gundam Hathaway»)
 function variantes(nombre) {
   const palabras = nombre.split(/\s+/).filter(Boolean);
   const lista = [nombre];
@@ -211,6 +409,9 @@ function variantes(nombre) {
     const v = palabras.slice(0, n).join(' ');
     if (v.length >= 4) lista.push(v);
   }
+  const antes = nombre.split(/\s+[-–—]\s+|:\s*/)[0].trim();
+  if (antes.length >= 4) lista.push(antes);
+  for (let n = palabras.length - 4; n >= 3 && lista.length < 9; n--) lista.push(palabras.slice(0, n).join(' '));
   return [...new Set(lista)];
 }
 
@@ -220,14 +421,20 @@ function variantes(nombre) {
 const comparable = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
   .replace(/[^a-z0-9]+/g, ' ').trim();
 
-function mejor(lista, nombre, anio) {
+// Con «estricto» (las otras fuentes, menos precisas que TMDB) el título tiene que coincidir
+// entero y el año, si lo hay, no puede diferir en más de uno: si no, mejor sin ficha que con
+// la de otra cosa
+function mejor(lista, nombre, anio, estricto = false) {
   const buscado = comparable(nombre);
   let elegido = null;
   let puntos = -1;
   lista.slice(0, 10).forEach((r, i) => {
-    const titulos = [comparable(r.titulo), comparable(r.original)];
+    const principales = [r.titulo, r.original].map(comparable).filter(Boolean);
+    const titulos = [...principales, ...(r.otros ?? []).map(comparable)].filter(Boolean);
+    if (estricto && (!titulos.includes(buscado) || (anio && r.anio && Math.abs(Number(r.anio) - Number(anio)) > 1))) return;
     let p = 0;
-    if (titulos.includes(buscado)) p += 4;
+    if (principales.includes(buscado)) p += 4;
+    else if (titulos.includes(buscado)) p += 2; // por un nombre alternativo: vale menos
     else if (titulos.some((t) => t.startsWith(buscado) || buscado.startsWith(t))) p += 1;
     if (anio && r.anio === String(anio)) p += 3;
     p -= i * 0.01; // a igualdad, el que TMDB pone antes
@@ -236,7 +443,7 @@ function mejor(lista, nombre, anio) {
   return elegido;
 }
 
-async function encontrar({ nombre, tipo, anio }) {
+async function encontrarTmdb({ nombre, tipo, anio }) {
   for (const n of variantes(nombre)) {
     const conAnio = anio ? await buscar(n, tipo, anio) : [];
     const lista = conAnio.length ? conAnio : await buscar(n, tipo);
@@ -250,15 +457,32 @@ async function encontrar({ nombre, tipo, anio }) {
   return null;
 }
 
+// TMDB primero; si no lo tiene (o no responde), las demás fuentes por orden
+async function encontrar(datos) {
+  const r = await encontrarTmdb(datos).catch(() => null);
+  if (r) return { tmdbId: r.tmdbId, tipo: r.tipo };
+  // Aquí sin recortar palabras («Love is in the Air» no puede acabar en «Love is»)
+  const nombres = [...new Set([datos.nombre, datos.nombre.split(/\s+[-–—]\s+|:\s*/)[0].trim()])].filter((n) => n.length >= 2);
+  for (const fuente of ordenRespaldo(datos)) {
+    for (const n of nombres) {
+      const lista = await RESPALDO[fuente].buscar(n, datos.tipo).catch(() => []);
+      const o = mejor(lista, n, datos.anio, true);
+      if (o) return { fuente: o.fuente, id: o.id, tipo: o.tipo };
+    }
+  }
+  return null;
+}
+
 // ---------- Lo que pide la interfaz ----------
-// Qué título de TMDB es cada vídeo o carpeta: corrección a mano > caché > búsqueda
+// Qué título es cada vídeo o carpeta: corrección a mano > caché > búsqueda. Se guarda
+// { tmdbId, tipo } o, si lo encontró otra fuente, { fuente, id, tipo }
 async function identificar(clave, seccion, datos) {
   if (cache.correcciones[clave]) return cache.correcciones[clave];
   if (clave in cache[seccion]) return cache[seccion][clave];
   const r = await encontrar(datos);
   // Solo se guarda lo encontrado: lo que no aparece se vuelve a buscar la próxima vez
   if (!r) return null;
-  cache[seccion][clave] = { tmdbId: r.tmdbId, tipo: r.tipo };
+  cache[seccion][clave] = r;
   guardar();
   return cache[seccion][clave];
 }
@@ -266,27 +490,28 @@ async function identificar(clave, seccion, datos) {
 export async function deArchivo(key) {
   const datos = analizar(key);
   if (!datos) return null;
+  datos.anime = /anime/i.test(key);
   // Los episodios heredan la serie de su carpeta (o de otro episodio ya identificado)
   const id = datos.tipo === 'serie' && datos.carpeta
     ? await identificar(datos.carpeta, 'carpetas', datos)
     : await identificar(key, 'archivos', datos);
   if (!id) return { encontrado: false, buscado: datos.nombre };
-  const f = await ficha(id.tmdbId, id.tipo);
+  const f = await fichaDe(id);
   if (id.tipo !== 'serie') return { encontrado: true, ...f };
 
-  const s = await temporada(id.tmdbId, datos.temporada).catch(() => null);
-  const e = s?.episodes?.find((x) => x.episode_number === datos.episodio);
+  const s = await temporadaDe(id, datos.temporada).catch(() => null);
+  const e = s?.episodios.find((x) => x.numero === datos.episodio);
   return {
     encontrado: true,
     ...f,
     episodio: {
       temporada: datos.temporada,
       numero: datos.episodio,
-      titulo: e?.name ?? `Episodio ${datos.episodio}`,
-      sinopsis: e?.overview ?? '',
-      imagen: img(e?.still_path, 'w300'),
-      fecha: e?.air_date ?? null,
-      duracion: e?.runtime ?? null,
+      titulo: e?.titulo || `Episodio ${datos.episodio}`,
+      sinopsis: e?.sinopsis ?? '',
+      imagen: e?.imagen ?? null,
+      fecha: e?.fecha ?? null,
+      duracion: e?.duracion ?? null,
     },
   };
 }
@@ -301,26 +526,28 @@ export async function deCarpeta(prefijo) {
   const numero = n.match(CARPETA_TEMPORADA)?.[1];
   if (numero) {
     if (partes.length < 3) return null;
-    const serie = await deCarpeta(partes.slice(0, -1).join('/') + '/');
+    const padre = partes.slice(0, -1).join('/') + '/';
+    const serie = await deCarpeta(padre);
     if (!serie?.encontrado || serie.tipo !== 'serie') return serie;
-    const s = await temporada(serie.tmdbId, Number(numero)).catch(() => null);
+    const id = cache.correcciones[padre] ?? cache.carpetas[padre];
+    const s = id && await temporadaDe(id, Number(numero)).catch(() => null);
     return {
       ...serie,
       temporada: {
         numero: Number(numero),
-        nombre: s?.name || `Temporada ${Number(numero)}`,
-        sinopsis: s?.overview ?? '',
-        poster: img(s?.poster_path, 'w342'),
-        anio: (s?.air_date ?? '').slice(0, 4),
-        episodios: s?.episodes?.length ?? null,
-        valoracion: s?.vote_average ? Math.round(s.vote_average * 10) / 10 : null,
+        nombre: s?.nombre || `Temporada ${Number(numero)}`,
+        sinopsis: s?.sinopsis ?? '',
+        poster: s?.poster ?? null,
+        anio: s?.anio ?? '',
+        episodios: s?.episodios.length || null,
+        valoracion: s?.valoracion ?? null,
       },
     };
   }
   const { anio, antes } = separarAnio(n);
   const tipo = partes.slice(0, -1).some((c) => CARPETA_SERIE.test(c)) ? 'serie' : null;
-  const id = await identificar(prefijo, 'carpetas', { nombre: limpiarNombre(antes.replace(/^[¡¿]/, '')), tipo, anio });
-  return id ? { encontrado: true, ...(await ficha(id.tmdbId, id.tipo)) } : { encontrado: false };
+  const id = await identificar(prefijo, 'carpetas', { nombre: limpiarNombre(antes.replace(/^[¡¿]/, '')), tipo, anio, anime: /anime/i.test(prefijo) });
+  return id ? { encontrado: true, ...(await fichaDe(id)) } : { encontrado: false };
 }
 
 // Imágenes de fondo para las categorías de la portada que aún no tienen vídeos con ficha:

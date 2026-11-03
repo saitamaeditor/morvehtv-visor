@@ -478,12 +478,14 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     cuerpo.append(mas);
     const enlaces = el('div', 'chips');
     if (d.trailer) enlaces.append(Object.assign(el('a', 'boton', '▶ Tráiler'), { href: d.trailer, target: '_blank', rel: 'noopener' }));
-    if (d.tmdb) enlaces.append(Object.assign(el('a', 'boton', 'TMDB ↗'), { href: d.tmdb, target: '_blank', rel: 'noopener' }));
+    // De dónde salen los datos: TMDB o, si no lo tenía, TVmaze, AniList o Wikipedia
+    const web = d.web || d.tmdb;
+    if (web) enlaces.append(Object.assign(el('a', 'boton', `${d.fuente || 'TMDB'} ↗`), { href: web, target: '_blank', rel: 'noopener' }));
     const objetivo = archivo ? archivo.key : clave;
     if (yo && objetivo) enlaces.prepend(botonFavorito(objetivo, archivo));
     cuerpo.append(enlaces);
   } else if (d) {
-    cuerpo.append(el('h2', null, 'Sin datos de TMDB'));
+    cuerpo.append(el('h2', null, 'Sin datos en ninguna fuente'));
     cuerpo.append(el('p', 'suave', d.buscado ? `No se encontró «${d.buscado}». Puedes buscarlo a mano:` : 'Puedes buscarlo a mano:'));
   }
 
