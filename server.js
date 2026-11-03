@@ -80,6 +80,30 @@ async function listarNivel(prefijo, token) {
   };
 }
 
+// Una carpeta con todo junto: las subcarpetas que solo agrupan («PELICULAS NETFLIX»,
+// «NETFLIX»…) no salen como carpetas, sale su contenido directamente. En la raíz no: allí
+// cada carpeta es una categoría. Solo en la primera página (las siguientes son de la propia
+// carpeta) y con tope, por si alguien anida muchísimas.
+async function listarJunto(prefijo, token) {
+  const r = await listarNivel(prefijo, token);
+  if (!prefijo || token) return r;
+  const pendientes = r.carpetas.filter((c) => meta.esAgrupadora(nombreDe(c)));
+  r.carpetas = r.carpetas.filter((c) => !meta.esAgrupadora(nombreDe(c)));
+  for (let vistas = 0; pendientes.length && vistas < 40; vistas++) {
+    const c = pendientes.shift();
+    let t = null;
+    do {
+      const s = await listarNivel(c, t);
+      r.archivos.push(...s.archivos);
+      for (const sub of s.carpetas) (meta.esAgrupadora(nombreDe(sub)) ? pendientes : r.carpetas).push(sub);
+      t = s.siguiente;
+    } while (t);
+  }
+  r.carpetas.push(...pendientes); // lo que pase del tope sale como carpeta: nada se esconde
+  return r;
+}
+const nombreDe = (k) => k.replace(/\/$/, '').split('/').pop();
+
 // Recorre todo lo que cuelga de un prefijo (para buscar y calcular tamaños)
 async function* recorrer(prefijo) {
   let token;
@@ -398,7 +422,6 @@ const rutas = {
   '/api/meta': (p) => meta.deArchivo(p.get('key')),
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo')),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
-  '/api/plataformas': async () => ({ plataformas: await meta.listaPlataformas().catch(() => []), patrones: meta.patronesPlataforma() }),
   '/api/catalogo': () => catalogo(),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
@@ -406,7 +429,7 @@ const rutas = {
   '/api/hls-parar': (p) => hlsParar(p.get('id')),
   '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),
   '/api/info': () => ({ bucket: E2_BUCKET }),
-  '/api/listar': (p) => listarNivel(p.get('prefijo') ?? '', p.get('token')),
+  '/api/listar': (p) => listarJunto(p.get('prefijo') ?? '', p.get('token')),
   '/api/buscar': (p) => buscar(p.get('prefijo') ?? '', p.get('q') ?? ''),
   '/api/tamano': (p) => tamano(p.get('prefijo') ?? ''),
   '/api/url': async (p) => ({ url: await firmar(p.get('key')) }),

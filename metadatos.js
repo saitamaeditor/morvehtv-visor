@@ -50,45 +50,20 @@ async function pedir(ruta, params = {}) {
   return r.json();
 }
 
-// ---------- Carpetas de plataforma («PELICULAS NETFLIX», «SERIES PRIME VIDEO»…) ----------
-// No son un título: no se buscan en TMDB y su tarjeta lleva el logo y los colores de la plataforma
-const PAIS = process.env.TMDB_PAIS || 'ES';
-const NOMBRES = [
-  [/netflix/i, 'Netflix'], [/amazon|prime video/i, 'Prime Video'], [/disney/i, 'Disney+'],
-  [/hbo|\bmax\b(?! ?\d)/i, 'Max'], [/movistar/i, 'Movistar Plus+'], [/apple ?tv/i, 'Apple TV+'],
-  [/skyshowtime/i, 'SkyShowtime'], [/filmin/i, 'Filmin'], [/rakuten/i, 'Rakuten TV'],
-  [/atres ?player/i, 'Atresplayer'], [/mitele/i, 'Mitele'], [/rtve/i, 'RTVE Play'],
-];
-const nombrePlataforma = (n) => NOMBRES.find(([re]) => re.test(n))?.[1] ?? null;
-// Las mismas reglas para la web
-export const patronesPlataforma = () => NOMBRES.map(([re, n]) => [re.source, re.flags, n]);
-
-// Las plataformas del país con su logo y sus códigos de TMDB (Netflix tiene varios: con
-// anuncios, básico…)
-let todas = null;
-export function listaPlataformas() {
-  if (!todas) {
-    todas = pedir('/watch/providers/movie', { watch_region: PAIS }).then((d) => {
-      const vistas = new Map();
-      for (const p of (d.results ?? []).sort((a, b) => (a.display_priorities?.[PAIS] ?? a.display_priority) - (b.display_priorities?.[PAIS] ?? b.display_priority))) {
-        const nombre = nombrePlataforma(p.provider_name);
-        if (!nombre) continue;
-        if (!vistas.has(nombre)) vistas.set(nombre, { nombre, logo: img(p.logo_path, 'w154'), ids: [] });
-        vistas.get(nombre).ids.push(p.provider_id);
-      }
-      return [...vistas.values()];
-    });
-    todas.catch(() => { todas = null; });
-  }
-  return todas;
-}
-
-// Fondo de una carpeta de plataforma («pl:pelicula:Netflix»): lo más visto de esa plataforma
-async function descubrirPlataforma(id) {
-  const [, tipo, nombre] = id.split(':');
-  const p = (await listaPlataformas()).find((x) => x.nombre === nombre);
-  if (!p) return null;
-  return [tipo === 'serie' ? '/discover/tv' : '/discover/movie', { with_watch_providers: p.ids.join('|'), watch_region: PAIS }];
+// ---------- Carpetas que solo agrupan ----------
+// «PELICULAS NETFLIX», «NETFLIX», «PELICULAS NETFLIX INFANTILES»…: no son un título, solo
+// ordenan. Dentro de una categoría se muestra su contenido directamente, todo junto, y no se
+// buscan en TMDB. Lo son si TODAS sus palabras son de este vocabulario, así que «Mad Max» o
+// «El alma intranquila» nunca lo son.
+const AGRUPAN = new Set(`pelicula peliculas peli pelis cine movies movie serie series anime animes infantil infantiles
+  kids ninos nino familia familiar familiares documental documentales docuserie docuseries programa programas tv
+  novela novelas turca turcas netflix prime video amazon disney plus hbo max movistar apple skyshowtime sky showtime
+  filmin rakuten atresplayer atres player mitele rtve play crunchyroll paramount dazn originales original estrenos
+  estreno 4k hd uhd y e de del la las los el en otras otros varias varios mas nuevas nuevos`.split(/\s+/));
+export function esAgrupadora(nombre) {
+  const palabras = String(nombre).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/^\d+\s*[-_.]?\s*/, '').split(/[^a-z0-9]+/).filter(Boolean);
+  return palabras.length > 0 && palabras.every((p) => AGRUPAN.has(p));
 }
 
 // Las fichas de TMDB se reutilizan entre todos los episodios de una serie
@@ -535,7 +510,7 @@ export async function deArchivo(key) {
 export async function deCarpeta(prefijo) {
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
-  if (partes.length < 2 || nombrePlataforma(n)) return null;
+  if (partes.length < 2 || esAgrupadora(n)) return null;
   const numero = n.match(CARPETA_TEMPORADA)?.[1];
   if (numero) {
     if (partes.length < 3) return null;
@@ -572,18 +547,23 @@ const DESCUBRIR = {
   docuserie: ['/discover/tv', { with_genres: '99' }],
   programa: ['/discover/tv', { with_genres: '10764' }],
   'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
+  // Para las categorías nuevas (carpetas que vayas creando), según su nombre
+  anime: ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
+  infantil: ['/discover/movie', { with_genres: '10751' }],
+  musica: ['/discover/movie', { with_genres: '10402' }],
+  terror: ['/discover/movie', { with_genres: '27' }],
 };
 const portadas = new Map(); // categoría → { hasta, fondos, carteles }
 
 export async function portadaCategoria(id) {
   const c = portadas.get(id);
   if (c && c.hasta > Date.now()) return { fondos: c.fondos, carteles: c.carteles };
-  const desc = id.startsWith('pl:') ? await descubrirPlataforma(id) : DESCUBRIR[id];
+  const desc = DESCUBRIR[id];
   if (!desc) throw Object.assign(new Error('Categoría desconocida'), { status: 400 });
   const [ruta, filtro] = desc;
   const { results = [] } = await pedir(ruta, { sort_by: 'popularity.desc', 'vote_count.gte': '100', include_adult: 'false', ...filtro });
   const fondos = results.filter((r) => r.backdrop_path).slice(0, 8).map((r) => img(r.backdrop_path, 'w780'));
-  // Los carteles, para el mosaico de las carpetas de plataforma
+  // Los carteles, para el abanico de la tarjeta de la categoría
   const carteles = results.filter((r) => r.poster_path).slice(0, 8).map((r) => img(r.poster_path, 'w342'));
   portadas.set(id, { hasta: Date.now() + 24 * 3600000, fondos, carteles });
   return { fondos, carteles };

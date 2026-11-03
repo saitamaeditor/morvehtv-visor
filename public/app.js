@@ -132,14 +132,16 @@ function porCapitulo(a, b) {
   const x = capitulo(a), y = capitulo(b);
   if (x !== null && y !== null && x !== y) return x - y;
   if ((x === null) !== (y === null)) return x === null ? 1 : -1;
-  return natural(a, b);
+  // Por el nombre del archivo y no por la ruta: con todo junto, las películas de distintas
+  // subcarpetas («PELICULAS NETFLIX», «PELICULAS NETFLIX ANIME»…) se mezclan por título
+  return natural(nombre(a), nombre(b)) || natural(a, b);
 }
 
 // Por temporada y episodio, si no por nombre en orden natural, y sin las carpetas internas
 // que empiezan por «_»
 function visibles() {
   const interna = (k) => k.slice(estado.prefijo.length).split('/').some((p) => p.startsWith('_'));
-  const carpetas = estado.carpetas.filter((c) => !nombre(c).startsWith('_')).sort(natural);
+  const carpetas = estado.carpetas.filter((c) => !nombre(c).startsWith('_')).sort((a, b) => natural(nombre(a), nombre(b)) || natural(a, b));
   const archivos = estado.archivos.filter((f) => !interna(f.key)).sort((x, y) => porCapitulo(x.key, y.key));
   return { carpetas, archivos };
 }
@@ -152,15 +154,16 @@ function pintar() {
 
   let otras = carpetas;
   if (!estado.prefijo) {
-    otras = carpetas.filter((c) => !categoriaDe(c));
+    // En la raíz todas las carpetas son categorías (también las nuevas); debajo, solo los
+    // archivos sueltos que haya
+    otras = [];
     items.append(portada(carpetas));
-    if (otras.length || archivos.length) items.append(el('h2', 'seccion', 'Otras carpetas y archivos'));
+    if (archivos.length) items.append(el('h2', 'seccion', 'Archivos sueltos'));
   }
   for (const c of otras) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
     if (estado.prefijo) { conMeta(t, 'carpeta', c); estrella(t, c); }
-    marcarPlataforma(t, c);
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
@@ -180,10 +183,10 @@ function pintar() {
 }
 
 // ---------- Portada por categorías ----------
-// Las mismas categorías que MorvehTV. Cada carpeta de primer nivel del bucket se asigna a
-// una por su nombre («05 - DOCUMENTALES», «Peliculas»…); la regla más concreta va primero
-// para que «DOCUSERIES» o «SERIES TURCAS» no caigan en Series. El anime no tiene categoría
-// propia: va en Películas o Series (p. ej. «PELICULAS/PELICULAS NETFLIX ANIME/»).
+// Cada carpeta de primer nivel del bucket es una categoría. Las conocidas se reconocen por su
+// nombre («05 - DOCUMENTALES», «Peliculas»…; la regla más concreta va primero para que
+// «DOCUSERIES» o «SERIES TURCAS» no caigan en Series) y llevan su icono y su color; cualquier
+// otra carpeta que crees en e2 («ANIME», «CONCIERTOS»…) sale sola como categoría nueva.
 const CATEGORIAS = [
   { id: 'pelicula', nombre: 'Películas', icono: '🎬', color: '#e5484d', es: (n) => /pelicul|cine|movie/.test(n) },
   { id: 'serie', nombre: 'Series', icono: '📺', color: '#4f8cff', es: (n) => /serie/.test(n) && !/docu|turc/.test(n) },
@@ -193,6 +196,15 @@ const CATEGORIAS = [
   { id: 'novela-turca', nombre: 'Novelas turcas', icono: '🌙', color: '#ffb224', es: (n) => /novela|turc/.test(n) },
 ];
 
+// Categorías nuevas: icono y carteles de relleno según su nombre; el color, uno fijo por nombre
+const PISTAS = [
+  [/anime/, '🍥', 'anime'], [/infantil|kids|nin[oa]s|familia|dibujos/, '🧸', 'infantil'],
+  [/music|concierto|karaoke/, '🎵', 'musica'], [/terror|miedo/, '👻', 'terror'],
+  [/deporte|futbol|f1|motogp|baloncesto|tenis/, '⚽', 'pelicula'], [/navidad/, '🎄', 'infantil'],
+  [/serie|programa|novela|reality/, '📺', 'serie'],
+];
+const PALETA = ['#d6409f', '#8e4ec6', '#0090ff', '#00a2c7', '#29a383', '#e54d2e', '#e2a336', '#7c66dc'];
+
 const limpiar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^\d+\s*[-_.]?\s*/, '').trim();
 
 function categoriaDe(carpeta) {
@@ -200,131 +212,101 @@ function categoriaDe(carpeta) {
   return CATEGORIAS.find((c) => c.es(n)) ?? null;
 }
 
+function categoriaNueva(carpeta) {
+  const n = limpiar(nombre(carpeta));
+  const pista = PISTAS.find(([re]) => re.test(n));
+  let h = 0;
+  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const bonito = nombre(carpeta).replace(/^\d+\s*[-_.]?\s*/, '').toLowerCase();
+  return {
+    id: `carpeta:${carpeta}`, nombre: bonito.charAt(0).toUpperCase() + bonito.slice(1),
+    icono: pista ? pista[1] : '📁', color: PALETA[h % PALETA.length], tmdb: pista ? pista[2] : 'pelicula',
+  };
+}
+
+// Las categorías de la portada con sus carpetas: las conocidas que tengas y, detrás, una por
+// cada carpeta nueva
+function categoriasDe(carpetas) {
+  const lista = CATEGORIAS.map((cat) => ({ cat, suyas: carpetas.filter((c) => categoriaDe(c) === cat) })).filter((x) => x.suyas.length);
+  for (const c of carpetas) if (!categoriaDe(c) && !nombre(c).startsWith('_')) lista.push({ cat: categoriaNueva(c), suyas: [c] });
+  return lista;
+}
+
 const tamanos = new Map();
 
-// Imagen de fondo de cada categoría: la de uno de tus títulos (su ficha de TMDB) y, si aún
-// no hay ninguno, la de algo popular de ese tipo. Se elige una vez por visita.
-const fondos = new Map();
-function fondoCategoria(cat, suyas) {
-  if (!fondos.has(cat.id)) {
-    const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
-    fondos.set(cat.id, (async () => {
+// La imagen de cada categoría: el fondo de uno de tus títulos y hasta 3 carteles distintos
+// (los de tus títulos primero; si hay menos, lo más popular de ese tipo en TMDB). Se eligen
+// una vez por visita.
+const artes = new Map();
+function arteCategoria(cat, suyas) {
+  if (!artes.has(cat.id)) {
+    artes.set(cat.id, (async () => {
+      const carteles = [];
+      const fondos = [];
       for (const c of suyas) {
         const d = await api('/api/buscar', { prefijo: c, q: '' }).catch(() => null);
-        const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video')).slice(0, 4);
-        const metas = await Promise.all(videos.map((f) => pedirMeta('archivo', f.key)));
-        const suyos = metas.filter((m) => m && m.encontrado && m.fondo).map((m) => m.fondo);
-        if (suyos.length) return azar(suyos);
+        const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video'));
+        // Al azar, para que la portada cambie de una visita a otra
+        videos.sort(() => Math.random() - 0.5);
+        const metas = await Promise.all(videos.slice(0, 12).map((f) => pedirMeta('archivo', f.key)));
+        for (const m of metas) {
+          if (!m || !m.encontrado) continue;
+          if (m.poster && carteles.indexOf(m.poster) < 0) carteles.push(m.poster);
+          if (m.fondo && fondos.indexOf(m.fondo) < 0) fondos.push(m.fondo);
+        }
       }
-      const r = await api('/api/portada', { cat: cat.id }).catch(() => null);
-      return r && r.fondos.length ? azar(r.fondos) : null;
+      if (carteles.length < 3 || !fondos.length) {
+        const r = await api('/api/portada', { cat: cat.tmdb || cat.id }).catch(() => null);
+        if (r) {
+          (r.carteles || []).forEach((u) => { if (carteles.length < 3 && carteles.indexOf(u) < 0) carteles.push(u); });
+          if (!fondos.length && r.fondos.length) fondos.push(r.fondos[Math.floor(Math.random() * r.fondos.length)]);
+        }
+      }
+      return { carteles: carteles.slice(0, 3), fondo: fondos[0] || null };
     })());
   }
-  return fondos.get(cat.id);
+  return artes.get(cat.id);
 }
+
+const precargar = (url) => new Promise((ok) => { const i = new Image(); i.onload = () => ok(url); i.onerror = () => ok(null); i.src = url; });
 
 function portada(carpetas) {
   const caja = el('div', 'categorias');
-  for (const cat of CATEGORIAS) {
-    const suyas = carpetas.filter((c) => categoriaDe(c) === cat);
-    const t = el('div', 'cat' + (suyas.length ? '' : ' vacia'));
-    if (suyas.length) { t.tabIndex = 0; t.setAttribute('role', 'button'); }
+  for (const { cat, suyas } of categoriasDe(carpetas)) {
+    const t = el('div', 'cat');
+    t.tabIndex = 0; t.setAttribute('role', 'button');
     t.style.setProperty('--c', cat.color);
-    const meta = el('div', 'meta', suyas.length ? 'Contando…' : 'Sin contenido aún');
-    t.append(el('div', 'icono', cat.icono), el('div', 'nombre', cat.nombre), meta);
-    fondoCategoria(cat, suyas).then((url) => {
-      if (!url) return;
-      // Se precarga para que aparezca de golpe con un fundido, no a trozos
-      const img = new Image();
-      img.onload = () => { t.style.setProperty('--img', `url("${url}")`); t.classList.add('con-imagen'); };
-      img.src = url;
-    });
-    if (suyas.length) {
-      t.title = suyas.map(nombre).join(', ');
-      t.onclick = () => irA(suyas[0]);
-      // Archivos y espacio de la categoría (se calcula una vez por sesión)
-      Promise.all(suyas.map((c) => {
-        if (!tamanos.has(c)) tamanos.set(c, api('/api/tamano', { prefijo: c }).catch(() => null));
-        return tamanos.get(c);
-      })).then((r) => {
-        const ok = r.filter(Boolean);
-        meta.textContent = ok.length
-          ? `${ok.reduce((s, d) => s + d.objetos, 0)} archivos · ${bytes(ok.reduce((s, d) => s + d.bytes, 0))}`
-          : nombre(suyas[0]);
+    const meta = el('div', 'meta', 'Contando…');
+    const abanico = el('div', 'abanico');
+    const texto = el('div', 'texto');
+    texto.append(el('div', 'icono', cat.icono), el('div', 'nombre', cat.nombre), meta);
+    t.append(abanico, texto);
+    t.title = suyas.map(nombre).join(', ');
+    t.onclick = () => irA(suyas[0]);
+    // Se precarga todo para que aparezca de golpe con un fundido, no a trozos
+    arteCategoria(cat, suyas).then(async ({ carteles, fondo }) => {
+      const [f, ...cs] = await Promise.all([fondo ? precargar(fondo) : null, ...carteles.map(precargar)]);
+      if (f) { t.style.setProperty('--img', `url("${f}")`); t.classList.add('con-imagen'); }
+      cs.filter(Boolean).forEach((u, i) => {
+        const img = el('img', `cartel-cat c${i + 1}`);
+        img.src = u; img.alt = '';
+        abanico.append(img);
       });
-    }
+      if (cs.some(Boolean)) t.classList.add('con-carteles');
+    });
+    // Archivos y espacio de la categoría (se calcula una vez por sesión)
+    Promise.all(suyas.map((c) => {
+      if (!tamanos.has(c)) tamanos.set(c, api('/api/tamano', { prefijo: c }).catch(() => null));
+      return tamanos.get(c);
+    })).then((r) => {
+      const ok = r.filter(Boolean);
+      const n = ok.reduce((s, d) => s + d.objetos, 0);
+      meta.textContent = !ok.length ? nombre(suyas[0]) : n ? `${n} archivos · ${bytes(ok.reduce((s, d) => s + d.bytes, 0))}` : 'Vacía de momento';
+      if (ok.length && !n) t.classList.add('sin-nada');
+    });
     caja.append(t);
   }
   return caja;
-}
-
-// ---------- Carpetas de plataforma ----------
-// Una carpeta con el nombre de una plataforma («PELICULAS NETFLIX», «SERIES PRIME VIDEO»…)
-// lleva una portada propia: un mosaico con los carteles de lo que hay dentro (completado con
-// lo más visto de esa plataforma si aún hay pocos) y, abajo, el logo, el nombre y el color de
-// la plataforma
-const COLORES_PLATAFORMA = {
-  Netflix: '#e50914', 'Prime Video': '#00a8e1', 'Disney+': '#113ccf', Max: '#5822b4', 'Movistar Plus+': '#019df4',
-  'Apple TV+': '#6e7480', SkyShowtime: '#ff2d6f', Filmin: '#e6007e', 'Rakuten TV': '#bf0000', Atresplayer: '#ff6a00',
-  Mitele: '#00b3e3', 'RTVE Play': '#e2001a',
-};
-let plataformasConocidas = null;
-
-// Hasta 4 carteles distintos: primero los de tus títulos de esa carpeta (los episodios de una
-// serie comparten cartel), luego los populares de la plataforma
-const cartelesPl = new Map();
-function cartelesPlataforma(id, carpeta) {
-  if (!cartelesPl.has(carpeta)) {
-    cartelesPl.set(carpeta, (async () => {
-      const d = await api('/api/buscar', { prefijo: carpeta, q: '' }).catch(() => null);
-      const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video')).slice(0, 16);
-      const metas = await Promise.all(videos.map((f) => pedirMeta('archivo', f.key)));
-      const lista = [];
-      const meter = (u) => { if (u && lista.indexOf(u) < 0 && lista.length < 4) lista.push(u); };
-      metas.forEach((m) => m && m.encontrado && meter(m.poster));
-      if (lista.length < 4) {
-        const r = await api('/api/portada', { cat: id }).catch(() => null);
-        ((r && r.carteles) || []).forEach(meter);
-      }
-      return lista;
-    })());
-  }
-  return cartelesPl.get(carpeta);
-}
-
-async function marcarPlataforma(t, carpeta) {
-  if (!plataformasConocidas) plataformasConocidas = api('/api/plataformas').catch(() => { plataformasConocidas = null; return null; });
-  const d = await plataformasConocidas;
-  if (!d || !t.isConnected) return;
-  const regla = d.patrones.map(([src, flags, n]) => [new RegExp(src, flags), n]).find(([re]) => re.test(nombre(carpeta)));
-  if (!regla) return;
-  const n = regla[1];
-  const pl = d.plataformas.find((p) => p.nombre === n);
-  t.classList.add('carpeta-plataforma');
-  t.style.setProperty('--c', COLORES_PLATAFORMA[n] || 'var(--acento)');
-  const mini = t.querySelector('.mini');
-  mini.className = 'mini cartel'; // mismo tamaño que los carteles de las películas de al lado
-  mini.textContent = '';
-  const serie = /serie|novela|program/.test(limpiar(`${estado.prefijo} ${nombre(carpeta)}`));
-  const mosaico = el('div', 'mosaico');
-  const sello = el('div', 'sello');
-  if (pl && pl.logo) { const i = el('img', 'logo-plataforma'); i.src = pl.logo; i.alt = ''; sello.append(i); }
-  sello.append(el('div', 'nombre-plataforma', n), el('div', 'tipo-plataforma', serie ? 'Series' : 'Películas'));
-  mini.append(mosaico, el('div', 'velo'), sello);
-  const meta = t.querySelector('.meta');
-  meta.textContent = n;
-  if (!tamanos.has(carpeta)) tamanos.set(carpeta, api('/api/tamano', { prefijo: carpeta }).catch(() => null));
-  tamanos.get(carpeta).then((r) => { if (r) meta.textContent = r.objetos ? `${r.objetos} archivos · ${bytes(r.bytes)}` : 'Vacía'; });
-  const urls = await cartelesPlataforma(`pl:${serie ? 'serie' : 'pelicula'}:${n}`, carpeta);
-  if (!t.isConnected || !urls.length) return;
-  // Con 1–3 carteles se repiten para llenar las 4 casillas
-  for (let i = 0; i < 4; i++) {
-    const c = el('div', 'casilla');
-    const img = new Image();
-    img.onload = () => { c.style.backgroundImage = `url("${img.src}")`; c.classList.add('cargada'); };
-    img.src = urls[i % urls.length];
-    mosaico.append(c);
-  }
 }
 
 function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {
