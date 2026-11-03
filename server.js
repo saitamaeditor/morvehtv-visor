@@ -327,9 +327,13 @@ async function hlsServir(res, id, archivo) {
 // Cada pocos segundos repasa el bucket entero y, si aparece, cambia o desaparece algo, avisa
 // a las pestañas abiertas (Server-Sent Events) para que se actualicen solas. Las carpetas
 // internas («_hls», «_fotograma»…) no cuentan: el catálogo de MorvehTV cambia a menudo.
-const SEGUNDOS_ESCANEO = Math.max(5, Number(process.env.VISOR_ESCANEO_SEGUNDOS) || 10);
+const SEGUNDOS_ESCANEO = Math.max(3, Number(process.env.VISOR_ESCANEO_SEGUNDOS) || 5);
 const oyentes = new Set();
 let foto = null; // key → "tamaño:fecha" del último repaso
+// Huella del contenido: la app la recibe al conectarse y, si no coincide con la que tenía (se
+// perdió avisos mientras estaba en segundo plano o sin conexión), se pone al día sola
+let huella = '';
+const huellaDe = (mapa) => createHash('sha1').update([...mapa].sort().join('\n')).digest('hex').slice(0, 12);
 
 const esInterna = (key) => key.split('/').some((p) => p.startsWith('_'));
 
@@ -343,18 +347,20 @@ async function repasar() {
   for await (const o of recorrer('')) {
     if (!esInterna(o.Key)) ahora.set(o.Key, `${o.Size}:${o.LastModified?.getTime()}`);
   }
-  if (foto) {
-    const nuevos = [...ahora.keys()].filter((k) => !foto.has(k));
-    const cambiados = [...ahora.keys()].filter((k) => foto.has(k) && foto.get(k) !== ahora.get(k));
-    const borrados = [...foto.keys()].filter((k) => !ahora.has(k));
-    if (nuevos.length || cambiados.length || borrados.length) {
-      console.log(`Cambios en e2: ${nuevos.length} nuevos, ${cambiados.length} cambiados, ${borrados.length} borrados`);
-      // Busca ya los metadatos de los vídeos nuevos para que lleguen con su carátula
-      for (const k of nuevos.filter((k) => esVideo(k))) await meta.deArchivo(k).catch(() => {});
-      avisar('cambios', { nuevos, cambiados, borrados });
-    }
-  }
+  const antes = foto;
+  // La foto nueva va primero: el catálogo que pida la app al recibir el aviso ya la incluye
   foto = ahora;
+  huella = huellaDe(ahora);
+  if (!antes) return;
+  const nuevos = [...ahora.keys()].filter((k) => !antes.has(k));
+  const cambiados = [...ahora.keys()].filter((k) => antes.has(k) && antes.get(k) !== ahora.get(k));
+  const borrados = [...antes.keys()].filter((k) => !ahora.has(k));
+  if (!nuevos.length && !cambiados.length && !borrados.length) return;
+  console.log(`Cambios en e2: ${nuevos.length} nuevos, ${cambiados.length} cambiados, ${borrados.length} borrados`);
+  // Aviso al momento; los metadatos de los vídeos nuevos se buscan después (la app ya los pide
+  // ella misma al pintar la tarjeta)
+  avisar('cambios', { nuevos, cambiados, borrados, huella });
+  for (const k of nuevos.filter((k) => esVideo(k))) await meta.deArchivo(k).catch(() => {});
 }
 
 async function vigilar() {
@@ -417,6 +423,7 @@ function eventos(req, res) {
   res.write('retry: 3000\n\n');
   // Versión del servidor: si cambia (se publicó algo nuevo), la app se recarga sola
   res.write(`event: version\ndata: ${JSON.stringify(VERSION)}\n\n`);
+  if (huella) res.write(`event: contenido\ndata: ${JSON.stringify(huella)}\n\n`);
   oyentes.add(res);
   const latido = setInterval(() => res.write(': latido\n\n'), 25000);
   res.on('close', () => { clearInterval(latido); oyentes.delete(res); });

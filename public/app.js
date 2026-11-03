@@ -1301,7 +1301,7 @@ $('#ant').onclick = () => abrir(actual - 1);
 $('#sig').onclick = () => abrir(actual + 1);
 
 // ---------- Actualización automática ----------
-// El servidor repasa el bucket cada 20 s y avisa de lo que se sube, cambia o se borra:
+// El servidor repasa el bucket cada 5 s y avisa al momento de lo que se sube, cambia o se borra:
 // la carpeta que estás viendo se vuelve a pintar sin recargar la página.
 const nuevas = new Set(); // lo subido mientras la app está abierta (lleva la etiqueta NUEVO)
 let actualKey = null;
@@ -1311,22 +1311,57 @@ let actualKey = null;
 // aplica al cerrar el vídeo.
 let pendientes = null;
 
-async function refrescar({ nuevos, cambiados, borrados }) {
+async function refrescar({ nuevos, cambiados, borrados, todo = false }) {
   nuevos.forEach((k) => nuevas.add(k));
   if (actual >= 0) {
-    pendientes = pendientes || { nuevos: [], cambiados: [], borrados: [] };
+    pendientes = pendientes || { nuevos: [], cambiados: [], borrados: [], todo: false };
     pendientes.nuevos.push(...nuevos); pendientes.cambiados.push(...cambiados); pendientes.borrados.push(...borrados);
+    pendientes.todo = pendientes.todo || todo;
     return;
   }
   // Contadores y portadas de las categorías, de nuevo: si has quitado o movido títulos, que no
   // sigan saliendo sus carteles
   tamanos.clear();
   artes.clear();
-  if (![...nuevos, ...cambiados, ...borrados].some((k) => k.startsWith(estado.prefijo))) return;
-  const d = await api('/api/listar', { prefijo: estado.prefijo });
-  if (actual >= 0) return; // se abrió un vídeo mientras tanto: ya se aplicará al cerrarlo
+  // Fichas guardadas de lo que ha cambiado (el vídeo y las carpetas que lo contienen), para que
+  // se vuelvan a pedir
+  const tocadas = [...nuevos, ...cambiados, ...borrados];
+  for (const id of [...metas.keys()]) {
+    const [clase, ...resto] = id.split(':');
+    const clave = resto.join(':');
+    if (clase === 'archivo' ? tocadas.includes(clave) : tocadas.some((k) => k.startsWith(clave))) metas.delete(id);
+  }
+  if (estado.prefijo.startsWith(':')) return; // «Seguir viendo», «Favoritos»: no salen del bucket
+  if (!todo && !tocadas.some((k) => k.startsWith(estado.prefijo))) return;
+  const prefijo = estado.prefijo;
+  const d = await api('/api/listar', { prefijo });
+  if (actual >= 0 || estado.prefijo !== prefijo) return; // abriste un vídeo u otra carpeta mientras tanto
   estado.carpetas = d.carpetas; estado.archivos = d.archivos; estado.token = d.siguiente;
-  pintar();
+  sinMoverse(pintar);
+}
+
+// Vuelve a pintar sin que la página salte: misma altura, cada fila deslizada donde estaba y el
+// foco (mando de la tele) en la misma tarjeta
+function sinMoverse(pintarDeNuevo) {
+  const y = window.scrollY;
+  const filas = [...document.querySelectorAll('#items .carrusel')].map((c) => c.scrollLeft);
+  const a = document.activeElement;
+  const enItems = a && a !== document.body && $('#items').contains(a);
+  const clave = enItems && (a.dataset.key || a.closest('[data-key]')?.dataset.key);
+  const todos = () => [...document.querySelectorAll('#items .item, #items a, #items button')];
+  const indice = enItems ? todos().indexOf(a) : -1;
+  pintarDeNuevo();
+  const volver = () => {
+    document.querySelectorAll('#items .carrusel').forEach((c, i) => { if (filas[i]) c.scrollLeft = filas[i]; });
+    window.scrollTo(0, y);
+  };
+  volver();
+  setTimeout(volver, 400); // las filas de «Últimos añadidos» llegan un poco después
+  if (enItems) {
+    const lista = todos();
+    const destino = (clave && lista.find((x) => x.dataset.key === clave)) || lista[Math.min(indice, lista.length - 1)];
+    if (destino) destino.focus({ preventScroll: true });
+  }
 }
 
 function aplicarPendientes() {
@@ -1342,23 +1377,49 @@ if (window.MorvehApp && typeof window.MorvehApp.salir === 'function') {
   $('#salir-app').onclick = () => window.MorvehApp.salir();
 }
 
-const eventos = new EventSource('/api/eventos');
-// El aviso de conexión solo aparece si se corta (su sitio lo ocupan las pestañas del perfil)
-eventos.onopen = () => { $('#directo').hidden = true; };
-eventos.onerror = () => { $('#directo').hidden = false; };
-eventos.addEventListener('cambios', (e) => refrescar(JSON.parse(e.data)).catch(() => {}));
 // Al publicar una versión nueva el servidor se reinicia y la conexión vuelve con otra versión:
 // la app se recarga sola para usarla (la tele y el móvil no se quedan con la antigua). Si estás
 // viendo algo, espera a que cierres el vídeo.
 let versionServidor = null;
 let recargarAlCerrar = false;
-eventos.addEventListener('version', (e) => {
-  const v = JSON.parse(e.data);
-  if (versionServidor && v !== versionServidor) {
-    if (actual >= 0) recargarAlCerrar = true;
-    else location.reload();
-  }
-  versionServidor = v;
+// Huella del contenido del bucket: si al reconectar no es la misma (la app estuvo en segundo
+// plano, sin red o el servidor dormido), algo cambió sin que llegara el aviso: se repinta todo
+let huellaContenido = null;
+let eventos = null;
+
+function conectar() {
+  if (eventos) eventos.close();
+  eventos = new EventSource('/api/eventos');
+  // El aviso de conexión solo aparece si se corta (su sitio lo ocupan las pestañas del perfil)
+  eventos.onopen = () => { $('#directo').hidden = true; };
+  eventos.onerror = () => {
+    $('#directo').hidden = false;
+    // Si el navegador se rinde (el servidor contestó con un error al despertar), otro intento
+    if (eventos.readyState === EventSource.CLOSED) setTimeout(conectar, 5000);
+  };
+  eventos.addEventListener('cambios', (e) => {
+    const d = JSON.parse(e.data);
+    if (d.huella) huellaContenido = d.huella;
+    refrescar(d).catch(() => {});
+  });
+  eventos.addEventListener('contenido', (e) => {
+    const h = JSON.parse(e.data);
+    if (huellaContenido && h !== huellaContenido) refrescar({ nuevos: [], cambiados: [], borrados: [], todo: true }).catch(() => {});
+    huellaContenido = h;
+  });
+  eventos.addEventListener('version', (e) => {
+    const v = JSON.parse(e.data);
+    if (versionServidor && v !== versionServidor) {
+      if (actual >= 0) recargarAlCerrar = true;
+      else location.reload();
+    }
+    versionServidor = v;
+  });
+}
+conectar();
+// Al volver a la app (móvil, tele) se reconecta si la conexión se había perdido
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && eventos.readyState !== EventSource.OPEN) conectar();
 });
 
 window.addEventListener('hashchange', () => {
