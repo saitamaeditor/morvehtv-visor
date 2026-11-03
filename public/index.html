@@ -432,6 +432,63 @@
     .cat { min-height: 130px; }
     .tele .cat { min-height: 24vh; }
   }
+
+  /* ---------- Dentro de las categorías: carátulas, episodios y ficha en cada pantalla ----------
+     Las columnas y la letra crecen con la pantalla: en un ordenador grande ya no salen 8
+     columnas diminutas, y los episodios (imagen apaisada) van en tarjetas más anchas */
+  .rejilla { grid-template-columns: repeat(auto-fill, minmax(clamp(140px, 12.5vw, 220px), 1fr)); gap: clamp(10px, 1.3vw, 20px); }
+  .rejilla.con-episodios { grid-template-columns: repeat(auto-fill, minmax(clamp(220px, 19vw, 340px), 1fr)); }
+  .item .nombre { font-size: clamp(13px, 1.05vw, 17px); line-height: 1.3; }
+  .item .meta { font-size: clamp(11.5px, .88vw, 14px); }
+  .item .resumen { font-size: clamp(12px, .9vw, 14px); }
+  .ver-mas { display: none; }
+  /* Tablet: se mira más de cerca que un ordenador, la letra no baja del tamaño cómodo */
+  @media (min-width: 601px) and (max-width: 1100px) {
+    .item .nombre { font-size: 14.5px; }
+    .item .meta { font-size: 12.5px; }
+    .item .resumen { font-size: 13px; }
+  }
+  /* El avatar pequeño del perfil arriba (las reglas de «¿Quién está viendo?» lo agrandaban) */
+  #perfil-actual .avatar { width: 30px; height: 30px; border-radius: 8px; font-size: 18px; border-width: 0; }
+  @media (max-width: 600px) {
+    .rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    /* Episodios: uno por fila, la imagen a la izquierda y el texto a la derecha */
+    .rejilla.con-episodios { grid-template-columns: minmax(0, 1fr); }
+    .item.episodio { display: grid; grid-template-columns: 44% minmax(0, 1fr); grid-auto-rows: min-content; align-content: start; }
+    .item.episodio .mini { grid-row: 1 / span 3; grid-column: 1; align-self: stretch; aspect-ratio: auto; min-height: 96px; }
+    .item.episodio .nombre, .item.episodio .meta, .item.episodio .resumen { grid-column: 2; }
+    .item.episodio .resumen { margin: 0 8px 8px; -webkit-line-clamp: 3; }
+    .item.episodio .estrella { right: auto; left: 6px; }
+    .item .nombre { font-size: 14px; }
+    .item .meta { font-size: 12px; }
+    .item .resumen { font-size: 12.5px; }
+    /* Ficha: cartel pequeño junto al título y debajo, a lo ancho, el resto; sinopsis de 4
+       líneas y reparto escondido hasta pulsar «Ver más» */
+    .ficha { display: grid; grid-template-columns: 96px minmax(0, 1fr); column-gap: 12px; row-gap: 8px; align-items: start; padding: 12px; }
+    .ficha img.cartel { width: 96px; grid-row: 1 / span 3; }
+    .ficha .cuerpo { display: contents; }
+    .ficha .cuerpo > * { grid-column: 1 / -1; }
+    .ficha .cuerpo > h2, .ficha .cuerpo > h2 + .suave, .ficha .cuerpo > .datos { grid-column: 2; }
+    .ficha h2 { font-size: 19px; line-height: 1.2; }
+    .ficha .chips.datos .chip { font-size: 11.5px; }
+    .ficha:not(.entera) .cuerpo > p { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+    .ficha:not(.entera) .linea, .ficha:not(.entera) .cuerpo > p.suave { display: none; }
+    .ver-mas { display: inline-flex; justify-self: start; padding: 4px 12px; font-size: 13px; min-height: 0; }
+    /* Arriba: logo, pestañas y perfil en una sola fila */
+    #perfil-actual { padding: 3px; }
+    .logo { gap: 6px; }
+    #pestanas { gap: 4px; }
+    .pestana { padding: 5px 8px; font-size: 11.5px; }
+  }
+  /* Móvil muy estrecho (320-380 px): solo la nube del logo, para que todo quepa en una fila */
+  @media (max-width: 380px) { .logo > span:not(#directo) { display: none; } }
+  /* Tele: por el alto de la pantalla; episodios más anchos */
+  .tele .rejilla { grid-template-columns: repeat(auto-fill, minmax(21vh, 1fr)); gap: 3vh 1.8vw; }
+  .tele .rejilla.con-episodios { grid-template-columns: repeat(auto-fill, minmax(40vh, 1fr)); }
+  .tele .item .nombre { font-size: 2.9vh; }
+  .tele .item .meta { font-size: 2.3vh; }
+  .tele .item .resumen { font-size: 2.3vh; }
+  .tele #perfil-actual .avatar { width: 5.5vh; height: 5.5vh; font-size: 3.4vh; border-radius: 1.2vh; }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>

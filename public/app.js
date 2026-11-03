@@ -316,6 +316,8 @@ async function conMeta(t, clase, clave) {
     mini.replaceChildren(img);
     if (visto) mini.append(visto);
     mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
+    // Los episodios (imagen apaisada) van en tarjetas más anchas para que se lea el título
+    if (d.episodio?.imagen) { t.classList.add('episodio'); const r = t.closest('.rejilla'); if (r) r.classList.add('con-episodios'); }
   }
   const meta = t.querySelector('.meta');
   const tam = t.dataset.tamano && bytes(Number(t.dataset.tamano));
@@ -372,7 +374,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
   if (d?.encontrado) {
     cuerpo.append(el('h2', null, `${d.titulo}${d.anio ? ` (${d.anio})` : ''}`));
     if (d.tituloOriginal && d.tituloOriginal !== d.titulo) cuerpo.append(el('div', 'suave', d.tituloOriginal));
-    const chips = el('div', 'chips');
+    const chips = el('div', 'chips datos');
     const chip = (t) => t && chips.append(el('span', 'chip', t));
     chip(d.valoracion && `★ ${d.valoracion}`);
     chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
@@ -399,6 +401,10 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     linea('Dirección', d.direccion);
     linea('Creada por', d.creadores);
     linea('Reparto', d.reparto);
+    // En el móvil la sinopsis y el reparto se recortan para que se vea antes lo de debajo
+    const mas = el('button', 'boton ver-mas', 'Ver más ▾');
+    mas.onclick = () => { const si = f.classList.toggle('entera'); mas.textContent = si ? 'Ver menos ▴' : 'Ver más ▾'; };
+    cuerpo.append(mas);
     const enlaces = el('div', 'chips');
     if (d.trailer) enlaces.append(Object.assign(el('a', 'boton', '▶ Tráiler'), { href: d.trailer, target: '_blank', rel: 'noopener' }));
     if (d.tmdb) enlaces.append(Object.assign(el('a', 'boton', 'TMDB ↗'), { href: d.tmdb, target: '_blank', rel: 'noopener' }));
