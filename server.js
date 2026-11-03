@@ -327,7 +327,7 @@ async function hlsServir(res, id, archivo) {
 // Cada pocos segundos repasa el bucket entero y, si aparece, cambia o desaparece algo, avisa
 // a las pestañas abiertas (Server-Sent Events) para que se actualicen solas. Las carpetas
 // internas («_hls», «_fotograma»…) no cuentan: el catálogo de MorvehTV cambia a menudo.
-const SEGUNDOS_ESCANEO = Math.max(5, Number(process.env.VISOR_ESCANEO_SEGUNDOS) || 20);
+const SEGUNDOS_ESCANEO = Math.max(5, Number(process.env.VISOR_ESCANEO_SEGUNDOS) || 10);
 const oyentes = new Set();
 let foto = null; // key → "tamaño:fecha" del último repaso
 

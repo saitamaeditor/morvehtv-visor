@@ -547,7 +547,9 @@ const DESCUBRIR = {
   docuserie: ['/discover/tv', { with_genres: '99' }],
   programa: ['/discover/tv', { with_genres: '10764' }],
   'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
-  // Para las categorías nuevas (carpetas que vayas creando), según su nombre
+  // Para las demás carpetas que vayas creando, según su nombre
+  'anime-pelicula': ['/discover/movie', { with_genres: '16', with_original_language: 'ja' }],
+  'anime-serie': ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
   anime: ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
   infantil: ['/discover/movie', { with_genres: '10751' }],
   musica: ['/discover/movie', { with_genres: '10402' }],

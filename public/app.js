@@ -183,53 +183,58 @@ function pintar() {
 }
 
 // ---------- Portada por categorías ----------
-// Cada carpeta de primer nivel del bucket es una categoría. Las conocidas se reconocen por su
-// nombre («05 - DOCUMENTALES», «Peliculas»…; la regla más concreta va primero para que
-// «DOCUSERIES» o «SERIES TURCAS» no caigan en Series) y llevan su icono y su color; cualquier
-// otra carpeta que crees en e2 («ANIME», «CONCIERTOS»…) sale sola como categoría nueva.
+// Cada carpeta de primer nivel de e2 es UNA categoría, ni más ni menos: si creas, renombras o
+// borras una carpeta en e2, la portada cambia igual (sola, en unos segundos). Las reglas solo
+// ponen nombre bonito, icono, color y carteles de relleno según el nombre de la carpeta; van de
+// la más concreta a la más general («PELICULAS ANIME» antes que «PELICULAS», «DOCUSERIES» o
+// «SERIES TURCAS» antes que «SERIES»). Una carpeta que no encaje en ninguna sale con su nombre.
 const CATEGORIAS = [
-  { id: 'pelicula', nombre: 'Películas', icono: '🎬', color: '#e5484d', es: (n) => /pelicul|cine|movie/.test(n) },
-  { id: 'serie', nombre: 'Series', icono: '📺', color: '#4f8cff', es: (n) => /serie/.test(n) && !/docu|turc/.test(n) },
-  { id: 'documental', nombre: 'Documentales', icono: '🌍', color: '#30a46c', es: (n) => /documental/.test(n) },
-  { id: 'docuserie', nombre: 'Docuseries', icono: '🎞️', color: '#12a594', es: (n) => /docuserie/.test(n) },
-  { id: 'programa', nombre: 'Programas de TV', icono: '📡', color: '#f76b15', es: (n) => /programa|\btv\b/.test(n) },
-  { id: 'novela-turca', nombre: 'Novelas turcas', icono: '🌙', color: '#ffb224', es: (n) => /novela|turc/.test(n) },
-];
-
-// Categorías nuevas: icono y carteles de relleno según su nombre; el color, uno fijo por nombre
-const PISTAS = [
-  [/anime/, '🍥', 'anime'], [/infantil|kids|nin[oa]s|familia|dibujos/, '🧸', 'infantil'],
-  [/music|concierto|karaoke/, '🎵', 'musica'], [/terror|miedo/, '👻', 'terror'],
-  [/deporte|futbol|f1|motogp|baloncesto|tenis/, '⚽', 'pelicula'], [/navidad/, '🎄', 'infantil'],
-  [/serie|programa|novela|reality/, '📺', 'serie'],
+  { id: 'anime-pelicula', orden: 2, nombre: 'Películas anime', icono: '🍥', color: '#d6409f', es: (n) => /anime/.test(n) && /pelicul|cine|movie/.test(n) },
+  { id: 'anime-serie', orden: 3, nombre: 'Series anime', icono: '🐉', color: '#8e4ec6', es: (n) => /anime/.test(n) && /serie/.test(n) },
+  { id: 'anime', orden: 4, nombre: 'Anime', icono: '🍥', color: '#d6409f', es: (n) => /anime/.test(n) },
+  { id: 'docuserie', orden: 6, nombre: 'Docuseries', icono: '🎞️', color: '#12a594', es: (n) => /docuserie/.test(n) },
+  { id: 'documental', orden: 5, nombre: 'Documentales', icono: '🌍', color: '#30a46c', es: (n) => /documental/.test(n) },
+  { id: 'novela-turca', orden: 8, nombre: 'Novelas turcas', icono: '🌙', color: '#ffb224', es: (n) => /novela|turc/.test(n) },
+  { id: 'infantil', orden: 9, nombre: 'Infantil', icono: '🧸', color: '#0090ff', es: (n) => /infantil|kids|nin[oa]s|familia|dibujos/.test(n) },
+  { id: 'programa', orden: 7, nombre: 'Programas de TV', icono: '📡', color: '#f76b15', es: (n) => /programa|\btv\b|reality/.test(n) },
+  { id: 'serie', orden: 1, nombre: 'Series', icono: '📺', color: '#4f8cff', es: (n) => /serie/.test(n) },
+  { id: 'pelicula', orden: 0, nombre: 'Películas', icono: '🎬', color: '#e5484d', es: (n) => /pelicul|cine|movie/.test(n) },
+  { id: 'musica', orden: 10, nombre: 'Música', icono: '🎵', color: '#7c66dc', es: (n) => /music|concierto|karaoke/.test(n), sinNombre: true },
+  { id: 'terror', orden: 11, nombre: 'Terror', icono: '👻', color: '#6e56cf', es: (n) => /terror|miedo/.test(n), sinNombre: true },
+  { id: 'deporte', orden: 12, nombre: 'Deportes', icono: '⚽', color: '#29a383', es: (n) => /deporte|futbol|f1|motogp|baloncesto|tenis/.test(n), tmdb: 'pelicula', sinNombre: true },
 ];
 const PALETA = ['#d6409f', '#8e4ec6', '#0090ff', '#00a2c7', '#29a383', '#e54d2e', '#e2a336', '#7c66dc'];
 
 const limpiar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^\d+\s*[-_.]?\s*/, '').trim();
+// «PELICULAS DE ACCION» → «Peliculas de accion» (el nombre tal cual, en minúsculas)
+const comoNombre = (carpeta) => { const b = nombre(carpeta).replace(/^\d+\s*[-_.]?\s*/, '').toLowerCase(); return b.charAt(0).toUpperCase() + b.slice(1); };
 
-function categoriaDe(carpeta) {
-  const n = limpiar(nombre(carpeta));
-  return CATEGORIAS.find((c) => c.es(n)) ?? null;
-}
-
-function categoriaNueva(carpeta) {
-  const n = limpiar(nombre(carpeta));
-  const pista = PISTAS.find(([re]) => re.test(n));
-  let h = 0;
-  for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const bonito = nombre(carpeta).replace(/^\d+\s*[-_.]?\s*/, '').toLowerCase();
-  return {
-    id: `carpeta:${carpeta}`, nombre: bonito.charAt(0).toUpperCase() + bonito.slice(1),
-    icono: pista ? pista[1] : '📁', color: PALETA[h % PALETA.length], tmdb: pista ? pista[2] : 'pelicula',
-  };
-}
-
-// Las categorías de la portada con sus carpetas: las conocidas que tengas y, detrás, una por
-// cada carpeta nueva
+// Las categorías de la portada, una por carpeta: Películas, Series… (su «orden») y detrás las
+// demás por nombre. El nombre bonito va a la carpeta de nombre más simple de cada tipo («PELICULAS»
+// se llama «Películas» aunque también exista «PELICULAS 4K», que sale como «Peliculas 4k»).
 function categoriasDe(carpetas) {
-  const lista = CATEGORIAS.map((cat) => ({ cat, suyas: carpetas.filter((c) => categoriaDe(c) === cat) })).filter((x) => x.suyas.length);
-  for (const c of carpetas) if (!categoriaDe(c) && !nombre(c).startsWith('_')) lista.push({ cat: categoriaNueva(c), suyas: [c] });
-  return lista;
+  const usadas = new Set();
+  const porSencillez = carpetas.filter((c) => !nombre(c).startsWith('_'))
+    .sort((a, b) => limpiar(nombre(a)).length - limpiar(nombre(b)).length);
+  const lista = porSencillez.map((c) => {
+    const n = limpiar(nombre(c));
+    const regla = CATEGORIAS.find((r) => r.es(n));
+    let h = 0;
+    for (const ch of n) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    // El nombre bonito, solo para la primera carpeta de cada tipo y si la regla lo da (las de
+    // música, terror… se llaman como tu carpeta); si no, el de la carpeta
+    const bonito = regla && !regla.sinNombre && !usadas.has(regla.id);
+    if (regla) usadas.add(regla.id);
+    const cat = {
+      id: `carpeta:${c}`,
+      nombre: bonito ? regla.nombre : comoNombre(c),
+      icono: regla ? regla.icono : '📁',
+      color: regla ? regla.color : PALETA[h % PALETA.length],
+      tmdb: regla ? regla.tmdb || regla.id : 'pelicula',
+    };
+    return { cat, suyas: [c], orden: regla ? regla.orden : 99, principal: bonito };
+  });
+  return lista.sort((a, b) => a.orden - b.orden || b.principal - a.principal || natural(a.cat.nombre, b.cat.nombre));
 }
 
 const tamanos = new Map();
@@ -1207,7 +1212,10 @@ async function refrescar({ nuevos, cambiados, borrados }) {
     pendientes.nuevos.push(...nuevos); pendientes.cambiados.push(...cambiados); pendientes.borrados.push(...borrados);
     return;
   }
+  // Contadores y portadas de las categorías, de nuevo: si has quitado o movido títulos, que no
+  // sigan saliendo sus carteles
   tamanos.clear();
+  artes.clear();
   if (![...nuevos, ...cambiados, ...borrados].some((k) => k.startsWith(estado.prefijo))) return;
   const d = await api('/api/listar', { prefijo: estado.prefijo });
   if (actual >= 0) return; // se abrió un vídeo mientras tanto: ya se aplicará al cerrarlo
