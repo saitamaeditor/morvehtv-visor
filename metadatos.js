@@ -141,6 +141,19 @@ function temporada(tmdbId, numero) {
   return temporadas.get(clave);
 }
 
+// Para /api/salud: «ok», «falta» (no hay TMDB_KEY) o «error» (TMDB no la acepta o no responde).
+// Se comprueba como mucho una vez cada 10 minutos.
+let estadoTmdb = null;
+export function saludTmdb() {
+  if (!tmdbKey()) return Promise.resolve('falta');
+  if (!estadoTmdb || estadoTmdb.hasta < Date.now()) {
+    // Con tope de 4 s: Render usa /api/salud para saber si el servicio está vivo
+    const tope = new Promise((ok) => setTimeout(() => ok('error tiempo'), 4000));
+    estadoTmdb = { hasta: Date.now() + 600000, p: Promise.race([pedir('/configuration').then(() => 'ok', (e) => `error ${e.message.match(/\d{3}/)?.[0] ?? ''}`.trim()), tope]) };
+  }
+  return estadoTmdb.p;
+}
+
 // ---------- Otras fuentes (gratis y sin clave) ----------
 // Si TMDB no encuentra un título, o lo encuentra a medias (episodios sin nombre, sin resumen o
 // sin imagen), se completa con TVmaze (series y programas), AniList (anime) y Wikipedia.

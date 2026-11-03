@@ -466,7 +466,7 @@ http
       if (url.pathname === '/api/entrar' && req.method === 'POST') return await acceso.entrar(req, res);
       // Para la pantalla de entrada (¿PIN o contraseña?) y para que Render sepa que está viva
       if (url.pathname === '/api/modo') return json(res, 200, { nube: acceso.NUBE });
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, tmdb: await meta.saludTmdb() });
       if (permiso === 'pin' && !PUBLICO.includes(url.pathname)) {
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Falta el PIN' });
         res.writeHead(302, { location: '/entrar.html' });
