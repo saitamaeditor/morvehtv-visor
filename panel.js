@@ -11,6 +11,7 @@ import {
   AbortMultipartUploadCommand, GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import * as meta from './metadatos.js';
 
 const TAM_PARTE = 32 * 1024 * 1024; // subidas: 32 MB por trozo, hasta ~320 GB
 const TAM_COPIA = 1024 ** 3; // copias de más de 5 GB: por trozos de 1 GB
@@ -188,7 +189,22 @@ export async function atender(ruta, req, res, json, ip) {
       ...(descargar && { ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` }) }), { expiresIn: 3600 }) });
   }
 
+  // Elegir el título antes de subirlo: buscar por nombre o IMDb y su ficha con los capítulos
+  if (ruta === '/api/panel/titulos') {
+    const q = String(url.searchParams.get('q') ?? '').trim();
+    if (q.length < 2) return json(res, 200, []);
+    return json(res, 200, await meta.buscarParaSubir(q));
+  }
+  if (ruta === '/api/panel/titulo') return json(res, 200, await meta.fichaParaSubir(url.searchParams.get('tipo'), url.searchParams.get('id')));
+
   if (req.method !== 'POST') throw error(405, 'Método no permitido');
+
+  // Deja apuntado qué título de TMDB es una película o una carpeta de serie (así la app no tiene
+  // que adivinarlo por el nombre)
+  if (ruta === '/api/panel/vincular') {
+    const clave = claveValida(datos.clave);
+    return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo));
+  }
 
   // Crear carpetas (una o varias: «SERIES/Nueva/Temporada 1/»…)
   if (ruta === '/api/panel/carpeta') {

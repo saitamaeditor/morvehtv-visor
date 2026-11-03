@@ -585,3 +585,49 @@ export function claveDe(key) {
   const d = analizar(key);
   return d?.tipo === 'serie' && d.carpeta ? d.carpeta : key;
 }
+
+// ---------- Para el gestor: elegir el título antes de subirlo ----------
+// Por nombre o por IMDb (el código «tt…» o el enlace entero de imdb.com)
+const resultado = (r, tipo) => ({
+  tmdbId: r.id, tipo, titulo: r.title ?? r.name, original: r.original_title ?? r.original_name ?? '',
+  anio: (r.release_date ?? r.first_air_date ?? '').slice(0, 4), poster: img(r.poster_path, 'w185'), sinopsis: r.overview ?? '',
+});
+export async function buscarParaSubir(q) {
+  const imdb = String(q ?? '').match(/tt\d{5,10}/)?.[0];
+  if (imdb) {
+    const r = await pedir(`/find/${imdb}`, { external_source: 'imdb_id' });
+    return [...(r.movie_results ?? []).map((x) => resultado(x, 'pelicula')), ...(r.tv_results ?? []).map((x) => resultado(x, 'serie'))];
+  }
+  const { results = [] } = await pedir('/search/multi', { query: String(q ?? '').trim(), include_adult: 'false' });
+  return results.filter((r) => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 20)
+    .map((r) => resultado(r, r.media_type === 'tv' ? 'serie' : 'pelicula'));
+}
+
+// Ficha para subir: la película, o la serie con todas sus temporadas y el nombre de cada
+// capítulo (en español; si TMDB solo tiene «Episodio 3», el título en inglés)
+export async function fichaParaSubir(tipo, tmdbId) {
+  const id = Number(tmdbId);
+  if (!id) throw Object.assign(new Error('Falta el título'), { status: 400 });
+  const comun = (x) => ({
+    tmdbId: id, titulo: x.title ?? x.name, original: x.original_title ?? x.original_name ?? '',
+    anio: (x.release_date ?? x.first_air_date ?? '').slice(0, 4), poster: img(x.poster_path, 'w342'),
+    sinopsis: x.overview ?? '', generos: (x.genres ?? []).map((g) => g.name), imdb: x.imdb_id ?? x.external_ids?.imdb_id ?? null,
+  });
+  if (tipo !== 'serie') return { tipo: 'pelicula', ...comun(await pedir(`/movie/${id}`)), duracion: null };
+  const s = await pedir(`/tv/${id}`, { append_to_response: 'external_ids' });
+  const numeros = (s.seasons ?? []).map((t) => t.season_number).filter((n) => n > 0);
+  if ((s.seasons ?? []).some((t) => t.season_number === 0 && t.episode_count)) numeros.push(0); // especiales, al final
+  const temporadas = await Promise.all(numeros.map(async (n) => {
+    const t = await pedir(`/tv/${id}/season/${n}`).catch(() => ({ episodes: [] }));
+    const episodios = (t.episodes ?? []).map((e) => ({ numero: e.episode_number, titulo: e.name ?? '', fecha: e.air_date ?? null }));
+    if (episodios.some((e) => !e.titulo || GENERICO.test(e.titulo))) {
+      const en = await pedir(`/tv/${id}/season/${n}`, { language: 'en-US' }).catch(() => ({ episodes: [] }));
+      for (const e of episodios) {
+        const otro = en.episodes?.find((x) => x.episode_number === e.numero)?.name;
+        if ((!e.titulo || GENERICO.test(e.titulo)) && otro && !GENERICO.test(otro)) e.titulo = otro;
+      }
+    }
+    return { numero: n, nombre: n === 0 ? 'Especiales' : (t.name || `Temporada ${n}`), episodios };
+  }));
+  return { tipo: 'serie', ...comun(s), temporadas };
+}
