@@ -139,6 +139,7 @@ const CATEGORIAS = [
   { id: 'anime-serie', nombre: 'Series anime', icono: '🐉', color: '#8e4ec6', es: (n) => /anime/.test(n) && /serie/.test(n) },
   { id: 'programa', nombre: 'Programas de TV', icono: '📡', color: '#f76b15', es: (n) => /programa|\btv\b/.test(n) },
   { id: 'novela-turca', nombre: 'Novelas turcas', icono: '🌙', color: '#ffb224', es: (n) => /novela|turc/.test(n) },
+  { id: 'deporte', nombre: 'Deportes', icono: '⚽', color: '#00a2c7', es: (n) => /deport|sport/.test(n) },
 ];
 
 const limpiar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^\d+\s*[-_.]?\s*/, '').trim();

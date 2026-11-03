@@ -222,7 +222,12 @@ async function identificar(clave, seccion, datos) {
   return cache[seccion][clave];
 }
 
+// Partidos y resúmenes de DEPORTES no son películas ni series: no se buscan en TMDB (saldría
+// cualquier película con un nombre parecido)
+const esDeporte = (key) => /deport|sport/i.test(key.split('/')[0].normalize('NFD').replace(/[̀-ͯ]/g, ''));
+
 export async function deArchivo(key) {
+  if (esDeporte(key)) return null;
   const datos = analizar(key);
   if (!datos) return null;
   // Los episodios heredan la serie de su carpeta (o de otro episodio ya identificado)
@@ -254,6 +259,7 @@ export async function deArchivo(key) {
 // («…/Temporada 2/»: la ficha de la serie más el póster, la sinopsis y los episodios de esa
 // temporada). Las de categoría no tienen.
 export async function deCarpeta(prefijo) {
+  if (esDeporte(prefijo)) return null;
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
   if (partes.length < 2) return null;
@@ -293,6 +299,8 @@ const DESCUBRIR = {
   'anime-serie': ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
   programa: ['/discover/tv', { with_genres: '10764' }],
   'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
+  // Películas de deporte o de fútbol (palabras clave de TMDB), sin las de dibujos
+  deporte: ['/discover/movie', { with_keywords: '6075|13042', without_genres: '16' }],
 };
 const portadas = new Map(); // categoría → { hasta, fondos }
 
