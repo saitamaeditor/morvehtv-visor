@@ -1,6 +1,6 @@
 // MorvehTV (visor de IDrive e2): un servidor que lista el bucket y firma enlaces para ver cada
 // archivo. Nunca escribe ni borra vídeos en e2: lo único que escribe es el archivo oculto de
-// perfiles (_morvehtv/usuarios.json, ver perfiles.js).
+// cuentas (_morvehtv/usuarios.json, ver perfiles.js). Sin sesión solo se ve entrar.html.
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
 import { readFile, mkdir, rm, stat } from 'node:fs/promises';
@@ -487,6 +487,9 @@ const json = (res, status, datos) => {
   res.end(JSON.stringify(datos));
 };
 
+// Lo que se puede abrir sin haber entrado: la pantalla de entrada y los iconos
+const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
+
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -495,9 +498,16 @@ http
       if (permiso === 'fuera') return json(res, 403, { error: 'Solo se puede entrar desde la red de casa' });
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, tmdb: await meta.saludTmdb() });
+      // Sin sesión solo se llega a la pantalla de entrar o registrarse
+      if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
+      if (!PUBLICO.includes(url.pathname) && !(await perfiles.sesion(req))) {
+        if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Inicia sesión' });
+        res.writeHead(302, { location: '/entrar.html', 'cache-control': 'no-store' });
+        return res.end();
+      }
 
       if (url.pathname === '/api/eventos') return eventos(req, res);
-      if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json);
+      if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
       const ruta = rutas[url.pathname];

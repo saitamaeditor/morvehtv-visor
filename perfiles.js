@@ -1,9 +1,9 @@
-// Favoritos y «Seguir viendo» (por dónde va cada vídeo): una sola lista para todos, sin perfiles
-// ni PIN.
+// Cuentas de usuario (registro con usuario y contraseña) con su «Seguir viendo» y sus favoritos.
 // Todo se guarda en un único archivo oculto del bucket (_morvehtv/usuarios.json): así lo
 // comparten el servidor de casa y el de Render y no se pierde cuando Render se reinicia. Es lo
 // único que MorvehTV escribe en e2; los vídeos nunca se tocan.
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const ARCHIVO = '_morvehtv/usuarios.json';
@@ -11,20 +11,19 @@ const ARCHIVO = '_morvehtv/usuarios.json';
 let s3;
 let bucket;
 let NUBE = false;
-let doc = null; // { secreto, comun, perfiles: [...] }
+let doc = null; // { secreto, cuentas: [...], perfiles y comun (de antes, sin usar) }
 let leidoEn = 0;
 let cola = Promise.resolve(); // las escrituras van de una en una
-const posPendientes = new Map(); // lista → Map(key → posición): se guardan juntas cada 20 s
+const posPendientes = new Map(); // cuenta → Map(key → posición): se guardan juntas cada 20 s
 
-// ¿Se puede escribir el archivo de perfiles? (la clave de e2 tiene que permitirlo). Se comprueba
+// ¿Se puede escribir el archivo de cuentas? (la clave de e2 tiene que permitirlo). Se comprueba
 // al arrancar reescribiendo el archivo tal cual y se ve en /api/salud
 export let escritura = 'comprobando';
 
 export function iniciar(cliente, nombreBucket, nube) {
   s3 = cliente; bucket = nombreBucket; NUBE = nube;
   setInterval(() => volcarPosiciones().catch((e) => console.error(`No se pudo guardar el progreso: ${e.message}`)), 20000);
-  // De paso se crea la lista común si aún no existe
-  cambiar(unir).then(() => { escritura = 'ok'; }, (e) => {
+  cambiar(() => {}).then(() => { escritura = 'ok'; }, (e) => {
     escritura = `error: ${e.name || e.message}`;
     console.error(`No se puede escribir ${ARCHIVO} en e2: ${e.message}`);
   });
@@ -35,7 +34,7 @@ async function descargar() {
     const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: ARCHIVO }));
     return JSON.parse(await r.Body.transformToString());
   } catch (e) {
-    if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return { secreto: randomBytes(32).toString('hex'), perfiles: [] };
+    if (e.name === 'NoSuchKey' || e.$metadata?.httpStatusCode === 404) return { secreto: randomBytes(32).toString('hex'), perfiles: [], cuentas: [] };
     throw e;
   }
 }
@@ -66,30 +65,61 @@ function cambiar(fn) {
 
 const error = (status, message) => Object.assign(new Error(message), { status });
 
-// ---------- Lista común ----------
-// Ya no hay perfiles que elegir: todos usan la misma lista. La primera vez se juntan en ella los
-// favoritos y el progreso de los perfiles que hubiera (que se quedan en el archivo, sin tocar)
-function unir(d) {
-  if (d.comun && d.perfiles.some((p) => p.id === d.comun)) return;
-  const comun = { id: randomBytes(8).toString('hex'), nombre: 'MorvehTV', creado: new Date().toISOString(), favoritos: [], posiciones: {} };
-  const favoritos = d.perfiles.flatMap((p) => p.favoritos || []).sort((a, b) => (b.cuando || 0) - (a.cuando || 0));
-  comun.favoritos = favoritos.filter((f, i) => favoritos.findIndex((x) => x.key === f.key) === i).slice(0, 500);
-  for (const p of d.perfiles) {
-    for (const [key, pos] of Object.entries(p.posiciones || {})) {
-      if (!comun.posiciones[key] || comun.posiciones[key].cuando < pos.cuando) comun.posiciones[key] = pos;
-    }
-  }
-  d.perfiles.push(comun);
-  d.comun = comun.id;
+// ---------- Cuentas ----------
+// La contraseña se guarda con scrypt, nunca en claro. La sesión es una cookie firmada con el
+// secreto del archivo que lleva la «generación» de la cuenta: cambiar la contraseña o «cerrar
+// sesión en todos los dispositivos» la sube y deja sin valor las cookies anteriores.
+// (La lista común y los perfiles de antes se quedan en el archivo, sin usar.)
+const COOKIE = 'morvehtv_sesion';
+const MAX_CUENTAS = 300;
+const scryptAsync = promisify(scrypt);
+const hashClave = async (clave, sal) => (await scryptAsync(String(clave).slice(0, 200), sal, 64)).toString('hex');
+const mismoHash = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+const usuarioValido = (u) => /^[a-z0-9._-]{3,20}$/.test(u);
+const normalizar = (u) => String(u ?? '').trim().toLowerCase();
+const firma = (secreto, c) => createHmac('sha256', secreto).update(`cuenta:${c.id}:${c.gen || 0}`).digest('hex');
+const publica = (c) => ({ id: c.id, usuario: c.usuario, nombre: c.nombre, creado: c.creado });
+
+// Límites de intentos: por conexión y por usuario (contraseñas) y por conexión (registros)
+const intentos = new Map(); // clave → [marcas de tiempo]
+function frenar(clave, max, minutos) {
+  const lista = (intentos.get(clave) || []).filter((t) => t > Date.now() - minutos * 60000);
+  intentos.set(clave, lista);
+  if (lista.length >= max) throw error(429, `Demasiados intentos. Prueba dentro de ${minutos} minutos.`);
+  return () => lista.push(Date.now());
+}
+setInterval(() => {
+  for (const [k, l] of intentos) if (!l.some((t) => t > Date.now() - 3600000)) intentos.delete(k);
+}, 600000).unref();
+
+function cookies(req) {
+  return Object.fromEntries((req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((p) => p.length === 2));
+}
+const cookieSesion = (valor, maxAge) =>
+  `${COOKIE}=${valor}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${NUBE ? '; Secure' : ''}`;
+const ponerSesion = (res, d, c) => res.setHeader('set-cookie', cookieSesion(`${c.id}.${firma(d.secreto, c)}`, 31536000));
+
+// La cuenta de quien hace la petición, o null (la usa también el servidor para dejar pasar)
+export async function sesion(req) {
+  const [id, f] = String(cookies(req)[COOKIE] ?? '').split('.');
+  if (!id || !f) return null;
+  const d = await leer();
+  const c = (d.cuentas || []).find((x) => x.id === id);
+  return c && mismoHash(f, firma(d.secreto, c)) ? c : null;
 }
 
-async function necesitaPerfil() {
-  let d = await leer();
-  if (!d.comun) d = await cambiar((x) => { unir(x); return x; });
-  const p = d.perfiles.find((x) => x.id === d.comun);
-  if (!p) throw error(503, 'La lista aún no está lista');
-  return p;
+async function necesitaCuenta(req) {
+  const c = await sesion(req);
+  if (!c) throw error(401, 'Inicia sesión');
+  return c;
 }
+
+// Cambia la cuenta dentro del archivo (releído justo antes) y devuelve lo que diga fn
+const cambiarCuenta = (id, fn) => cambiar((d) => {
+  const c = (d.cuentas || []).find((x) => x.id === id);
+  if (!c) throw error(401, 'Esa cuenta ya no existe');
+  return fn(c, d);
+});
 
 async function cuerpo(req) {
   let t = '';
@@ -100,25 +130,115 @@ async function cuerpo(req) {
   return t ? JSON.parse(t) : {};
 }
 
+function claveNueva(clave) {
+  if (clave.length < 8) throw error(400, 'La contraseña debe tener al menos 8 caracteres');
+  if (clave.length > 200) throw error(400, 'Contraseña demasiado larga');
+}
+
 // ---------- Rutas ----------
-export async function atender(ruta, req, res, json) {
+export async function atender(ruta, req, res, json, ip) {
+  // ¿Hay sesión? (la pantalla de entrada lo mira para saltar directa a la app)
+  if (ruta === '/api/sesion') {
+    const c = await sesion(req);
+    return c ? json(res, 200, publica(c)) : json(res, 401, { error: 'Inicia sesión' });
+  }
   if (ruta === '/api/yo') {
-    const p = await necesitaPerfil();
-    const pendientes = posPendientes.get(p.id);
-    const posiciones = { ...p.posiciones, ...(pendientes ? Object.fromEntries(pendientes) : {}) };
-    return json(res, 200, { id: p.id, nombre: p.nombre, favoritos: p.favoritos, posiciones });
+    const c = await necesitaCuenta(req);
+    const pendientes = posPendientes.get(c.id);
+    const posiciones = { ...c.posiciones, ...(pendientes ? Object.fromEntries(pendientes) : {}) };
+    return json(res, 200, { ...publica(c), favoritos: c.favoritos, posiciones });
   }
   if (req.method !== 'POST') throw error(405, 'Método no permitido');
   const datos = await cuerpo(req);
-  const yo = await necesitaPerfil();
+
+  if (ruta === '/api/registro') {
+    const usuario = normalizar(datos.usuario);
+    const clave = String(datos.clave ?? '');
+    const nombre = String(datos.nombre ?? '').trim().slice(0, 30) || usuario;
+    if (!usuarioValido(usuario)) throw error(400, 'El usuario debe tener de 3 a 20 caracteres: letras, números, punto, guion o guion bajo');
+    claveNueva(clave);
+    const anotar = frenar(`registro:${ip}`, 5, 60);
+    const sal = randomBytes(16).toString('hex');
+    const hash = await hashClave(clave, sal);
+    const r = await cambiar((d) => {
+      d.cuentas = d.cuentas || [];
+      if (d.cuentas.length >= MAX_CUENTAS) throw error(403, 'No se admiten más registros por ahora');
+      if (d.cuentas.some((x) => x.usuario === usuario)) throw error(409, 'Ese usuario ya existe');
+      const c = { id: randomBytes(8).toString('hex'), usuario, nombre, sal, clave: hash, gen: 0,
+        creado: new Date().toISOString(), favoritos: [], posiciones: {} };
+      d.cuentas.push(c);
+      return { c, d };
+    });
+    anotar();
+    console.log(`Cuenta nueva: ${usuario}`);
+    ponerSesion(res, r.d, r.c);
+    return json(res, 200, publica(r.c));
+  }
+
+  if (ruta === '/api/login') {
+    const usuario = normalizar(datos.usuario);
+    const anotarIp = frenar(`login:${ip}`, 10, 10);
+    const anotarUsuario = frenar(`usuario:${usuario}`, 10, 10);
+    const d = await leer();
+    const c = (d.cuentas || []).find((x) => x.usuario === usuario);
+    // Con un usuario que no existe también se calcula un hash: así no se nota por el tiempo
+    const hash = await hashClave(String(datos.clave ?? ''), c ? c.sal : 'sin-cuenta');
+    if (!c || !mismoHash(hash, c.clave)) {
+      anotarIp(); anotarUsuario();
+      throw error(401, 'Usuario o contraseña incorrectos');
+    }
+    ponerSesion(res, d, c);
+    return json(res, 200, publica(c));
+  }
+
+  if (ruta === '/api/salir') {
+    res.setHeader('set-cookie', cookieSesion('', 0));
+    return json(res, 200, { ok: true });
+  }
+
+  const yo = await necesitaCuenta(req);
+
+  if (ruta === '/api/cuenta-nombre') {
+    const nombre = String(datos.nombre ?? '').trim().slice(0, 30);
+    if (!nombre) throw error(400, 'Escribe un nombre');
+    return json(res, 200, await cambiarCuenta(yo.id, (c) => { c.nombre = nombre; return publica(c); }));
+  }
+
+  // Cambiar la contraseña o borrar la cuenta: las dos piden la contraseña actual
+  if (ruta === '/api/cuenta-clave' || ruta === '/api/cuenta-borrar') {
+    const anotar = frenar(`usuario:${yo.usuario}`, 10, 10);
+    if (!mismoHash(await hashClave(String(datos.actual ?? ''), yo.sal), yo.clave)) {
+      anotar();
+      throw error(401, 'La contraseña actual no es correcta');
+    }
+    if (ruta === '/api/cuenta-borrar') {
+      await cambiar((d) => { d.cuentas = (d.cuentas || []).filter((x) => x.id !== yo.id); });
+      posPendientes.delete(yo.id);
+      console.log(`Cuenta borrada: ${yo.usuario}`);
+      res.setHeader('set-cookie', cookieSesion('', 0));
+      return json(res, 200, { ok: true });
+    }
+    const nueva = String(datos.nueva ?? '');
+    claveNueva(nueva);
+    const sal = randomBytes(16).toString('hex');
+    const hash = await hashClave(nueva, sal);
+    const r = await cambiarCuenta(yo.id, (c, d) => { c.sal = sal; c.clave = hash; c.gen = (c.gen || 0) + 1; return { c, d }; });
+    ponerSesion(res, r.d, r.c); // este dispositivo sigue dentro; los demás tienen que volver a entrar
+    return json(res, 200, { ok: true });
+  }
+
+  // Cierra la sesión en todos los dispositivos menos en este
+  if (ruta === '/api/cuenta-cerrar-todas') {
+    const r = await cambiarCuenta(yo.id, (c, d) => { c.gen = (c.gen || 0) + 1; return { c, d }; });
+    ponerSesion(res, r.d, r.c);
+    return json(res, 200, { ok: true });
+  }
 
   // Añadir o quitar de «Mi lista» (un vídeo o una serie entera)
   if (ruta === '/api/favorito') {
     const key = String(datos.key ?? '');
     if (!key || key.length > 1024 || (NUBE && key.split('/').some((p) => p.startsWith('_')))) throw error(400, 'Clave no válida');
-    const favoritos = await cambiar((d) => {
-      const p = d.perfiles.find((x) => x.id === yo.id);
-      if (!p) throw error(404, 'Ese perfil ya no existe');
+    const favoritos = await cambiarCuenta(yo.id, (p) => {
       p.favoritos = p.favoritos.filter((f) => f.key !== key);
       if (datos.si) {
         p.favoritos.unshift({ key, tipo: key.endsWith('/') ? 'carpeta' : 'archivo',
@@ -151,12 +271,12 @@ async function volcarPosiciones() {
   try {
     await cambiar((d) => {
       for (const [id, cambios] of lote) {
-        const p = d.perfiles.find((x) => x.id === id);
+        const p = (d.cuentas || []).find((x) => x.id === id);
         if (!p) continue;
         for (const [key, pos] of cambios) {
           if (pos) p.posiciones[key] = pos; else delete p.posiciones[key];
         }
-        // Como mucho los 300 vídeos más recientes por perfil
+        // Como mucho los 300 vídeos más recientes por cuenta
         const claves = Object.keys(p.posiciones).sort((a, b) => p.posiciones[b].cuando - p.posiciones[a].cuando);
         claves.slice(300).forEach((k) => delete p.posiciones[k]);
       }
@@ -175,4 +295,7 @@ async function volcarPosiciones() {
 // Al apagar el servidor (Render lo hace a menudo) se intenta guardar lo pendiente
 export const guardarPendiente = () => volcarPosiciones().catch(() => {});
 
-export const RUTAS = ['/api/yo', '/api/favorito', '/api/posicion'];
+export const RUTAS = ['/api/sesion', '/api/yo', '/api/registro', '/api/login', '/api/salir', '/api/cuenta-nombre',
+  '/api/cuenta-clave', '/api/cuenta-borrar', '/api/cuenta-cerrar-todas', '/api/favorito', '/api/posicion'];
+// Las que se pueden usar sin haber entrado
+export const SIN_SESION = ['/api/sesion', '/api/registro', '/api/login', '/api/salir'];

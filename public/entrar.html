@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MorvehTV · Entrar</title>
+<meta name="theme-color" content="#101114">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icono-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MorvehTV">
+<style>
+  * { box-sizing: border-box; }
+  html { -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
+    background: #101114; background-image: radial-gradient(ellipse at 50% -10%, rgba(0,164,220,.22), rgba(16,17,20,0) 60%);
+    color: #f1f2f4; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .caja { width: 100%; max-width: 400px; }
+  .marca { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 22px; font-size: 28px; font-weight: 800; letter-spacing: .01em; }
+  .marca img { width: 44px; height: 44px; }
+  .marca span { color: #00a4dc; }
+  .tarjeta { background: #1a1c21; border: 1px solid #2e323a; border-radius: 16px; padding: 26px 24px 22px; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+  .pestanas { display: flex; background: #101114; border-radius: 10px; padding: 4px; margin-bottom: 22px; }
+  .pestana { flex: 1; padding: 10px 8px; border: 0; border-radius: 8px; background: transparent; color: #a3a9b4; font: 600 15px system-ui, sans-serif; cursor: pointer; }
+  .pestana.activa { background: #2a2e36; color: #fff; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { margin: 0 0 18px; color: #a3a9b4; font-size: 14px; }
+  label { display: block; margin: 0 0 14px; font-size: 14px; color: #c9ced6; font-weight: 600; }
+  .opcional { color: #7d8492; font-weight: 400; }
+  .campo { position: relative; margin-top: 6px; }
+  input { width: 100%; padding: 12px 14px; font: 16px system-ui, sans-serif; color: #fff; background: #101114; border: 1px solid #353a44; border-radius: 10px; }
+  input:focus { border-color: #00a4dc; outline: none; box-shadow: 0 0 0 3px rgba(0,164,220,.25); }
+  input.con-ojo { padding-right: 76px; }
+  .ojo { position: absolute; right: 6px; top: 50%; margin-top: -16px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: #a3a9b4; font: 600 13px system-ui, sans-serif; cursor: pointer; }
+  .ojo:hover, .ojo:focus { color: #fff; background: #2a2e36; outline: none; }
+  .ayuda { margin-top: 6px; font-size: 12.5px; color: #7d8492; font-weight: 400; }
+  .fuerza { height: 4px; border-radius: 2px; background: #2a2e36; margin-top: 8px; overflow: hidden; }
+  .fuerza i { display: block; height: 100%; width: 0; background: #e5484d; transition: width .2s, background .2s; }
+  .enviar { width: 100%; margin-top: 6px; padding: 13px; border: 0; border-radius: 10px; background: #00a4dc; color: #fff; font: 700 16px system-ui, sans-serif; cursor: pointer; }
+  .enviar:hover, .enviar:focus { background: #19b6ec; outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+  .enviar[disabled] { opacity: .6; cursor: default; }
+  .pestana:focus { outline: none; box-shadow: 0 0 0 2px #00a4dc; }
+  .error { min-height: 20px; margin: 12px 0 0; color: #ff6b6b; font-size: 14px; text-align: center; }
+  .pie { margin-top: 16px; text-align: center; color: #7d8492; font-size: 13px; }
+  .enlace { background: none; border: 0; padding: 0; color: #00a4dc; font: inherit; font-weight: 600; cursor: pointer; }
+  .enlace:focus { outline: 2px solid #00a4dc; outline-offset: 2px; border-radius: 4px; }
+  [hidden] { display: none !important; }
+  /* Tele: todo más grande */
+  .tele .caja { max-width: 560px; }
+  .tele body, .tele input, .tele .enviar { font-size: 22px; }
+  .tele .pestana { font-size: 20px; }
+  @media (max-width: 420px) { .tarjeta { padding: 22px 18px 18px; } .marca { font-size: 24px; } }
+</style>
+</head>
+<body>
+<div class="caja">
+  <div class="marca"><img src="/icono.svg" alt=""><b>Morveh<span>TV</span></b></div>
+  <div class="tarjeta">
+    <div class="pestanas" role="tablist">
+      <button type="button" class="pestana activa" id="p-entrar" role="tab">Iniciar sesión</button>
+      <button type="button" class="pestana" id="p-registro" role="tab">Crear cuenta</button>
+    </div>
+
+    <form id="f-entrar" autocomplete="on" novalidate>
+      <h1>Bienvenido de nuevo</h1>
+      <p class="sub">Entra con tu usuario para seguir viendo donde lo dejaste.</p>
+      <label>Usuario
+        <div class="campo"><input id="e-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20"></div>
+      </label>
+      <label>Contraseña
+        <div class="campo"><input id="e-clave" class="con-ojo" type="password" name="password" autocomplete="current-password" maxlength="200">
+          <button type="button" class="ojo" data-para="e-clave">Mostrar</button></div>
+      </label>
+      <button class="enviar" type="submit">Entrar</button>
+      <p class="error" id="e-error" role="alert"></p>
+    </form>
+
+    <form id="f-registro" autocomplete="on" novalidate hidden>
+      <h1>Crea tu cuenta</h1>
+      <p class="sub">Tendrás tu propio «Seguir viendo» y tus favoritos en todos tus aparatos.</p>
+      <label>Nombre <span class="opcional">(opcional)</span>
+        <div class="campo"><input id="r-nombre" name="name" autocomplete="nickname" maxlength="30"></div>
+      </label>
+      <label>Usuario
+        <div class="campo"><input id="r-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20"></div>
+        <div class="ayuda">De 3 a 20 caracteres: letras, números, punto, guion o guion bajo.</div>
+      </label>
+      <label>Contraseña
+        <div class="campo"><input id="r-clave" class="con-ojo" type="password" name="new-password" autocomplete="new-password" maxlength="200">
+          <button type="button" class="ojo" data-para="r-clave">Mostrar</button></div>
+        <div class="fuerza"><i id="r-fuerza"></i></div>
+        <div class="ayuda" id="r-fuerza-txt">Al menos 8 caracteres.</div>
+      </label>
+      <label>Repite la contraseña
+        <div class="campo"><input id="r-clave2" class="con-ojo" type="password" autocomplete="new-password" maxlength="200">
+          <button type="button" class="ojo" data-para="r-clave2">Mostrar</button></div>
+      </label>
+      <button class="enviar" type="submit">Crear cuenta</button>
+      <p class="error" id="r-error" role="alert"></p>
+      <p class="pie">Guarda bien tu contraseña: no se puede recuperar por correo.</p>
+    </form>
+  </div>
+  <p class="pie" id="cambiar-txt">¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate</button></p>
+</div>
+<script>
+  // Escrito sin sintaxis moderna: tiene que funcionar en teles antiguas
+  (function () {
+    function $(id) { return document.getElementById(id); }
+    if (/Android TV|AFT|BRAVIA|SMART-TV|SmartTV|Tizen|Web0S|webOS|HbbTV|GoogleTV/i.test(navigator.userAgent)) document.documentElement.className += ' tele';
+
+    // Si ya hay sesión, directo a la app
+    fetch('/api/sesion', { credentials: 'same-origin' }).then(function (r) { if (r.ok) location.replace('/'); }).catch(function () {});
+
+    var modo = 'entrar';
+    function cambiar(nuevo) {
+      modo = nuevo;
+      $('f-entrar').hidden = modo !== 'entrar';
+      $('f-registro').hidden = modo !== 'registro';
+      $('p-entrar').className = 'pestana' + (modo === 'entrar' ? ' activa' : '');
+      $('p-registro').className = 'pestana' + (modo === 'registro' ? ' activa' : '');
+      $('cambiar-txt').innerHTML = modo === 'entrar'
+        ? '¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate</button>'
+        : '¿Ya tienes cuenta? <button type="button" class="enlace" id="ir-entrar">Inicia sesión</button>';
+      var b = $('ir-registro') || $('ir-entrar');
+      b.onclick = function () { cambiar(modo === 'entrar' ? 'registro' : 'entrar'); };
+      $(modo === 'entrar' ? 'e-usuario' : 'r-nombre').focus();
+    }
+    $('p-entrar').onclick = function () { cambiar('entrar'); };
+    $('p-registro').onclick = function () { cambiar('registro'); };
+    $('ir-registro').onclick = function () { cambiar('registro'); };
+    if (location.hash === '#registro') cambiar('registro'); else $('e-usuario').focus();
+
+    // Mostrar u ocultar la contraseña
+    var ojos = document.querySelectorAll('.ojo');
+    for (var i = 0; i < ojos.length; i++) ojos[i].onclick = function () {
+      var campo = $(this.getAttribute('data-para'));
+      var ver = campo.type === 'password';
+      campo.type = ver ? 'text' : 'password';
+      this.textContent = ver ? 'Ocultar' : 'Mostrar';
+    };
+
+    // Indicador de seguridad de la contraseña
+    $('r-clave').oninput = function () {
+      var c = this.value, p = 0;
+      if (c.length >= 8) p++;
+      if (c.length >= 12) p++;
+      if (/[a-z]/.test(c) && /[A-Z]/.test(c)) p++;
+      if (/\d/.test(c)) p++;
+      if (/[^A-Za-z0-9]/.test(c)) p++;
+      var niveles = [['#e5484d', 'Al menos 8 caracteres.'], ['#e5484d', 'Débil'], ['#f76b15', 'Mejorable'], ['#ffb224', 'Aceptable'], ['#30a46c', 'Fuerte'], ['#30a46c', 'Muy fuerte']];
+      var n = c.length < 8 ? 0 : p;
+      $('r-fuerza').style.width = (c.length ? Math.max(8, n * 20) : 0) + '%';
+      $('r-fuerza').style.background = niveles[n][0];
+      $('r-fuerza-txt').textContent = niveles[n][1];
+    };
+
+    function enviar(ruta, datos, error, boton) {
+      error.textContent = '';
+      boton.disabled = true;
+      fetch(ruta, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' }, body: JSON.stringify(datos)
+      }).then(function (r) {
+        return r.json().then(function (d) {
+          if (r.ok) return location.replace('/');
+          boton.disabled = false;
+          error.textContent = d.error || 'No se pudo completar';
+        });
+      }).catch(function () {
+        boton.disabled = false;
+        error.textContent = 'No se pudo conectar. Revisa la conexión e inténtalo de nuevo.';
+      });
+    }
+
+    $('f-entrar').onsubmit = function (e) {
+      e.preventDefault();
+      var u = $('e-usuario').value.trim(), c = $('e-clave').value;
+      if (!u || !c) { $('e-error').textContent = 'Escribe tu usuario y tu contraseña'; return; }
+      enviar('/api/login', { usuario: u, clave: c }, $('e-error'), this.querySelector('.enviar'));
+    };
+
+    $('f-registro').onsubmit = function (e) {
+      e.preventDefault();
+      var err = $('r-error');
+      var u = $('r-usuario').value.trim().toLowerCase(), c = $('r-clave').value;
+      if (!/^[a-z0-9._-]{3,20}$/.test(u)) { err.textContent = 'El usuario debe tener de 3 a 20 caracteres: letras, números, punto, guion o guion bajo'; return; }
+      if (c.length < 8) { err.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
+      if (c !== $('r-clave2').value) { err.textContent = 'Las contraseñas no coinciden'; return; }
+      enviar('/api/registro', { nombre: $('r-nombre').value.trim(), usuario: u, clave: c }, err, this.querySelector('.enviar'));
+    };
+
+    // Mando de la tele: ↑ ↓ pasan de un campo a otro; ← → cambian de pestaña arriba
+    document.addEventListener('keydown', function (e) {
+      var k = e.key || '', c = e.keyCode;
+      var arriba = k === 'ArrowUp' || c === 38, abajo = k === 'ArrowDown' || c === 40;
+      var a = document.activeElement;
+      if ((k === 'ArrowLeft' || c === 37 || k === 'ArrowRight' || c === 39) && a && /pestana/.test(a.className)) {
+        e.preventDefault();
+        (a.id === 'p-entrar' ? $('p-registro') : $('p-entrar')).focus();
+        return;
+      }
+      if (!arriba && !abajo) return;
+      var todos = document.querySelectorAll('input, .ojo, .enviar, .enlace');
+      var lista = [];
+      for (var i = 0; i < todos.length; i++) if (todos[i].offsetParent) lista.push(todos[i]);
+      var pos = lista.indexOf(a);
+      var destino;
+      // Desde las pestañas, abajo va al primer campo; desde el primer campo, arriba a la pestaña
+      if (pos < 0) destino = abajo ? lista[0] : null;
+      else destino = lista[pos + (abajo ? 1 : -1)] || (arriba ? $(modo === 'entrar' ? 'p-entrar' : 'p-registro') : null);
+      if (destino) { e.preventDefault(); destino.focus(); }
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
-// ---------- Favoritos y «Seguir viendo» ----------
-// Una sola lista para todos (sin perfiles ni PIN), guardada en el servidor: es la misma en la web,
-// el móvil y la tele.
-let yo = null; // { id, nombre, favoritos: [...], posiciones: {...} }
+// ---------- Cuenta del usuario ----------
+// Cada uno entra con su usuario y contraseña (entrar.html) y tiene su «Seguir viendo» y sus
+// favoritos, guardados en el servidor: son los mismos en la web, el móvil y la tele.
+let yo = null; // { id, usuario, nombre, creado, favoritos: [...], posiciones: {...} }
 
 async function enviar(ruta, datos) {
   const r = await fetch(ruta, {
@@ -9,6 +9,8 @@ async function enviar(ruta, datos) {
     headers: { 'content-type': 'application/json' }, body: JSON.stringify(datos || {}),
   });
   const d = await r.json();
+  // La sesión caducó o se cerró desde otro aparato (no confundir con «contraseña actual incorrecta»)
+  if (r.status === 401 && d.error === 'Inicia sesión') { location.replace('/entrar.html'); throw new Error(d.error); }
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
@@ -21,7 +23,149 @@ async function empezar() {
   } catch (e) {
     aviso('No se pudo leer «Seguir viendo» ni los favoritos', 4000);
   }
+  pintarBotonCuenta();
   cargar();
+}
+
+const inicial = (c) => (c.nombre || c.usuario || '?').trim().charAt(0).toUpperCase();
+
+// Botón redondo con la inicial, arriba a la derecha
+function pintarBotonCuenta() {
+  let b = $('#mi-cuenta');
+  if (!b) {
+    b = el('button', 'boton');
+    b.id = 'mi-cuenta';
+    b.title = 'Mi cuenta';
+    b.onclick = abrirCuenta;
+    $('header').insertBefore(b, $('#salir-app'));
+  }
+  b.hidden = !yo;
+  b.innerHTML = '';
+  if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
+}
+
+function campo(etiqueta, tipo, auto) {
+  const l = el('label', null, etiqueta);
+  const i = el('input');
+  i.type = tipo; i.autocomplete = auto; i.maxLength = tipo === 'password' ? 200 : 30;
+  l.append(i);
+  return { l, i };
+}
+
+// Un bloque del panel con su título, sus campos, un botón y su línea de mensaje
+function bloque(titulo, texto) {
+  const s = el('section', 'cuenta-bloque');
+  s.append(el('h3', null, titulo));
+  if (texto) s.append(el('p', 'cuenta-texto', texto));
+  const msg = el('p', 'cuenta-msg');
+  return { s, msg };
+}
+
+async function accion(boton, msg, fn, exito) {
+  msg.className = 'cuenta-msg'; msg.textContent = '';
+  boton.disabled = true;
+  try {
+    await fn();
+    if (exito) { msg.classList.add('bien'); msg.textContent = exito; }
+  } catch (e) {
+    msg.classList.add('mal'); msg.textContent = e.message;
+  }
+  boton.disabled = false;
+}
+
+function abrirCuenta() {
+  if (!yo) return;
+  let p = $('#cuenta');
+  if (!p) {
+    p = el('div');
+    p.id = 'cuenta';
+    p.onclick = (e) => { if (e.target === p) cerrarCuenta(); };
+    document.body.append(p);
+  }
+  p.innerHTML = '';
+  p.hidden = false;
+  document.documentElement.classList.add('con-cuenta');
+  const caja = el('div', 'cuenta-caja');
+  p.append(caja);
+
+  // Cabecera: inicial, nombre, @usuario y desde cuándo
+  const cab = el('div', 'cuenta-cab');
+  const datos = el('div');
+  const desde = yo.creado ? new Date(yo.creado).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  datos.append(el('h2', null, yo.nombre || yo.usuario), el('p', 'cuenta-texto', `@${yo.usuario}${desde ? ` · desde el ${desde}` : ''}`));
+  const x = el('button', 'boton cuenta-cerrar', '✕');
+  x.title = 'Cerrar';
+  x.onclick = cerrarCuenta;
+  cab.append(el('div', 'inicial grande', inicial(yo)), datos, x);
+  caja.append(cab);
+
+  // Nombre visible
+  const bn = bloque('Nombre', 'Es el que se ve arriba. Tu usuario para entrar no cambia.');
+  const n = campo('Nombre', 'text', 'nickname');
+  n.i.value = yo.nombre || '';
+  const gn = el('button', 'boton', 'Guardar nombre');
+  gn.onclick = () => accion(gn, bn.msg, async () => {
+    const r = await enviar('/api/cuenta-nombre', { nombre: n.i.value });
+    yo.nombre = r.nombre;
+    pintarBotonCuenta();
+    cab.querySelector('h2').textContent = r.nombre;
+    cab.querySelector('.inicial').textContent = inicial(yo);
+  }, 'Nombre guardado');
+  bn.s.append(n.l, gn, bn.msg);
+  caja.append(bn.s);
+
+  // Contraseña
+  const bc = bloque('Contraseña', 'Al cambiarla se cierra la sesión en tus otros aparatos.');
+  const actualC = campo('Contraseña actual', 'password', 'current-password');
+  const nueva = campo('Contraseña nueva (mínimo 8 caracteres)', 'password', 'new-password');
+  const otra = campo('Repite la contraseña nueva', 'password', 'new-password');
+  const gc = el('button', 'boton', 'Cambiar contraseña');
+  gc.onclick = () => accion(gc, bc.msg, async () => {
+    if (nueva.i.value.length < 8) throw new Error('La contraseña nueva debe tener al menos 8 caracteres');
+    if (nueva.i.value !== otra.i.value) throw new Error('Las contraseñas nuevas no coinciden');
+    await enviar('/api/cuenta-clave', { actual: actualC.i.value, nueva: nueva.i.value });
+    actualC.i.value = nueva.i.value = otra.i.value = '';
+  }, 'Contraseña cambiada');
+  bc.s.append(actualC.l, nueva.l, otra.l, gc, bc.msg);
+  caja.append(bc.s);
+
+  // Sesiones
+  const bs = bloque('Sesiones');
+  const todas = el('button', 'boton', 'Cerrar sesión en los demás aparatos');
+  todas.onclick = () => accion(todas, bs.msg, () => enviar('/api/cuenta-cerrar-todas'), 'Listo: los demás aparatos tendrán que volver a entrar');
+  const salir = el('button', 'boton boton-acento', 'Cerrar sesión');
+  salir.onclick = async () => {
+    await enviar('/api/salir').catch(() => {});
+    location.replace('/entrar.html');
+  };
+  const filaS = el('div', 'cuenta-botones');
+  filaS.append(salir, todas);
+  bs.s.append(filaS, bs.msg);
+  caja.append(bs.s);
+
+  // Borrar la cuenta
+  const bb = bloque('Borrar cuenta', 'Se borran tu cuenta, tus favoritos y lo que tenías a medias. No se puede deshacer.');
+  bb.s.classList.add('peligro');
+  const cb = campo('Escribe tu contraseña para confirmar', 'password', 'current-password');
+  const borrar = el('button', 'boton boton-peligro', 'Borrar mi cuenta');
+  borrar.onclick = () => accion(borrar, bb.msg, async () => {
+    if (!cb.i.value) throw new Error('Escribe tu contraseña');
+    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.')) return;
+    await enviar('/api/cuenta-borrar', { actual: cb.i.value });
+    location.replace('/entrar.html#registro');
+  });
+  bb.s.append(cb.l, borrar, bb.msg);
+  caja.append(bb.s);
+
+  x.focus();
+}
+
+function cerrarCuenta() {
+  const p = $('#cuenta');
+  if (p) { p.hidden = true; p.innerHTML = ''; }
+  document.documentElement.classList.remove('con-cuenta');
+  const b = $('#mi-cuenta');
+  if (b) b.focus();
 }
 
 // ---------- Favoritos ----------

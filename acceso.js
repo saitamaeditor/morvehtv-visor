@@ -1,13 +1,13 @@
-// Quién puede entrar. Sin PIN:
-//  · En casa (tu PC): entran este ordenador y los aparatos de la red local (móvil, tablet,
-//    tele). Desde internet no se puede entrar.
-//  · En la nube (Render): entra todo el mundo que tenga la dirección.
+// Desde dónde se puede llegar a MorvehTV (luego cada uno entra con su cuenta, ver perfiles.js):
+//  · En casa (tu PC): este ordenador y los aparatos de la red local (móvil, tablet, tele).
+//    Desde internet no.
+//  · En la nube (Render): desde cualquier sitio.
 import os from 'node:os';
 
 export const NUBE = Boolean(process.env.RENDER || process.env.VISOR_NUBE === '1');
 
 // Detrás del proxy de Render la IP real llega en x-forwarded-for
-const ipDe = (req) =>
+export const ipDe = (req) =>
   (NUBE ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') ||
   (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
 

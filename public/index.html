@@ -307,6 +307,47 @@
   #visor.cine .repro .de-cero { position: fixed; }
   .tele .repro .de-cero { top: calc(50% + 90px); font-size: 20px; }
   #salir-app:hover, #salir-app:focus { background: rgba(229,72,77,.85); border-color: #e5484d; color: #fff; outline: none; }
+  /* ================= Mi cuenta ================= */
+  #mi-cuenta { flex: none; margin-left: auto; padding: 3px 12px 3px 3px; border-radius: 999px; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
+  #mi-cuenta:hover, #mi-cuenta:focus { border-color: var(--acento); outline: none; }
+  #mi-cuenta + #salir-app { margin-left: 0; }
+  .inicial { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
+    background: linear-gradient(135deg, #00a4dc, #0072a8); color: #fff; font-weight: 800; font-size: 15px; }
+  .inicial.grande { width: 64px; height: 64px; font-size: 30px; }
+  #cuenta { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 40; overflow-y: auto; padding: 5vh 16px;
+    background: rgba(5,6,8,.78); display: flex; justify-content: center; align-items: flex-start; }
+  #cuenta[hidden] { display: none; }
+  .con-cuenta body { overflow: hidden; }
+  .cuenta-caja { width: 100%; max-width: 520px; background: var(--panel); border: 1px solid var(--borde); border-radius: 16px; padding: 22px; box-shadow: 0 24px 60px rgba(0,0,0,.6); }
+  .cuenta-cab { display: flex; align-items: center; gap: 16px; padding-bottom: 18px; border-bottom: 1px solid var(--borde); }
+  .cuenta-cab > div:nth-child(2) { flex: 1; min-width: 0; }
+  .cuenta-cab h2 { margin: 0; font-size: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cuenta-cerrar { align-self: flex-start; border-radius: 50%; width: 38px; height: 38px; justify-content: center; padding: 0; }
+  .cuenta-bloque { padding: 18px 0; border-bottom: 1px solid var(--borde); display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .cuenta-bloque:last-child { border-bottom: 0; padding-bottom: 4px; }
+  .cuenta-bloque h3 { margin: 0; font-size: 16px; }
+  .cuenta-texto { margin: 0; color: var(--suave); font-size: 13.5px; line-height: 1.45; }
+  .cuenta-bloque label { width: 100%; display: flex; flex-direction: column; gap: 6px; color: var(--suave); font-size: 13.5px; }
+  .cuenta-bloque input { width: 100%; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--borde); background: var(--fondo); color: var(--texto); font: inherit; font-size: 15px; }
+  .cuenta-bloque input:focus { border-color: var(--acento); outline: none; box-shadow: 0 0 0 3px rgba(0,164,220,.25); }
+  .cuenta-bloque .boton:focus, .cuenta-cerrar:focus { outline: none; box-shadow: 0 0 0 3px var(--acento); }
+  .cuenta-botones { display: flex; flex-wrap: wrap; gap: 10px; }
+  .boton-acento { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 700; }
+  .boton-peligro { color: #ff6b6b; border-color: rgba(255,107,107,.5); background: transparent; }
+  .boton-peligro:hover, .boton-peligro:focus { background: #e5484d; border-color: #e5484d; color: #fff; }
+  .cuenta-bloque.peligro h3 { color: #ff6b6b; }
+  .cuenta-msg { margin: 0; min-height: 0; font-size: 13.5px; }
+  .cuenta-msg.bien { color: #3dd68c; }
+  .cuenta-msg.mal { color: #ff6b6b; }
+  .tele .cuenta-caja { max-width: 760px; font-size: 20px; }
+  .tele .cuenta-bloque input, .tele .cuenta-bloque .boton { font-size: 20px; }
+  .tele #mi-cuenta .inicial { width: 5.5vh; height: 5.5vh; font-size: 2.8vh; }
+  @media (max-width: 600px) {
+    #mi-cuenta { padding: 3px; }
+    #mi-cuenta .txt { display: none; }
+    #cuenta { padding: 0; }
+    .cuenta-caja { border-radius: 0; min-height: 100%; border: 0; }
+  }
   /* Mi lista */
   /* Pestañas «Seguir viendo» y «Favoritos» junto al logo */
   #pestanas { display: flex; gap: 6px; }

@@ -28,6 +28,8 @@ const consulta = (params = {}) => Object.keys(params).map((k) => `${encodeURICom
 async function api(ruta, params) {
   const r = await fetch(`${ruta}?${consulta(params)}`, { credentials: 'same-origin' });
   const d = await r.json();
+  // Sin sesión (caducó, o se cerró desde otro aparato): a la pantalla de entrar
+  if (r.status === 401) { location.replace('/entrar.html'); throw new Error(d.error); }
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
@@ -1164,7 +1166,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#pestanas button, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
@@ -1177,12 +1179,19 @@ const visible = (x) => {
 };
 
 function moverFoco(dir) {
-  const enVisor = actual >= 0;
-  const cands = [...document.querySelectorAll(enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
+  const enCuenta = document.documentElement.classList.contains('con-cuenta');
+  const enVisor = !enCuenta && actual >= 0;
+  const cands = [...document.querySelectorAll(enCuenta ? '#cuenta button, #cuenta input' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
-    const primero = enVisor ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
+    const primero = enVisor || enCuenta ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
     if (primero) { primero.focus(); primero.scrollIntoView({ block: 'nearest' }); }
+    return;
+  }
+  // En «Mi cuenta» todo va en una columna: ↑ ↓ siguen el orden (campo, su botón, el siguiente…)
+  if (enCuenta && (dir === 'arriba' || dir === 'abajo')) {
+    const otro = cands[cands.indexOf(a) + (dir === 'abajo' ? 1 : -1)];
+    if (otro) { otro.focus(); otro.scrollIntoView({ block: 'nearest' }); }
     return;
   }
   const r = a.getBoundingClientRect();
@@ -1224,6 +1233,7 @@ function enfocarVisor() {
 // si ya está en la portada (la app de Android usa eso para salir con el botón Atrás).
 function atras() {
   if (window.morvehSaltarIntro && window.morvehSaltarIntro()) return true;
+  if (document.documentElement.classList.contains('con-cuenta')) { cerrarCuenta(); return true; }
   if ($('#visor').classList.contains('cine')) { salirCine(); return true; }
   if (actual >= 0) { cerrar(); return true; }
   if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }
