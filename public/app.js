@@ -103,102 +103,6 @@ function visibles() {
   return { carpetas, archivos };
 }
 
-function tarjetaArchivo(f, i, archivos) {
-  const [, clase, icono] = tipo(f.key);
-  const t = tarjeta({ icono, titulo: nombre(f.key), miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i, archivos), nuevo: nuevas.has(f.key) });
-  t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
-  t.dataset.key = f.key;
-  t.dataset.tamano = f.tamano;
-  barraVisto(t);
-  if (clase.startsWith('video')) { conMeta(t, 'archivo', f.key); estrella(t, f.key, f); }
-  return t;
-}
-
-// ---------- Películas por plataforma ----------
-// En la carpeta de películas se reparten en secciones (Netflix, Prime Video, Disney+…) con
-// botones arriba para ver solo una. Manda la carpeta: lo que esté en «PELICULAS/PELICULAS
-// NETFLIX/» es de Netflix. Lo que está suelto va donde diga TMDB que se puede ver en España (si
-// está en varias, sale en cada una) y lo que no está en ninguna, al final.
-const POR_PLATAFORMA = ['pelicula', 'anime-pelicula'];
-const SIN_PLATAFORMA = 'En ninguna plataforma';
-let pintados = 0;
-let plataformaElegida = '';
-let plataformasConocidas = null;
-
-async function porPlataformas(pintado) {
-  const prefijo = estado.prefijo;
-  const items = $('#items');
-  if (!plataformasConocidas) plataformasConocidas = api('/api/plataformas').catch(() => { plataformasConocidas = null; return { plataformas: [], patrones: [] }; });
-  const [conocidas, todo] = await Promise.all([plataformasConocidas, api('/api/buscar', { prefijo, q: '' }).catch(() => null)]);
-  if (pintado !== pintados || !todo) return;
-  const patrones = conocidas.patrones.map(([src, flags, n]) => [new RegExp(src, flags), n]);
-  const deCarpeta = (n) => (patrones.find(([re]) => re.test(n)) || [])[1];
-  const logoDe = (n) => (conocidas.plataformas.find((p) => p.nombre === n) || {}).logo || null;
-  const carpetasPl = visibles().carpetas.filter((c) => deCarpeta(nombre(c)));
-  // Las películas sueltas y las de las carpetas de plataforma (no las de otras subcarpetas)
-  const lista = todo.archivos.filter((f) => {
-    const partes = f.key.slice(prefijo.length).split('/');
-    return tipo(f.key)[1].startsWith('video') && !partes.some((x) => x.startsWith('_'))
-      && (partes.length === 1 || (partes.length === 2 && deCarpeta(partes[0])));
-  }).sort((x, y) => nombre(x.key).localeCompare(nombre(y.key), 'es', { numeric: true }));
-  const metas = await Promise.all(lista.map((f) => pedirMeta('archivo', f.key)));
-  if (pintado !== pintados) return;
-
-  const grupos = new Map();
-  const grupo = (n, logo) => {
-    if (!grupos.has(n)) grupos.set(n, { nombre: n, logo, lista: [] });
-    return grupos.get(n);
-  };
-  carpetasPl.forEach((c) => grupo(deCarpeta(nombre(c)), logoDe(deCarpeta(nombre(c)))));
-  lista.forEach((f, n) => {
-    const partes = f.key.slice(prefijo.length).split('/');
-    const suya = partes.length === 2 && deCarpeta(partes[0]);
-    if (suya) return grupo(suya, logoDe(suya)).lista.push(n);
-    const pls = (metas[n] && metas[n].plataformas) || [];
-    if (!pls.length) grupo(SIN_PLATAFORMA, null).lista.push(n);
-    pls.forEach((p) => grupo(p.nombre, p.logo).lista.push(n));
-  });
-  // Solo si de verdad hay alguna plataforma: si no, se queda la lista normal
-  if (!grupos.size || (grupos.size === 1 && grupos.has(SIN_PLATAFORMA))) return;
-  const orden = [...grupos.values()].sort((a, b) => (a.nombre === SIN_PLATAFORMA) - (b.nombre === SIN_PLATAFORMA) || b.lista.length - a.lista.length);
-  if (!grupos.has(plataformaElegida)) plataformaElegida = '';
-
-  // Lo demás (otras subcarpetas, imágenes…) se queda al final, como estaba
-  const claves = new Set(lista.map((f) => f.key));
-  const resto = [...items.children].filter((t) => !(t.dataset.key && claves.has(t.dataset.key)) && !carpetasPl.includes(t.dataset.carpeta));
-  items.innerHTML = '';
-  const botones = el('div', 'plataformas');
-  const secciones = [];
-  const elegir = (n) => {
-    plataformaElegida = n;
-    botones.querySelectorAll('button').forEach((b) => b.classList.toggle('activa', b.dataset.pl === n));
-    secciones.forEach((nodos) => nodos.forEach((x) => { x.hidden = !!n && x.dataset.pl !== n; }));
-  };
-  const boton = (n, texto, logo, cuantas) => {
-    const b = el('button', 'plataforma');
-    b.dataset.pl = n;
-    if (logo) { const i = el('img'); i.src = logo; i.alt = ''; b.append(i); }
-    b.append(el('span', null, texto), el('small', null, String(cuantas)));
-    b.onclick = () => elegir(n);
-    botones.append(b);
-  };
-  boton('', 'Todas', null, lista.length);
-  orden.forEach((g) => boton(g.nombre, g.nombre, g.logo, g.lista.length));
-  items.append(botones);
-  for (const g of orden) {
-    const titulo = el('h2', 'seccion plataforma-titulo');
-    if (g.logo) { const i = el('img'); i.src = g.logo; i.alt = ''; titulo.append(i); }
-    titulo.append(`${g.nombre} · ${g.lista.length}`);
-    const nodos = [titulo];
-    if (!g.lista.length) nodos.push(el('div', 'vacio', `Aún no hay películas en la carpeta de ${g.nombre}.`));
-    for (const n of g.lista) nodos.push(tarjetaArchivo(lista[n], n, lista));
-    nodos.forEach((x) => { x.dataset.pl = g.nombre; items.append(x); });
-    secciones.push(nodos);
-  }
-  if (resto.length) items.append(el('h2', 'seccion', 'Otras carpetas y archivos'), ...resto);
-  elegir(plataformaElegida);
-}
-
 function pintar() {
   const { carpetas, archivos } = visibles();
   const items = $('#items');
@@ -213,16 +117,20 @@ function pintar() {
   }
   for (const c of otras) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
-    t.dataset.carpeta = c;
     items.append(t);
     if (estado.prefijo) { conMeta(t, 'carpeta', c); estrella(t, c); }
   }
-  archivos.forEach((f, i) => items.append(tarjetaArchivo(f, i, archivos)));
+  archivos.forEach((f, i) => {
+    const [, clase, icono] = tipo(f.key);
+    const t = tarjeta({ icono, titulo: nombre(f.key), miniatura: f.miniatura, meta: bytes(f.tamano), alPulsar: () => abrir(i, archivos), nuevo: nuevas.has(f.key) });
+    t.querySelector('.meta').append(el('span', 'fecha', ` · ${fecha(f.fecha)}`));
+    t.dataset.key = f.key;
+    t.dataset.tamano = f.tamano;
+    barraVisto(t);
+    items.append(t);
+    if (clase.startsWith('video')) { conMeta(t, 'archivo', f.key); estrella(t, f.key, f); }
+  });
   if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
-  const pintado = ++pintados;
-  if (POR_PLATAFORMA.includes(categoriaDe(estado.prefijo)?.id) && estado.prefijo.split('/').filter(Boolean).length === 1) {
-    porPlataformas(pintado);
-  }
   $('#mas').hidden = !estado.token;
   // En la tele siempre hay algo con foco para que el mando funcione desde el principio
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
@@ -1053,7 +961,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#pestanas button, .plataformas button, #perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#pestanas button, #perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 

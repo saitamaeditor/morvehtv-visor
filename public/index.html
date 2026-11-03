@@ -358,22 +358,6 @@
   #perfil-actual + #salir-app { margin-left: 0; }
   .mini-avatar { width: 30px; height: 30px; border-radius: 8px; font-size: 18px; border-width: 0; }
   /* Mi lista */
-  /* Películas por plataforma: botones para elegir una y título de cada sección */
-  .plataformas { grid-column: 1 / -1; display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; }
-  .plataformas::-webkit-scrollbar { display: none; }
-  .plataforma { flex: none; display: inline-flex; align-items: center; gap: 8px; background: var(--panel2); color: var(--texto); border: 1px solid var(--borde); border-radius: 999px; padding: 5px 14px 5px 6px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
-  .plataforma:first-child { padding-left: 14px; }
-  .plataforma img { width: 26px; height: 26px; border-radius: 6px; }
-  .plataforma small { color: var(--suave); font-weight: 400; }
-  .plataforma:hover, .plataforma:focus { border-color: var(--acento); outline: none; }
-  .plataforma.activa { background: var(--acento); border-color: var(--acento); color: #fff; }
-  .plataforma.activa small { color: #fff; }
-  .plataforma-titulo { display: flex; align-items: center; gap: 10px; }
-  #items [hidden] { display: none !important; }
-  #items .vacio[data-pl] { grid-column: 1 / -1; padding: 8px 2px 16px; text-align: left; }
-  .plataforma-titulo img { width: 30px; height: 30px; border-radius: 7px; }
-  .tele .plataforma { font-size: 2vh; padding: 0.8vh 1.4vw; }
-  .tele .plataforma img, .tele .plataforma-titulo img { width: 3.6vh; height: 3.6vh; }
   /* Pestañas «Seguir viendo» y «Favoritos» junto al logo */
   #pestanas { display: flex; gap: 6px; }
   #pestanas[hidden], #directo[hidden] { display: none; }

@@ -52,43 +52,6 @@ async function pedir(ruta, params = {}) {
   return r.json();
 }
 
-// ---------- Plataformas (dónde se puede ver con suscripción, en España) ----------
-const PAIS = process.env.TMDB_PAIS || 'ES';
-// TMDB separa las versiones con anuncios y los paquetes («Netflix basic with Ads», «Movistar
-// Plus+ Ficción Total»): se juntan bajo el nombre de la plataforma
-const NOMBRES = [
-  [/netflix/i, 'Netflix'], [/amazon|prime video/i, 'Prime Video'], [/disney/i, 'Disney+'],
-  [/hbo|^max$|\bmax\b(?! ?\d)/i, 'Max'], [/movistar/i, 'Movistar Plus+'], [/apple ?tv/i, 'Apple TV+'],
-  [/skyshowtime/i, 'SkyShowtime'], [/filmin/i, 'Filmin'], [/rakuten/i, 'Rakuten TV'],
-  [/atres ?player/i, 'Atresplayer'], [/mitele/i, 'Mitele'], [/rtve/i, 'RTVE Play'],
-];
-// Las mismas reglas para la web (carpetas con nombre de plataforma)
-export const patronesPlataforma = () => NOMBRES.map(([re, n]) => [re.source, re.flags, n]);
-const nombrePlataforma = (n) => NOMBRES.find(([re]) => re.test(n))?.[1] ?? null;
-
-// Carpeta con el nombre de una plataforma («PELICULAS NETFLIX», «Prime Video»): no es un título
-export const esCarpetaPlataforma = (n) => !!nombrePlataforma(n);
-
-function plataformas(pais) {
-  const vistas = new Map();
-  for (const p of [...(pais?.flatrate ?? []), ...(pais?.ads ?? []), ...(pais?.free ?? [])].sort((a, b) => a.display_priority - b.display_priority)) {
-    const nombre = nombrePlataforma(p.provider_name) ?? p.provider_name.replace(/\s+(standard|basic)?\s*with ads$/i, '').replace(/ amazon channel$/i, '');
-    if (!vistas.has(nombre)) vistas.set(nombre, { nombre, logo: img(p.logo_path, 'w92') });
-  }
-  return [...vistas.values()];
-}
-
-// Todas las plataformas del país con su logo (para las carpetas «PELICULAS NETFLIX»…)
-let todas = null;
-export function listaPlataformas() {
-  if (!todas) {
-    todas = pedir('/watch/providers/movie', { watch_region: PAIS })
-      .then((d) => plataformas({ flatrate: d.results ?? [] }).filter((p) => nombrePlataforma(p.nombre)));
-    todas.catch(() => { todas = null; });
-  }
-  return todas;
-}
-
 // Las fichas de TMDB se reutilizan entre todos los episodios de una serie
 const fichas = new Map();
 const temporadas = new Map();
@@ -96,7 +59,7 @@ const temporadas = new Map();
 function ficha(tmdbId, tipo) {
   const clave = `${tipo}:${tmdbId}`;
   if (!fichas.has(clave)) {
-    const p = pedir(`/${tipo === 'serie' ? 'tv' : 'movie'}/${tmdbId}`, { append_to_response: 'videos,credits,watch/providers' }).then((d) => {
+    const p = pedir(`/${tipo === 'serie' ? 'tv' : 'movie'}/${tmdbId}`, { append_to_response: 'videos,credits' }).then((d) => {
       const trailer = (d.videos?.results ?? []).find((v) => v.site === 'YouTube' && v.type === 'Trailer');
       return {
         tmdbId: d.id,
@@ -116,7 +79,6 @@ function ficha(tmdbId, tipo) {
         temporadas: d.number_of_seasons ?? null,
         trailer: trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null,
         tmdb: `https://www.themoviedb.org/${tipo === 'serie' ? 'tv' : 'movie'}/${d.id}`,
-        plataformas: plataformas(d['watch/providers']?.results?.[PAIS]),
       };
     });
     p.catch(() => fichas.delete(clave));
@@ -302,7 +264,7 @@ export async function deCarpeta(prefijo) {
   if (esDeporte(prefijo)) return prefijo.split('/').filter(Boolean).length < 2 ? null : deportes.ficha(prefijo, { carpeta: true });
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
-  if (partes.length < 2 || esCarpetaPlataforma(n)) return null;
+  if (partes.length < 2) return null;
   const numero = n.match(CARPETA_TEMPORADA)?.[1];
   if (numero) {
     if (partes.length < 3) return null;
