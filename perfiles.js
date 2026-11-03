@@ -1,25 +1,20 @@
-// Perfiles de la familia: «¿Quién está viendo?», cada uno con su PIN de 4 cifras, su lista de
-// favoritos y por dónde va en cada vídeo.
+// Favoritos y «Seguir viendo» (por dónde va cada vídeo): una sola lista para todos, sin perfiles
+// ni PIN.
 // Todo se guarda en un único archivo oculto del bucket (_morvehtv/usuarios.json): así lo
 // comparten el servidor de casa y el de Render y no se pierde cuando Render se reinicia. Es lo
 // único que MorvehTV escribe en e2; los vídeos nunca se tocan.
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const ARCHIVO = '_morvehtv/usuarios.json';
-const COOKIE = 'morvehtv_perfil';
-const MAX_PERFILES = 10;
-export const AVATARES = ['🦁', '🐼', '🦊', '🐸', '🐙', '🦄', '🐯', '🐵', '🐧', '🐶', '🐱', '🐻'];
-export const COLORES = ['#e5484d', '#4f8cff', '#30a46c', '#f76b15', '#8e4ec6', '#d6409f', '#12a594', '#ffb224'];
 
 let s3;
 let bucket;
 let NUBE = false;
-let doc = null; // { secreto, perfiles: [...] }
+let doc = null; // { secreto, comun, perfiles: [...] }
 let leidoEn = 0;
 let cola = Promise.resolve(); // las escrituras van de una en una
-const posPendientes = new Map(); // perfil → Map(key → posición): se guardan juntas cada 20 s
-const fallos = new Map(); // perfil → { n, hasta }
+const posPendientes = new Map(); // lista → Map(key → posición): se guardan juntas cada 20 s
 
 // ¿Se puede escribir el archivo de perfiles? (la clave de e2 tiene que permitirlo). Se comprueba
 // al arrancar reescribiendo el archivo tal cual y se ve en /api/salud
@@ -28,7 +23,8 @@ export let escritura = 'comprobando';
 export function iniciar(cliente, nombreBucket, nube) {
   s3 = cliente; bucket = nombreBucket; NUBE = nube;
   setInterval(() => volcarPosiciones().catch((e) => console.error(`No se pudo guardar el progreso: ${e.message}`)), 20000);
-  cambiar(() => {}).then(() => { escritura = 'ok'; }, (e) => {
+  // De paso se crea la lista común si aún no existe
+  cambiar(unir).then(() => { escritura = 'ok'; }, (e) => {
     escritura = `error: ${e.name || e.message}`;
     console.error(`No se puede escribir ${ARCHIVO} en e2: ${e.message}`);
   });
@@ -68,33 +64,32 @@ function cambiar(fn) {
   return tarea;
 }
 
-const hashPin = (pin, sal) => scryptSync(String(pin), sal, 32).toString('hex');
 const error = (status, message) => Object.assign(new Error(message), { status });
-const publico = (p) => ({ id: p.id, nombre: p.nombre, avatar: p.avatar, color: p.color });
 
-// ---------- Sesión del perfil (cookie firmada con un secreto que vive en el propio archivo) ----------
-function cookies(req) {
-  return Object.fromEntries((req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).filter((p) => p.length === 2));
+// ---------- Lista común ----------
+// Ya no hay perfiles que elegir: todos usan la misma lista. La primera vez se juntan en ella los
+// favoritos y el progreso de los perfiles que hubiera (que se quedan en el archivo, sin tocar)
+function unir(d) {
+  if (d.comun && d.perfiles.some((p) => p.id === d.comun)) return;
+  const comun = { id: randomBytes(8).toString('hex'), nombre: 'MorvehTV', creado: new Date().toISOString(), favoritos: [], posiciones: {} };
+  const favoritos = d.perfiles.flatMap((p) => p.favoritos || []).sort((a, b) => (b.cuando || 0) - (a.cuando || 0));
+  comun.favoritos = favoritos.filter((f, i) => favoritos.findIndex((x) => x.key === f.key) === i).slice(0, 500);
+  for (const p of d.perfiles) {
+    for (const [key, pos] of Object.entries(p.posiciones || {})) {
+      if (!comun.posiciones[key] || comun.posiciones[key].cuando < pos.cuando) comun.posiciones[key] = pos;
+    }
+  }
+  d.perfiles.push(comun);
+  d.comun = comun.id;
 }
-const firma = (secreto, id) => createHmac('sha256', secreto).update(`perfil:${id}`).digest('hex');
 
-async function perfilDe(req) {
-  const [id, f] = String(cookies(req)[COOKIE] ?? '').split('.');
-  if (!id || !f) return null;
-  const d = await leer();
-  const bien = firma(d.secreto, id);
-  if (f.length !== bien.length || !timingSafeEqual(Buffer.from(f), Buffer.from(bien))) return null;
-  return d.perfiles.find((p) => p.id === id) ?? null;
-}
-
-async function necesitaPerfil(req) {
-  const p = await perfilDe(req);
-  if (!p) throw error(401, 'Elige tu perfil');
+async function necesitaPerfil() {
+  let d = await leer();
+  if (!d.comun) d = await cambiar((x) => { unir(x); return x; });
+  const p = d.perfiles.find((x) => x.id === d.comun);
+  if (!p) throw error(503, 'La lista aún no está lista');
   return p;
 }
-
-const cookiePerfil = (valor, maxAge) =>
-  `${COOKIE}=${valor}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${NUBE ? '; Secure' : ''}`;
 
 async function cuerpo(req) {
   let t = '';
@@ -105,98 +100,17 @@ async function cuerpo(req) {
   return t ? JSON.parse(t) : {};
 }
 
-const pinValido = (pin) => /^\d{4}$/.test(String(pin ?? ''));
-
 // ---------- Rutas ----------
 export async function atender(ruta, req, res, json) {
-  // Lista para «¿Quién está viendo?»
-  if (ruta === '/api/perfiles') {
-    const d = await leer();
-    const yo = await perfilDe(req);
-    return json(res, 200, { perfiles: d.perfiles.map(publico), actual: yo ? yo.id : null, avatares: AVATARES, colores: COLORES });
-  }
-  if (req.method !== 'POST' && ruta !== '/api/yo') throw error(405, 'Método no permitido');
-
   if (ruta === '/api/yo') {
-    const p = await necesitaPerfil(req);
+    const p = await necesitaPerfil();
     const pendientes = posPendientes.get(p.id);
     const posiciones = { ...p.posiciones, ...(pendientes ? Object.fromEntries(pendientes) : {}) };
-    return json(res, 200, { ...publico(p), favoritos: p.favoritos, posiciones });
+    return json(res, 200, { id: p.id, nombre: p.nombre, favoritos: p.favoritos, posiciones });
   }
-
+  if (req.method !== 'POST') throw error(405, 'Método no permitido');
   const datos = await cuerpo(req);
-
-  if (ruta === '/api/perfil-crear') {
-    const nombre = String(datos.nombre ?? '').trim().slice(0, 20);
-    if (!nombre) throw error(400, 'Pon un nombre');
-    if (!pinValido(datos.pin)) throw error(400, 'El PIN tiene que ser de 4 números');
-    const avatar = AVATARES.includes(datos.avatar) ? datos.avatar : AVATARES[0];
-    const color = COLORES.includes(datos.color) ? datos.color : COLORES[0];
-    const nuevo = await cambiar((d) => {
-      if (d.perfiles.length >= MAX_PERFILES) throw error(400, `Como mucho ${MAX_PERFILES} perfiles`);
-      if (d.perfiles.some((p) => p.nombre.toLowerCase() === nombre.toLowerCase())) throw error(400, 'Ya hay un perfil con ese nombre');
-      const sal = randomBytes(16).toString('hex');
-      const p = { id: randomBytes(8).toString('hex'), nombre, avatar, color, sal, pin: hashPin(datos.pin, sal),
-        creado: new Date().toISOString(), favoritos: [], posiciones: {} };
-      d.perfiles.push(p);
-      return { p, secreto: d.secreto };
-    });
-    res.setHeader('set-cookie', cookiePerfil(`${nuevo.p.id}.${firma(nuevo.secreto, nuevo.p.id)}`, 31536000));
-    return json(res, 200, publico(nuevo.p));
-  }
-
-  if (ruta === '/api/perfil-entrar') {
-    const d = await leer();
-    const p = d.perfiles.find((x) => x.id === datos.id);
-    if (!p) throw error(404, 'Ese perfil ya no existe');
-    const f = fallos.get(p.id);
-    if (f && f.n >= 5 && f.hasta > Date.now()) throw error(429, 'Demasiados intentos. Espera 5 minutos.');
-    if (!pinValido(datos.pin) || hashPin(datos.pin, p.sal) !== p.pin) {
-      fallos.set(p.id, { n: (f && f.hasta > Date.now() ? f.n : 0) + 1, hasta: Date.now() + 5 * 60000 });
-      throw error(401, 'PIN incorrecto');
-    }
-    fallos.delete(p.id);
-    res.setHeader('set-cookie', cookiePerfil(`${p.id}.${firma(d.secreto, p.id)}`, 31536000));
-    return json(res, 200, publico(p));
-  }
-
-  if (ruta === '/api/perfil-salir') {
-    res.setHeader('set-cookie', cookiePerfil('', 0));
-    return json(res, 200, { ok: true });
-  }
-
-  const yo = await necesitaPerfil(req);
-
-  // Cambiar nombre, avatar, color o PIN del propio perfil (pide el PIN actual)
-  if (ruta === '/api/perfil-editar') {
-    if (hashPin(datos.pinActual ?? '', yo.sal) !== yo.pin) throw error(401, 'PIN actual incorrecto');
-    const r = await cambiar((d) => {
-      const p = d.perfiles.find((x) => x.id === yo.id);
-      if (!p) throw error(404, 'Ese perfil ya no existe');
-      const nombre = String(datos.nombre ?? '').trim().slice(0, 20);
-      if (nombre) {
-        if (d.perfiles.some((x) => x.id !== p.id && x.nombre.toLowerCase() === nombre.toLowerCase())) throw error(400, 'Ya hay un perfil con ese nombre');
-        p.nombre = nombre;
-      }
-      if (AVATARES.includes(datos.avatar)) p.avatar = datos.avatar;
-      if (COLORES.includes(datos.color)) p.color = datos.color;
-      if (datos.pin) {
-        if (!pinValido(datos.pin)) throw error(400, 'El PIN tiene que ser de 4 números');
-        p.sal = randomBytes(16).toString('hex');
-        p.pin = hashPin(datos.pin, p.sal);
-      }
-      return publico(p);
-    });
-    return json(res, 200, r);
-  }
-
-  if (ruta === '/api/perfil-borrar') {
-    if (hashPin(datos.pin ?? '', yo.sal) !== yo.pin) throw error(401, 'PIN incorrecto');
-    await cambiar((d) => { d.perfiles = d.perfiles.filter((x) => x.id !== yo.id); });
-    posPendientes.delete(yo.id);
-    res.setHeader('set-cookie', cookiePerfil('', 0));
-    return json(res, 200, { ok: true });
-  }
+  const yo = await necesitaPerfil();
 
   // Añadir o quitar de «Mi lista» (un vídeo o una serie entera)
   if (ruta === '/api/favorito') {
@@ -261,5 +175,4 @@ async function volcarPosiciones() {
 // Al apagar el servidor (Render lo hace a menudo) se intenta guardar lo pendiente
 export const guardarPendiente = () => volcarPosiciones().catch(() => {});
 
-export const RUTAS = ['/api/perfiles', '/api/yo', '/api/perfil-crear', '/api/perfil-entrar', '/api/perfil-salir',
-  '/api/perfil-editar', '/api/perfil-borrar', '/api/favorito', '/api/posicion'];
+export const RUTAS = ['/api/yo', '/api/favorito', '/api/posicion'];

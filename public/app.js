@@ -28,9 +28,6 @@ const consulta = (params = {}) => Object.keys(params).map((k) => `${encodeURICom
 async function api(ruta, params) {
   const r = await fetch(`${ruta}?${consulta(params)}`, { credentials: 'same-origin' });
   const d = await r.json();
-  // Sin el PIN de la app, a la pantalla de entrada; sin perfil, a «¿Quién está viendo?»
-  if (r.status === 401 && d.error === 'Falta el PIN') { location.href = '/entrar.html'; throw new Error('Falta el PIN'); }
-  if (r.status === 401 && ruta !== '/api/yo' && typeof elegirPerfil === 'function') elegirPerfil();
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
@@ -45,8 +42,8 @@ function irA(prefijo) {
   location.hash = encodeURIComponent(prefijo);
 }
 
-// Cada carga lleva un número: si mientras llega la respuesta ha empezado otra (elegir perfil y
-// cambiar de carpeta a la vez, doble pulsación en «Cargar más»…), la vieja se descarta. Antes
+// Cada carga lleva un número: si mientras llega la respuesta ha empezado otra (cambiar dos veces
+// de carpeta muy seguido, doble pulsación en «Cargar más»…), la vieja se descarta. Antes
 // las dos se sumaban a la lista y los archivos salían duplicados.
 let cargaActual = 0;
 
@@ -55,7 +52,7 @@ async function cargar(mas = false) {
   const n = ++cargaActual;
   const items = $('#items');
   pintarPestanas();
-  // «Seguir viendo» y «Favoritos» (pestañas de arriba): listas del perfil, no carpetas de e2
+  // «Seguir viendo» y «Favoritos» (pestañas de arriba): la lista común, no carpetas de e2
   if (estado.prefijo.startsWith(':')) {
     $('#cabecera').hidden = true; $('#mas').hidden = true;
     pintarMigas();
@@ -207,7 +204,7 @@ function pintarInicio(carpetas, archivos) {
   medios.c.append(...portada(carpetas).children);
   items.append(medios.s);
 
-  // Seguir viendo (imagen apaisada, con la barra de lo visto) y Favoritos, si hay perfil
+  // Seguir viendo (imagen apaisada, con la barra de lo visto) y Favoritos, si se pudo leer la lista
   if (typeof yo !== 'undefined' && yo) {
     const seguir = listaSeguir();
     if (seguir.length) {
@@ -773,7 +770,7 @@ function boton(clase, html, titulo) {
 // Un solo reproductor para todo el contenido. Con «urlDirecto» lee el archivo tal cual de e2
 // (MP4 que cualquier aparato abre: saltos instantáneos); sin él, el servidor lo prepara en HLS.
 // ---------- Seguir viendo ----------
-// Cada perfil recuerda por dónde iba en cada vídeo (se guarda en el servidor, así sigue igual en
+// La lista común recuerda por dónde iba en cada vídeo (se guarda en el servidor, así sigue igual en
 // la tele, el móvil o el ordenador). Al terminarlo (últimos 2 min o el 95 %) se olvida.
 function posicionDe(key) {
   const p = yo && yo.posiciones[key];
@@ -1167,7 +1164,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#pestanas button, #perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#pestanas button, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
@@ -1180,12 +1177,11 @@ const visible = (x) => {
 };
 
 function moverFoco(dir) {
-  const enPerfiles = document.documentElement.classList.contains('con-perfiles');
-  const enVisor = !enPerfiles && actual >= 0;
-  const cands = [...document.querySelectorAll(enPerfiles ? '#perfiles button, #perfiles input' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
+  const enVisor = actual >= 0;
+  const cands = [...document.querySelectorAll(enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
-    const primero = enVisor || enPerfiles ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
+    const primero = enVisor ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
     if (primero) { primero.focus(); primero.scrollIntoView({ block: 'nearest' }); }
     return;
   }
@@ -1250,7 +1246,6 @@ document.addEventListener('keydown', (e) => {
 
   if (k === 'atras') {
     if (escribiendo && e.key === 'Backspace') return;
-    if (document.documentElement.classList.contains('con-perfiles')) return; // ahí «Atrás» no navega
     // Esc ya lo gestiona el navegador para salir de la pantalla completa
     if (enPantallaCompleta() && (e.key === 'Escape' || e.key === 'Esc')) return;
     e.preventDefault();
@@ -1390,7 +1385,7 @@ let eventos = null;
 function conectar() {
   if (eventos) eventos.close();
   eventos = new EventSource('/api/eventos');
-  // El aviso de conexión solo aparece si se corta (su sitio lo ocupan las pestañas del perfil)
+  // El aviso de conexión solo aparece si se corta (su sitio lo ocupan las pestañas)
   eventos.onopen = () => { $('#directo').hidden = true; };
   eventos.onerror = () => {
     $('#directo').hidden = false;
@@ -1430,6 +1425,6 @@ window.addEventListener('hashchange', () => {
 // El nombre del bucket solo se muestra si no es el mismo que el de la app
 api('/api/info').then((d) => { if (d.bucket.toLowerCase() !== 'morvehtv') $('#bucket').textContent = d.bucket; }).catch(() => {});
 estado.prefijo = decodeURIComponent(location.hash.slice(1));
-// Antes de nada, «¿Quién está viendo?» (perfiles.js, que se carga detrás de este archivo)
+// Lee la lista de favoritos y «Seguir viendo» y pinta el inicio (perfiles.js, que se carga detrás)
 document.addEventListener('DOMContentLoaded', () => empezar());
 

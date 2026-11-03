@@ -36,7 +36,6 @@ if (!(E2_ENDPOINT && E2_BUCKET && E2_ACCESS_KEY_ID && E2_SECRET_ACCESS_KEY)) {
 }
 
 await meta.iniciar(dir);
-await acceso.iniciar(dir);
 
 const s3 = new S3Client({
   endpoint: /^https?:\/\//.test(E2_ENDPOINT) ? E2_ENDPOINT : `https://${E2_ENDPOINT}`,
@@ -488,24 +487,14 @@ const json = (res, status, datos) => {
   res.end(JSON.stringify(datos));
 };
 
-// Lo que se puede abrir sin haber puesto el PIN: la pantalla para ponerlo y los iconos
-const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg', '/api/modo', '/api/salud'];
-
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
       const permiso = acceso.permiso(req);
       if (permiso === 'fuera') return json(res, 403, { error: 'Solo se puede entrar desde la red de casa' });
-      if (url.pathname === '/api/entrar' && req.method === 'POST') return await acceso.entrar(req, res);
-      // Para la pantalla de entrada (¿PIN o contraseña?) y para que Render sepa que está viva
-      if (url.pathname === '/api/modo') return json(res, 200, { nube: acceso.NUBE });
+      // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, tmdb: await meta.saludTmdb() });
-      if (permiso === 'pin' && !PUBLICO.includes(url.pathname)) {
-        if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Falta el PIN' });
-        res.writeHead(302, { location: '/entrar.html' });
-        return res.end();
-      }
 
       if (url.pathname === '/api/eventos') return eventos(req, res);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json);
@@ -537,13 +526,12 @@ http
       json(res, err.status ?? (err.code === 'ENOENT' ? 404 : err.$metadata?.httpStatusCode ?? 500), { error: err.message });
     }
   })
-  // Escucha en la red de casa para que entren el móvil y la tele (con PIN); con
+  // Escucha en la red de casa para que entren el móvil y la tele (sin PIN); con
   // VISOR_SOLO_LOCAL=1 solo se puede usar desde este ordenador
   .listen(PUERTO, process.env.VISOR_SOLO_LOCAL === '1' && !acceso.NUBE ? '127.0.0.1' : '0.0.0.0', () => {
-    console.log(`MorvehTV (bucket "${E2_BUCKET}") en http://localhost:${PUERTO}${acceso.NUBE ? ' (modo nube: entra con VISOR_CLAVE)' : ''}`);
+    console.log(`MorvehTV (bucket "${E2_BUCKET}") en http://localhost:${PUERTO}${acceso.NUBE ? ' (modo nube)' : ''}`);
     if (process.env.VISOR_SOLO_LOCAL !== '1' && !acceso.NUBE) {
       for (const u of acceso.direcciones(PUERTO)) console.log(`  En el móvil o la tele (misma wifi): ${u}`);
-      console.log(`  PIN para otros dispositivos: ${acceso.elPin()}`);
     }
     vigilar();
   });
