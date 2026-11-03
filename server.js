@@ -123,6 +123,57 @@ async function texto(key) {
   return { texto: await r.Body.transformToString('utf-8'), recortado: (r.ContentRange ?? '').split('/')[1] > 2097152 };
 }
 
+// ---------- Enlaces (.url / .strm) ----------
+// Un archivo pequeño del bucket con la dirección de un vídeo que está en otro sitio: un stream
+// (.m3u8, .mp4…) que abre el reproductor de siempre, o una página con su propio reproductor
+// que se abre en un iframe aislado. Vale el formato de acceso directo de Windows («URL=…»)
+// y el de Kodi/Jellyfin (.strm, la dirección en la primera línea).
+const esEnlace = (key) => /\.(url|strm)$/i.test(key);
+const STREAM = /\.(m3u8|mp4|m4v|webm|mov|mp3|m4a|aac)(\?|#|$)/i;
+
+// YouTube y Vimeo no dejan meter su página normal en un iframe: se pasa a su versión «embed»
+function aEmbed(u) {
+  const yt = u.hostname.replace(/^(www|m)\./, '');
+  const id = yt === 'youtu.be' ? u.pathname.slice(1)
+    : yt === 'youtube.com' && u.pathname === '/watch' ? u.searchParams.get('v') : null;
+  if (id) return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
+  const vimeo = yt === 'vimeo.com' && u.pathname.match(/^\/(\d+)/);
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
+  return u.href;
+}
+
+// Direcciones de la propia máquina o de la red de casa: el servidor no las comprueba
+const privada = (host) => /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?$|\[?f[cd])/i.test(host);
+
+// Comprueba que la dirección responde (sin descargar el vídeo): estado HTTP o el fallo de red
+async function comprobar(url) {
+  if (privada(new URL(url).hostname)) return { estado: null };
+  const corte = new AbortController();
+  const reloj = setTimeout(() => corte.abort(), 8000);
+  try {
+    const r = await fetch(url, { method: 'GET', redirect: 'follow', signal: corte.signal, headers: { range: 'bytes=0-0' } });
+    r.body?.cancel().catch(() => {});
+    return { estado: r.status };
+  } catch (e) {
+    return { estado: 0, fallo: corte.signal.aborted ? 'No responde (tiempo agotado)' : 'No se pudo conectar' };
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+async function enlace(key) {
+  if (!esEnlace(key)) throw Object.assign(new Error('No es un enlace'), { status: 400 });
+  const r = await s3.send(new GetObjectCommand({ Bucket: E2_BUCKET, Key: key, Range: 'bytes=0-65535' }));
+  const lineas = (await r.Body.transformToString('utf-8')).split(/\r?\n/).map((l) => l.trim());
+  const bruto = (lineas.find((l) => /^URL=/i.test(l)) ?? '').slice(4) || lineas.find((l) => /^https?:\/\//i.test(l));
+  let u;
+  try { u = new URL(bruto); } catch (e) { u = null; }
+  if (!u || !/^https?:$/.test(u.protocol)) throw Object.assign(new Error('El archivo no tiene una dirección http(s) válida'), { status: 422 });
+  const tipo = STREAM.test(u.pathname) ? 'stream' : 'embed';
+  const url = tipo === 'embed' ? aEmbed(u) : u.href;
+  return { tipo, url, ...(await comprobar(url)) };
+}
+
 // ---------- Reproducción convertida con ffmpeg ----------
 // Los .ts no tienen índice (no se puede saltar), muchos .mkv llevan audio AC3/DTS y el
 // iPhone y las smart TV no abren .mkv. ffmpeg lee el archivo de e2 desde el segundo pedido y
@@ -359,6 +410,7 @@ const rutas = {
   '/api/tamano': (p) => tamano(p.get('prefijo') ?? ''),
   '/api/url': async (p) => ({ url: await firmar(p.get('key')) }),
   '/api/texto': (p) => texto(p.get('key')),
+  '/api/enlace': (p) => enlace(p.get('key')),
 };
 
 const tipos = {

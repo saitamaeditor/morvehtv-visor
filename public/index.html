@@ -77,6 +77,12 @@
   #visor .contenido > video, #visor .contenido > img { max-width: 100%; max-height: calc(100vh - 110px); }
   #visor .contenido > video { max-height: 68vh; }
   #visor iframe { width: 100%; height: calc(100vh - 110px); border: 0; background: #fff; }
+  /* Reproductor de otro sitio (enlace .url / .strm) y su aviso de fallo */
+  #visor iframe.incrustado { background: #000; flex: 1; min-height: 0; }
+  .fallo-enlace { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .fallo-enlace p { margin: 0 0 4px; font-size: 1.1em; }
+  .fallo-enlace .boton { padding: 10px 22px; border-radius: 8px; background: var(--panel); color: #fff; border: 1px solid #fff3; cursor: pointer; font: inherit; }
+  .fallo-enlace .boton:focus, .fallo-enlace .boton:hover { background: #fff; color: #000; }
   #visor pre { white-space: pre-wrap; word-break: break-word; background: var(--panel); padding: 16px; border-radius: 8px; max-width: 1000px; width: 100%; margin: 0; align-self: start; }
   #visor audio { width: min(600px, 100%); }
   .flecha { position: absolute; top: 50%; transform: translateY(-50%); font-size: 28px; background: rgba(0,0,0,.5); border: 0; color: #fff; width: 44px; height: 64px; cursor: pointer; border-radius: 8px; }

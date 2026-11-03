@@ -2,6 +2,7 @@ const $ = (s) => document.querySelector(s);
 const estado = { prefijo: '', carpetas: [], archivos: [], token: null };
 
 const TIPOS = [
+  [/\.(url|strm)$/i, 'enlace', '🔗'],
   [/\.(mp4|m4v|webm|mov|mkv|ogv)$/i, 'video', '🎬'],
   [/\.(avi|ts|wmv|flv)$/i, 'video-raro', '🎞️'],
   [/\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i, 'imagen', '🖼️'],
@@ -585,7 +586,8 @@ function barraVisto(t) {
   mini.append(barra);
 }
 
-function reproductor(key, m, urlDirecto = null) {
+// «renovar»: cómo conseguir otra vez la dirección si se corta (un enlace de e2 nuevo, por si caducó)
+function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', { key }).then((r) => r.url)) {
   const directo = !!urlDirecto;
   const caja = el('div', 'repro');
   // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
@@ -714,9 +716,10 @@ function reproductor(key, m, urlDirecto = null) {
     if (directo) {
       // Enlace nuevo de e2 (el anterior pudo caducar) y se sigue desde el mismo segundo
       if (intentos++ > 5) return;
-      const r = await api('/api/url', { key }).catch(() => null);
-      if (!r || !caja.isConnected) return;
-      v.src = r.url;
+      const url = await renovar().catch(() => null);
+      if (!url || !caja.isConnected) return;
+      if (hls) return fuente(url, t, seguir);
+      v.src = url;
       v.addEventListener('loadedmetadata', () => { v.currentTime = t; if (seguir) v.play().catch(() => {}); }, { once: true });
       return;
     }
@@ -763,7 +766,9 @@ function reproductor(key, m, urlDirecto = null) {
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
   caja.parar = () => { if (v.currentTime > 0) guardar(); turno++; clearTimeout(vigia); mantenerPantalla(false); if (hls) hls.destroy(); hls = null; parar(sesion); sesion = null; };
-  if (directo) {
+  // Un stream HLS de otro sitio (.m3u8) va por hls.js; el resto, directo al <video>
+  if (directo && /\.m3u8(\?|#|$)/i.test(urlDirecto)) cargarHls().then(() => caja.isConnected && fuente(urlDirecto, inicio, false));
+  else if (directo) {
     v.preload = 'auto'; v.src = urlDirecto;
     if (inicio) v.addEventListener('loadedmetadata', () => { v.currentTime = inicio; }, { once: true });
   } else ir(inicio, false);
@@ -813,6 +818,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   $('#vmeta').textContent = `${bytes(f.tamano)} · ${fecha(f.fecha)}`;
   $('#ant').hidden = i === 0; $('#sig').hidden = i === lista.length - 1;
   const c = $('#vcontenido'); c.innerHTML = '';
+  if (clase === 'enlace') return abrirEnlace(f, i, c);
 
   try {
     const { url } = await api('/api/url', { key: f.key });
@@ -853,6 +859,62 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   }
 }
 
+// ---------- Enlaces a vídeos de otros sitios (.url / .strm) ----------
+// Aviso de fallo con «Reintentar» (y, para una página que el servidor no pudo comprobar,
+// «Abrir igualmente»: algunas webs solo responden a navegadores)
+function falloEnlace(c, texto, reintentar, igualmente) {
+  c.innerHTML = '';
+  const caja = el('div', 'vacio error fallo-enlace');
+  caja.append(el('p', '', texto));
+  const b = el('button', 'boton', '↻ Reintentar'); b.onclick = reintentar; caja.append(b);
+  if (igualmente) { const o = el('button', 'boton', 'Abrir igualmente'); o.onclick = igualmente; caja.append(o); }
+  c.append(caja);
+  enfocarVisor();
+}
+
+const motivo = (d) => d.fallo || (d.estado ? `El sitio respondió con un error (HTTP ${d.estado})` : 'No se pudo conectar');
+
+async function abrirEnlace(f, i, c) {
+  const otraVez = () => { if (actual === i) abrirEnlace(f, i, c); };
+  c.innerHTML = '<div class="vacio">Conectando…</div>';
+  let d;
+  try {
+    d = await api('/api/enlace', { key: f.key });
+  } catch (e) {
+    if (actual === i) falloEnlace(c, e.message, otraVez);
+    return;
+  }
+  if (actual !== i) return;
+  // estado null: dirección de la red de casa, que el servidor no comprueba
+  const bien = d.estado === null || (d.estado >= 200 && d.estado < 400);
+  if (d.tipo === 'stream') {
+    if (!bien) return falloEnlace(c, motivo(d), otraVez);
+    c.innerHTML = '';
+    entrarCine();
+    c.append(reproductor(f.key, { duracion: 0, audios: [] }, d.url, () => Promise.resolve(d.url)));
+    return enfocarVisor();
+  }
+  if (!bien) return falloEnlace(c, motivo(d), otraVez, () => incrustar(c, d.url, otraVez));
+  incrustar(c, d.url, otraVez);
+}
+
+// Página con su propio reproductor, aislada: puede ejecutar su JavaScript y ponerse a pantalla
+// completa, pero no abrir ventanas ni pestañas nuevas ni cambiar la página de MorvehTV
+function incrustar(c, url, otraVez) {
+  c.innerHTML = '';
+  const fr = el('iframe', 'incrustado');
+  fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms');
+  fr.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+  fr.setAttribute('allowfullscreen', '');
+  fr.referrerPolicy = 'strict-origin-when-cross-origin';
+  // Un iframe no avisa si falla: si en 20 s no ha cargado, se ofrece reintentar
+  const espera = setTimeout(() => { if (fr.isConnected) falloEnlace(c, 'El reproductor no termina de cargar.', otraVez); }, 20000);
+  fr.onload = () => clearTimeout(espera);
+  fr.src = url;
+  c.append(fr);
+  enfocarVisor();
+}
+
 function cerrar() {
   salirCine();
   pararMedios();
@@ -889,7 +951,7 @@ const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
 const ENFOCABLES_APP = '#perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button';
+const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
@@ -937,7 +999,7 @@ function moverFoco(dir) {
 // Al abrir un vídeo con el mando, el foco va al propio vídeo: OK lo reproduce y ← → lo mueven
 function enfocarVisor() {
   if (!esTele && !document.documentElement.classList.contains('usa-mando')) return;
-  const b = document.querySelector('#vcontenido video') || document.querySelector('.controles .boton') || $('#vcerrar');
+  const b = document.querySelector('#vcontenido video') || document.querySelector('.fallo-enlace button') || document.querySelector('#vcontenido > iframe') || document.querySelector('.controles .boton') || $('#vcerrar');
   if (b) b.focus();
 }
 

@@ -11,6 +11,8 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
+import android.net.Uri;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -21,6 +23,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -48,6 +51,9 @@ public class MainActivity extends Activity {
     private Actualizador actualizador;
     private boolean actualizacionMirada = false;
     private final Handler hilo = new Handler(Looper.getMainLooper());
+    // Render dormido tarda hasta un minuto en despertar: pasado esto se da la carga por fallida
+    private static final long TIEMPO_MAXIMO = 90_000;
+    private final Runnable agotado = () -> { if (!cargada) error("MorvehTV no responde (tiempo agotado)."); };
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -66,6 +72,10 @@ public class MainActivity extends Activity {
         ajustes.setJavaScriptEnabled(true);
         ajustes.setDomStorageEnabled(true);
         ajustes.setMediaPlaybackRequiresUserGesture(false);
+        // Ninguna página (ni los reproductores de otros sitios metidos en la app) abre ventanas
+        // por su cuenta: window.open y target="_blank" pasan por onCreateWindow, que las rechaza
+        ajustes.setJavaScriptCanOpenWindowsAutomatically(false);
+        ajustes.setSupportMultipleWindows(true);
         ajustes.setLoadWithOverviewMode(true);
         ajustes.setUseWideViewPort(true);
         // Respeta la letra grande del sistema, pero sin pasar de +15 %: más allá los textos de la
@@ -76,7 +86,8 @@ public class MainActivity extends Activity {
         ajustes.setUserAgentString(ajustes.getUserAgentString() + (esTele() ? " Android TV" : "") + " MorvehTVApp");
 
         CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
+        // Los reproductores de otros sitios suelen necesitar sus propias cookies dentro del iframe
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
 
         web.setBackgroundColor(Color.BLACK);
         web.addJavascriptInterface(new Puente(), "MorvehApp");
@@ -87,7 +98,12 @@ public class MainActivity extends Activity {
         // Sin el resaltado que Android 8+ pinta sobre toda la vista web al enfocarla con el mando
         if (android.os.Build.VERSION.SDK_INT >= 26) web.setDefaultFocusHighlightEnabled(false);
 
-        reintentar.setOnClickListener(v -> abrir());
+        reintentar.setOnClickListener(v -> {
+            // Si ya se estaba dentro de MorvehTV se recarga esa misma página; si no, la portada
+            String url = web.getUrl();
+            if (url != null && esNuestra(Uri.parse(url))) { prepararCarga(); web.reload(); }
+            else abrir();
+        });
 
         // Android 15 dibuja la app por debajo de la barra de estado y de la de navegación: se deja
         // ese hueco para que no tapen la cabecera ni los controles (en pantalla completa, nada)
@@ -116,7 +132,13 @@ public class MainActivity extends Activity {
     }
 
     private void abrir() {
+        prepararCarga();
+        web.loadUrl(BuildConfig.SERVIDOR);
+    }
+
+    private void prepararCarga() {
         cargada = false;
+        hilo.removeCallbacksAndMessages(null);
         carga.setVisibility(View.VISIBLE);
         reintentar.setVisibility(View.GONE);
         mensaje.setText("Conectando…");
@@ -124,15 +146,23 @@ public class MainActivity extends Activity {
         hilo.postDelayed(() -> {
             if (!cargada) mensaje.setText("Despertando el servidor…\nla primera vez puede tardar un minuto");
         }, 6000);
-        web.loadUrl(BuildConfig.SERVIDOR);
+        hilo.postDelayed(agotado, TIEMPO_MAXIMO);
     }
 
-    private void error() {
+    private void error(String motivo) {
         cargada = false;
+        hilo.removeCallbacks(agotado);
+        web.stopLoading();
         carga.setVisibility(View.VISIBLE);
-        mensaje.setText("No se pudo conectar con MorvehTV.\nComprueba la conexión a internet.");
+        mensaje.setText(motivo + "\nComprueba la conexión a internet y vuelve a intentarlo.");
         reintentar.setVisibility(View.VISIBLE);
         reintentar.requestFocus();
+    }
+
+    // La web de MorvehTV (la dirección compilada en BuildConfig.SERVIDOR)
+    private static boolean esNuestra(Uri u) {
+        Uri casa = Uri.parse(BuildConfig.SERVIDOR);
+        return u.getHost() != null && u.getHost().equalsIgnoreCase(casa.getHost());
     }
 
     // Quita la pantalla de «Conectando…». Se hace en cuanto la página empieza a verse (o la
@@ -153,6 +183,7 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView vista, String url) {
             if (reintentar.getVisibility() == View.VISIBLE) return;
             cargada = true;
+            hilo.removeCallbacks(agotado);
             mostrarWeb();
             web.requestFocus();
             CookieManager.getInstance().flush();
@@ -165,18 +196,52 @@ public class MainActivity extends Activity {
 
         @Override
         public void onReceivedError(WebView vista, WebResourceRequest pedido, WebResourceError fallo) {
-            if (pedido.isForMainFrame()) error();
+            if (pedido.isForMainFrame()) error("No se pudo conectar con MorvehTV.");
+        }
+
+        // La página principal respondió, pero con un error (Render caído, 502 al desplegar…)
+        @Override
+        public void onReceivedHttpError(WebView vista, WebResourceRequest pedido, WebResourceResponse respuesta) {
+            if (pedido.isForMainFrame()) error("MorvehTV respondió con un error (HTTP " + respuesta.getStatusCode() + ").");
         }
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView vista, WebResourceRequest pedido) {
-            // Todo se queda dentro de la app (tráiler y TMDB incluidos)
-            return false;
+            // Solo la página principal: lo que pasa dentro de un iframe lo controla su sandbox
+            if (!pedido.isForMainFrame()) return false;
+            Uri u = pedido.getUrl();
+            String esquema = u.getScheme();
+            if (!"http".equals(esquema) && !"https".equals(esquema)) return true; // intent:, market:…
+            // MorvehTV y lo que abras tú con un toque (tráiler, TMDB) se quedan dentro de la app;
+            // una redirección automática a otro sitio, no
+            return !(esNuestra(u) || pedido.hasGesture());
         }
     }
 
     // Vídeo a pantalla completa (botón ⛶ del reproductor)
     private class Cromo extends WebChromeClient {
+        // Ventanas nuevas (window.open, target="_blank"): las que salen solas se cancelan; las de un
+        // toque tuyo (Tráiler, TMDB ↗) se abren en la misma vista, como antes. Los reproductores
+        // de otros sitios van en un iframe sin permiso de ventanas, así que nunca llegan aquí.
+        @Override
+        public boolean onCreateWindow(WebView vista, boolean dialogo, boolean gesto, Message resultado) {
+            if (!gesto || dialogo) return false;
+            // Una vista provisional solo para saber qué dirección quería abrir
+            WebView provisional = new WebView(MainActivity.this);
+            provisional.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest pedido) {
+                    String esquema = pedido.getUrl().getScheme();
+                    if ("http".equals(esquema) || "https".equals(esquema)) web.loadUrl(pedido.getUrl().toString());
+                    hilo.post(v::destroy); // no se destruye dentro de su propio aviso
+                    return true;
+                }
+            });
+            ((WebView.WebViewTransport) resultado.obj).setWebView(provisional);
+            resultado.sendToTarget();
+            return true;
+        }
+
         @Override
         public void onShowCustomView(View vista, CustomViewCallback alSalir) {
             if (vistaCompleta != null) { alSalir.onCustomViewHidden(); return; }
