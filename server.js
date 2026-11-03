@@ -389,8 +389,12 @@ async function catalogo() {
     // También las carpetas aún vacías (o sin vídeos): la portada las enseña como «Próximamente»
     if (!carpetas.has(raiz)) carpetas.set(raiz, new Map());
     if (!esVideo(o.key)) continue;
-    const esSerie = partes.length >= 3;
-    const clave = esSerie ? `${partes[0]}/${partes[1]}/` : o.key;
+    // Las carpetas que solo agrupan («PELICULAS NETFLIX», «NETFLIX»…) se saltan: la serie es la
+    // primera carpeta de debajo que no lo sea; si no hay ninguna, el vídeo es una película
+    let i = 1;
+    while (i < partes.length - 1 && meta.esAgrupadora(partes[i])) i++;
+    const esSerie = i < partes.length - 1;
+    const clave = esSerie ? `${partes.slice(0, i + 1).join('/')}/` : o.key;
     if (!carpetas.has(raiz)) carpetas.set(raiz, new Map());
     const titulos = carpetas.get(raiz);
     const previo = titulos.get(clave);

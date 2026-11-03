@@ -86,7 +86,7 @@
   #visor pre { white-space: pre-wrap; word-break: break-word; background: var(--panel); padding: 16px; border-radius: 8px; max-width: 1000px; width: 100%; margin: 0; align-self: start; }
   #visor audio { width: min(600px, 100%); }
   .flecha { position: absolute; top: 50%; transform: translateY(-50%); font-size: 28px; background: rgba(0,0,0,.5); border: 0; color: #fff; width: 44px; height: 64px; cursor: pointer; border-radius: 8px; }
-  .flecha:hover { background: rgba(79,140,255,.6); }
+  .flecha:hover { background: rgba(0,164,220,.6); }
   #ant { left: 8px; } #sig { right: 8px; }
   .categorias { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
   .lista .categorias { margin-bottom: 8px; }
@@ -160,7 +160,7 @@
     background: rgba(10,12,16,.55); color: #fff; font-size: 34px; line-height: 1; padding-left: 6px;
     box-shadow: 0 6px 30px rgba(0,0,0,.6); transition: transform .15s, background .15s;
   }
-  .gran-play:hover, .gran-play:focus { background: rgba(79,140,255,.75); transform: translate(-50%, -50%) scale(1.06); outline: none; }
+  .gran-play:hover, .gran-play:focus { background: rgba(0,164,220,.75); transform: translate(-50%, -50%) scale(1.06); outline: none; }
   #visor.cine .gran-play { position: fixed; top: 50%; }
   .tele .gran-play { width: 110px; height: 110px; font-size: 44px; }
   .cargando { position: absolute; top: 12px; left: 12px; background: rgba(0,0,0,.7); padding: 6px 10px; border-radius: 6px; pointer-events: none; }
@@ -195,7 +195,7 @@
   html:not(.usa-mando):not(.tele) .item:focus:not(:focus-visible), html:not(.usa-mando):not(.tele) .cat:focus:not(:focus-visible),
   html:not(.usa-mando):not(.tele) .boton:focus:not(:focus-visible) { outline: none; }
   .tele body, .usa-mando body { scroll-behavior: smooth; }
-  .tele .item:focus, .tele .cat:focus { transform: scale(1.06); box-shadow: 0 10px 30px rgba(79,140,255,.45); z-index: 2; }
+  .tele .item:focus, .tele .cat:focus { transform: scale(1.06); box-shadow: 0 10px 30px rgba(0,164,220,.45); z-index: 2; }
   .item, .cat { transition: transform .12s, box-shadow .12s, border-color .12s; }
   /* En la tele todo más grande: se ve desde el sofá */
   .tele body { font-size: 20px; }
@@ -480,11 +480,11 @@
     .rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     /* Episodios: uno por fila, la imagen a la izquierda y el texto a la derecha */
     .rejilla.con-episodios { grid-template-columns: minmax(0, 1fr); }
-    .item.episodio { display: grid; grid-template-columns: 44% minmax(0, 1fr); grid-auto-rows: min-content; align-content: start; }
-    .item.episodio .mini { grid-row: 1 / span 3; grid-column: 1; align-self: stretch; aspect-ratio: auto; min-height: 96px; }
-    .item.episodio .nombre, .item.episodio .meta, .item.episodio .resumen { grid-column: 2; }
-    .item.episodio .resumen { margin: 0 8px 8px; -webkit-line-clamp: 3; }
-    .item.episodio .estrella { right: auto; left: 6px; }
+    .rejilla .item.episodio { display: grid; grid-template-columns: 44% minmax(0, 1fr); grid-auto-rows: min-content; align-content: start; }
+    .rejilla .item.episodio .mini { grid-row: 1 / span 3; grid-column: 1; align-self: stretch; aspect-ratio: auto; min-height: 96px; }
+    .rejilla .item.episodio .nombre, .rejilla .item.episodio .meta, .rejilla .item.episodio .resumen { grid-column: 2; }
+    .rejilla .item.episodio .resumen { margin: 0 8px 8px; -webkit-line-clamp: 3; }
+    .rejilla .item.episodio .estrella { right: auto; left: 6px; }
     .item .nombre { font-size: 14px; }
     .item .meta { font-size: 12px; }
     .item .resumen { font-size: 12.5px; }
@@ -515,6 +515,104 @@
   .tele .item .meta { font-size: 2.3vh; }
   .tele .item .resumen { font-size: 2.3vh; }
   .tele #perfil-actual .avatar { width: 5.5vh; height: 5.5vh; font-size: 3.4vh; border-radius: 1.2vh; }
+
+  /* ================= Aspecto de servidor multimedia =================
+     Fondo casi negro, un solo color de acento, carteles sin marco con el título debajo, inicio
+     en filas que se deslizan y ficha con el fondo del título a lo grande */
+  :root { --fondo: #101114; --panel: #1a1c21; --panel2: #24272e; --borde: #2e323a; --texto: #f1f2f4; --suave: #a3a9b4; --acento: #00a4dc; }
+  body { background: var(--fondo); }
+  header { background: rgba(16,17,20,.9); border-bottom: 0; box-shadow: 0 1px 0 rgba(255,255,255,.06); }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    header { background: rgba(16,17,20,.72); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  }
+  .logo .tv { background: none; color: var(--acento); }
+  /* Pestañas: texto con una raya debajo en la activa */
+  .pestana { background: none; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 7px 4px; margin: 0 6px; color: var(--suave); font-size: 14px; }
+  .pestana:hover, .pestana:focus { color: #fff; border-color: transparent; border-bottom-color: rgba(255,255,255,.35); }
+  .pestana.activa { background: none; color: #fff; border-bottom-color: var(--acento); }
+  /* Si no caben (móvil), las pestañas se deslizan en vez de ensanchar la página */
+  #pestanas { min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  #pestanas::-webkit-scrollbar { display: none; }
+  .logo { min-width: 0; }
+  .tele .pestana:focus { color: #fff; border-bottom-color: var(--acento); background: rgba(255,255,255,.08); border-radius: 6px 6px 0 0; }
+  .boton { border-radius: 6px; }
+  .boton.activo { background: var(--acento); border-color: var(--acento); }
+
+  /* Inicio */
+  #items.inicio { display: block; }
+  .fila { margin: 0 0 clamp(18px, 2.6vw, 36px); }
+  .fila-titulo { font-size: clamp(16px, 1.45vw, 22px); font-weight: 700; margin: 0 0 8px; letter-spacing: .01em; }
+  .fila-titulo a { color: var(--texto); text-decoration: none; border-radius: 6px; padding: 2px 4px; margin-left: -4px; }
+  .fila-titulo a:hover, .fila-titulo a:focus { color: var(--acento); }
+  .carrusel { display: flex; gap: clamp(10px, 1.1vw, 18px); overflow-x: auto; overflow-y: hidden; padding: 8px 6px 14px; margin: -8px -6px 0;
+    scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .carrusel::-webkit-scrollbar { display: none; }
+  .carrusel > * { flex: 0 0 auto; scroll-snap-align: start; }
+  .carrusel .item { width: clamp(118px, 10.5vw, 185px); }
+  .carrusel.anchas .item, .carrusel .item.episodio { width: clamp(220px, 19vw, 330px); }
+  .carrusel .item .resumen { display: none; }
+  .carrusel.medios .cat { width: clamp(250px, 24vw, 400px); aspect-ratio: 16 / 9; }
+  .tele .carrusel .item { width: 15vw; }
+  .tele .carrusel.anchas .item, .tele .carrusel .item.episodio { width: 26vw; }
+  .tele .carrusel.medios .cat { width: 30vw; }
+  .tele .fila-titulo { font-size: 3.2vh; }
+
+  /* Tarjetas: el cartel con esquinas redondeadas y sombra; título y datos debajo, centrados */
+  .item { background: transparent; border: 0; border-radius: 0; overflow: visible; }
+  .item:hover { border-color: transparent; }
+  .item .mini { position: relative; border-radius: 8px; background: var(--panel2); box-shadow: 0 4px 14px rgba(0,0,0,.45); transition: box-shadow .15s, transform .15s; }
+  .item .nombre { padding: 8px 2px 0; text-align: center; font-size: 13.5px; font-weight: 600; line-height: 1.3;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .meta { padding: 3px 2px 0; text-align: center; font-size: 12px; }
+  .item .resumen { margin: 6px 2px 0; }
+  .item:hover .mini, .item:focus .mini { box-shadow: 0 0 0 3px var(--acento), 0 10px 24px rgba(0,0,0,.6); }
+  .item:focus { outline: none !important; box-shadow: none !important; }
+  .tele .item:focus { transform: none; }
+  .tele .item:focus .mini { transform: scale(1.05); }
+  /* Botón ▶ al pasar por encima */
+  .item .mini::after { content: '▶'; position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%;
+    background: rgba(0,164,220,.92); color: #fff; font-size: 20px; line-height: 48px; text-align: center; padding-left: 3px; box-sizing: border-box;
+    opacity: 0; transform: scale(.8); transition: opacity .15s, transform .15s; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+  .item:hover .mini.cartel::after, .item:hover .mini.ancha::after, .item:focus .mini.cartel::after, .item:focus .mini.ancha::after { opacity: 1; transform: none; }
+  .item .visto { border-radius: 0 0 8px 8px; }
+  .item .visto span { background: var(--acento); }
+  /* Episodios (en la temporada): imagen apaisada y el texto a la izquierda */
+  .item.episodio .nombre, .item.episodio .meta, .carrusel.anchas .item .nombre, .carrusel.anchas .item .meta { text-align: left; }
+  .item.episodio .nombre { -webkit-line-clamp: 2; }
+  /* Las tarjetas de categoría: más redondeadas y sin borde */
+  .cat { border-radius: 10px; border: 0; }
+
+  /* Ficha de la serie: el fondo a todo lo ancho, que se funde con la página */
+  #cabecera { position: relative; margin: -16px -16px 22px; border: 0; border-radius: 0; background-color: var(--fondo); background-position: center top; background-size: cover;
+    padding: clamp(90px, 20vw, 300px) clamp(16px, 3.5vw, 56px) 8px; }
+  #cabecera.con-fondo { background-image: linear-gradient(180deg, rgba(16,17,20,.05) 0%, rgba(16,17,20,.45) 40%, rgba(16,17,20,.92) 78%, var(--fondo) 100%),
+    linear-gradient(90deg, rgba(16,17,20,.75) 0%, rgba(16,17,20,0) 65%), var(--fondo-img); }
+  #cabecera .ficha { padding: 0; max-width: none; gap: clamp(16px, 2.4vw, 36px); }
+  #cabecera .ficha img.cartel { width: clamp(130px, 14vw, 240px); border-radius: 10px; box-shadow: 0 12px 34px rgba(0,0,0,.7); }
+  #cabecera .ficha h2 { font-size: clamp(24px, 2.8vw, 44px); line-height: 1.1; text-shadow: 0 2px 14px rgba(0,0,0,.7); }
+  #cabecera .ficha p { text-shadow: 0 1px 8px rgba(0,0,0,.6); }
+  #cabecera .chip { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.12); }
+  .boton.reproducir { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 700; padding: 9px 22px; border-radius: 999px; font-size: 15px; }
+  .boton.reproducir:hover, .boton.reproducir:focus { background: #19b6ec; border-color: #fff; }
+  #cabecera .boton:not(.reproducir) { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.14); border-radius: 999px; }
+  .tele #cabecera { padding: 12vh 3vw 1vh; margin-bottom: 3vh; }
+  .tele #cabecera .ficha img.cartel { width: 22vh; }
+  .tele #cabecera .ficha h2 { font-size: 4.4vh; }
+  .tele .boton.reproducir { font-size: 2.4vh; padding: 1vh 2.4vw; }
+
+  @media (max-width: 600px) {
+    .carrusel .item { width: 31vw; }
+    .carrusel.anchas .item, .carrusel .item.episodio { width: 66vw; }
+    .carrusel.medios .cat { width: 78vw; }
+    .carrusel.medios .cat .texto { max-width: 50%; }
+    .carrusel.medios .cat .abanico { top: 15%; bottom: 15%; right: 5%; width: 38%; }
+    .carrusel.medios .cat .icono { display: block; }
+    #cabecera { margin: -16px -12px 16px; padding: 120px 12px 4px; }
+    #cabecera.con-fondo { background-size: auto 260px; background-repeat: no-repeat; }
+    .item .nombre { font-size: 12.5px; }
+    /* En el móvil los episodios van en fila (imagen a la izquierda): sin ▶ encima */
+    .rejilla .item.episodio .mini::after { display: none; }
+  }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>

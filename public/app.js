@@ -90,6 +90,8 @@ async function cargar(mas = false) {
 function pintarMigas() {
   const partes = estado.prefijo.split('/').filter(Boolean);
   const m = $('#migas'); m.innerHTML = '';
+  // En el inicio la ruta sobra (solo diría «Inicio»): la pestaña ya lo marca
+  m.hidden = !partes.length && !estado.prefijo.startsWith(':');
   const enlace = (texto, pref) => {
     // Con href: así el enlace recibe el foco del mando y se abre con OK
     const a = document.createElement('a'); a.textContent = texto; a.href = `#${encodeURIComponent(pref)}`; m.append(a);
@@ -152,18 +154,17 @@ function pintar() {
   items.className = 'rejilla';
   items.innerHTML = '';
 
-  let otras = carpetas;
   if (!estado.prefijo) {
-    // En la raíz todas las carpetas son categorías (también las nuevas); debajo, solo los
-    // archivos sueltos que haya
-    otras = [];
-    items.append(portada(carpetas));
-    if (archivos.length) items.append(el('h2', 'seccion', 'Archivos sueltos'));
+    pintarInicio(carpetas, archivos);
+    $('#mas').hidden = true;
+    const conMando = esTele || document.documentElement.classList.contains('usa-mando');
+    if (conMando && actual < 0 && (!document.activeElement || document.activeElement === document.body)) moverFoco('abajo');
+    return;
   }
-  for (const c of otras) {
+  for (const c of carpetas) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
-    if (estado.prefijo) { conMeta(t, 'carpeta', c); estrella(t, c); }
+    conMeta(t, 'carpeta', c); estrella(t, c);
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
@@ -180,6 +181,86 @@ function pintar() {
   // En la tele siempre hay algo con foco para que el mando funcione desde el principio
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
   if (conMando && actual < 0 && (!document.activeElement || document.activeElement === document.body)) moverFoco('abajo');
+}
+
+// ---------- Inicio: filas que se deslizan hacia los lados ----------
+// «Mis medios» (las categorías), «Seguir viendo», «Favoritos» y, por cada categoría, lo último
+// que has subido. Cada fila es un carrusel: con el ratón o el dedo se desliza y con el mando
+// ← → pasan de una tarjeta a otra.
+function fila(titulo, irAlPulsar, clase = '') {
+  const s = el('section', 'fila');
+  const h = el('h2', 'fila-titulo');
+  if (irAlPulsar) {
+    const a = el('a', null, `${titulo} ›`); a.href = '#'; a.onclick = (e) => { e.preventDefault(); irAlPulsar(); };
+    h.append(a);
+  } else h.textContent = titulo;
+  const c = el('div', `carrusel ${clase}`.trim());
+  s.append(h, c);
+  return { s, c };
+}
+
+let catalogoPedido = null;
+function pintarInicio(carpetas, archivos) {
+  const items = $('#items');
+  items.className = 'inicio';
+  const medios = fila('Mis medios', null, 'medios');
+  medios.c.append(...portada(carpetas).children);
+  items.append(medios.s);
+
+  // Seguir viendo (imagen apaisada, con la barra de lo visto) y Favoritos, si hay perfil
+  if (typeof yo !== 'undefined' && yo) {
+    const seguir = listaSeguir();
+    if (seguir.length) {
+      const f = fila('Seguir viendo', () => irA(':seguir'), 'anchas');
+      seguir.slice(0, 20).forEach((x, i) => f.c.append(tarjetaPerfil(x, () => abrir(i, seguir), false, true)));
+      items.append(f.s);
+    }
+    if (yo.favoritos.length) {
+      const f = fila('Favoritos', () => irA(':favoritos'));
+      const sueltos = yo.favoritos.filter((x) => x.tipo === 'archivo');
+      yo.favoritos.slice(0, 20).forEach((x) => f.c.append(x.tipo === 'carpeta'
+        ? tarjetaPerfil(x, () => irA(x.key), true)
+        : tarjetaPerfil(x, () => abrir(sueltos.indexOf(x), sueltos))));
+      items.append(f.s);
+    }
+  }
+
+  // Últimos añadidos de cada categoría, en el mismo orden que «Mis medios»
+  const sitio = el('div', 'ultimos');
+  items.append(sitio);
+  catalogoPedido = catalogoPedido || api('/api/catalogo').catch(() => null);
+  const pedido = catalogoPedido;
+  pedido.then((d) => {
+    if (catalogoPedido === pedido) catalogoPedido = null; // la próxima vez, datos frescos
+    if (!d || estado.prefijo || !sitio.isConnected) return;
+    for (const { cat, suyas } of categoriasDe(carpetas)) {
+      const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
+      const titulos = entrada ? entrada.titulos.slice(0, 20) : [];
+      if (!titulos.length) continue;
+      const f = fila(`Últimos añadidos en ${cat.nombre}`, () => irA(suyas[0]));
+      const pelis = titulos.filter((x) => x.tipo === 'archivo');
+      for (const x of titulos) {
+        if (x.tipo === 'carpeta') {
+          const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
+          f.c.append(t); conMeta(t, 'carpeta', x.key);
+        } else {
+          const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis), nuevo: nuevas.has(x.key) });
+          t.dataset.key = x.key; barraVisto(t);
+          f.c.append(t); conMeta(t, 'archivo', x.key);
+        }
+      }
+      sitio.append(f.s);
+    }
+  });
+
+  if (archivos.length) {
+    const f = fila('Archivos sueltos');
+    archivos.forEach((x, i) => {
+      const [, , icono] = tipo(x.key);
+      f.c.append(tarjeta({ icono, titulo: nombre(x.key), miniatura: x.miniatura, meta: bytes(x.tamano), alPulsar: () => abrir(i, archivos) }));
+    });
+    items.append(f.s);
+  }
 }
 
 // ---------- Portada por categorías ----------
@@ -361,18 +442,20 @@ const tituloDe = (d) => d.episodio
   : `${d.titulo}${d.anio && !d.titulo.includes(d.anio) ? ` (${d.anio})` : ''}`;
 
 // Cambia la tarjeta del archivo por la carátula y el título de TMDB
-async function conMeta(t, clase, clave) {
+// Con { ancha: true } usa la imagen apaisada (la del episodio o el fondo de la película)
+async function conMeta(t, clase, clave, { ancha = false } = {}) {
   const d = await pedirMeta(clase, clave);
   if (!d?.encontrado || !t.isConnected) return;
   const temp = d.temporada;
-  const imagen = d.episodio?.imagen ?? temp?.poster ?? d.poster;
+  const apaisada = d.episodio?.imagen ?? (ancha ? d.fondo : null);
+  const imagen = apaisada ?? temp?.poster ?? d.poster;
   const mini = t.querySelector('.mini');
   if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
     const visto = mini.querySelector('.visto'); // la barra de lo que ya has visto se queda
     mini.replaceChildren(img);
     if (visto) mini.append(visto);
-    mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
+    mini.classList.add(apaisada ? 'ancha' : 'cartel');
     // Los episodios (imagen apaisada) van en tarjetas más anchas para que se lea el título
     if (d.episodio?.imagen) { t.classList.add('episodio'); const r = t.closest('.rejilla'); if (r) r.classList.add('con-episodios'); }
   }
@@ -411,8 +494,28 @@ async function pintarCabecera(prefijo) {
   if (partes.length < 2) return;
   const d = await pedirMeta('carpeta', partes.length < prefijo.split('/').filter(Boolean).length ? prefijo : partes.join('/') + '/');
   if (!d?.encontrado || estado.prefijo !== prefijo) return;
-  c.append(fichaHtml(d, { clave: partes.join('/') + '/' }));
-  if (d.fondo) c.style.backgroundImage = `linear-gradient(90deg, var(--fondo) 30%, rgba(15,17,21,.75)), url("${d.fondo}")`;
+  const f = fichaHtml(d, { clave: partes.join('/') + '/' });
+  // «▶ Reproducir» (o «Reanudar» si ya empezaste algún episodio de aquí)
+  const enlaces = f.querySelector('.cuerpo > .chips:not(.datos)');
+  if (enlaces) {
+    const b = el('button', 'boton reproducir', '▶ Reproducir');
+    const pintarB = () => { const { archivos } = visibles(); b.textContent = archivos.some((x) => posicionDe(x.key)) ? '▶ Reanudar' : '▶ Reproducir'; };
+    b.onclick = () => {
+      const { carpetas, archivos } = visibles();
+      const videos = archivos.filter((x) => tipo(x.key)[1].startsWith('video'));
+      if (videos.length) {
+        const i = videos.findIndex((x) => posicionDe(x.key));
+        abrir(Math.max(0, i), videos);
+      } else if (carpetas.length) irA(carpetas[0]); // una serie con temporadas: a la primera
+    };
+    enlaces.prepend(b);
+    setTimeout(pintarB, 1500);
+  }
+  c.append(f);
+  // Fondo grande arriba, que se funde con la página (el degradado lo pone la hoja de estilos)
+  c.classList.toggle('con-fondo', !!d.fondo);
+  c.style.backgroundImage = '';
+  if (d.fondo) c.style.setProperty('--fondo-img', `url("${d.fondo}")`);
   c.hidden = false;
 }
 
@@ -1064,7 +1167,7 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#pestanas button, #perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#pestanas button, #perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
@@ -1100,7 +1203,10 @@ function moverFoco(dir) {
     const principal = { arriba: -dy, abajo: dy, izq: -dx, der: dx }[dir];
     if (principal <= 2) continue;
     const lateral = dir === 'arriba' || dir === 'abajo' ? Math.abs(dx) : Math.abs(dy);
-    const p = principal + lateral * 2.5;
+    // Al subir, el menú de arriba (fijo) solo gana si no queda nada del contenido por encima:
+    // así ↑ pasa de una fila del inicio a la anterior y no salta al menú
+    const alMenu = dir === 'arriba' && !a.closest('header') && c.closest('header') ? 100000 : 0;
+    const p = principal + lateral * 2.5 + alMenu;
     if (p < puntos) { puntos = p; mejor = c; }
   }
   if (mejor) {

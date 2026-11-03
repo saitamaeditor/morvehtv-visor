@@ -349,6 +349,10 @@ function pintarPestanas() {
   if (!nav) {
     nav = el('nav');
     nav.id = 'pestanas';
+    const inicio = el('button', 'pestana', '⌂ Inicio');
+    inicio.dataset.vista = '';
+    inicio.onclick = () => irA('');
+    nav.append(inicio);
     for (const [id, v] of Object.entries(VISTAS_PERFIL)) {
       const b = el('button', 'pestana', v.corto);
       b.dataset.vista = id;
@@ -358,7 +362,8 @@ function pintarPestanas() {
     $('#directo').after(nav);
   }
   nav.hidden = !yo;
-  nav.querySelectorAll('button').forEach((b) => b.classList.toggle('activa', estado.prefijo === `:${b.dataset.vista}`));
+  nav.querySelectorAll('button').forEach((b) => b.classList.toggle('activa',
+    b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo));
 }
 
 function pintarVistaPerfil(vista) {
@@ -367,11 +372,7 @@ function pintarVistaPerfil(vista) {
   items.innerHTML = '';
   if (!yo) return;
   if (vista === 'seguir') {
-    const lista = Object.keys(yo.posiciones)
-      .map((key) => Object.assign({ key }, yo.posiciones[key]))
-      .filter((p) => p.t > 0)
-      .sort((a, b) => b.cuando - a.cuando)
-      .map((p) => ({ key: p.key, tamano: p.tamano, fecha: p.fecha }));
+    const lista = listaSeguir();
     if (!lista.length) items.innerHTML = `<div class="vacio">Aquí aparecerá lo que empieces a ver, ${yo.nombre}.</div>`;
     lista.forEach((f, i) => items.append(tarjetaPerfil(f, () => abrir(i, lista))));
   } else {
@@ -387,12 +388,24 @@ function pintarVistaPerfil(vista) {
   if (conMando && actual < 0) { const p = $('#items .item') || $('#pestanas .activa'); if (p) p.focus(); }
 }
 
-function tarjetaPerfil(f, alPulsar, carpeta) {
+// Lo que el perfil dejó a medias, lo último primero
+function listaSeguir() {
+  if (!yo) return [];
+  return Object.keys(yo.posiciones)
+    .map((key) => Object.assign({ key }, yo.posiciones[key]))
+    .filter((p) => p.t > 0)
+    .sort((a, b) => b.cuando - a.cuando)
+    .map((p) => ({ key: p.key, tamano: p.tamano, fecha: p.fecha }));
+}
+
+// «ancha»: con la imagen apaisada (fondo de la película o imagen del episodio), como en la
+// fila «Seguir viendo» del inicio
+function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
   const [, , icono] = tipo(f.key);
   const t = tarjeta({ icono: carpeta ? '📁' : icono, titulo: nombre(f.key), meta: carpeta ? 'Serie' : (f.tamano ? bytes(f.tamano) : ''), alPulsar });
   t.classList.add('de-perfil');
   if (!carpeta) { t.dataset.key = f.key; if (f.tamano) t.dataset.tamano = f.tamano; barraVisto(t); }
-  conMeta(t, carpeta ? 'carpeta' : 'archivo', f.key);
+  conMeta(t, carpeta ? 'carpeta' : 'archivo', f.key, { ancha });
   estrella(t, f.key, carpeta ? null : f);
   return t;
 }
