@@ -4,6 +4,7 @@
 // una sola vez. Es una caché local: no toca el catálogo de MorvehTV.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+import * as deportes from './deportes.js';
 
 // Se leen al usarlas: server.js carga el .env después de importar este módulo
 const tmdbKey = () => process.env.TMDB_KEY ?? '';
@@ -16,6 +17,7 @@ let cache = { archivos: {}, carpetas: {}, correcciones: {} };
 let guardando = null;
 
 export async function iniciar(dir) {
+  await deportes.iniciar(dir);
   archivoCache = path.join(dir, 'data', 'metadatos.json');
   try {
     cache = { ...cache, ...JSON.parse(await readFile(archivoCache, 'utf8')) };
@@ -222,12 +224,12 @@ async function identificar(clave, seccion, datos) {
   return cache[seccion][clave];
 }
 
-// Partidos y resúmenes de DEPORTES no son películas ni series: no se buscan en TMDB (saldría
-// cualquier película con un nombre parecido)
+// Partidos y carreras de DEPORTES no son películas ni series: no se buscan en TMDB (saldría
+// cualquier película con un nombre parecido) sino en TheSportsDB (deportes.js)
 const esDeporte = (key) => /deport|sport/i.test(key.split('/')[0].normalize('NFD').replace(/[̀-ͯ]/g, ''));
 
 export async function deArchivo(key) {
-  if (esDeporte(key)) return null;
+  if (esDeporte(key)) return deportes.ficha(key);
   const datos = analizar(key);
   if (!datos) return null;
   // Los episodios heredan la serie de su carpeta (o de otro episodio ya identificado)
@@ -259,7 +261,7 @@ export async function deArchivo(key) {
 // («…/Temporada 2/»: la ficha de la serie más el póster, la sinopsis y los episodios de esa
 // temporada). Las de categoría no tienen.
 export async function deCarpeta(prefijo) {
-  if (esDeporte(prefijo)) return null;
+  if (esDeporte(prefijo)) return prefijo.split('/').filter(Boolean).length < 2 ? null : deportes.ficha(prefijo, { carpeta: true });
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
   if (partes.length < 2) return null;

@@ -47,6 +47,13 @@ function irA(prefijo) {
 
 async function cargar(mas = false) {
   const items = $('#items');
+  pintarPestanas();
+  // «Seguir viendo» y «Favoritos» (pestañas de arriba): listas del perfil, no carpetas de e2
+  if (estado.prefijo.startsWith(':')) {
+    $('#cabecera').hidden = true; $('#mas').hidden = true;
+    pintarMigas();
+    return pintarVistaPerfil(estado.prefijo.slice(1));
+  }
   if (!mas) {
     estado.carpetas = []; estado.archivos = []; estado.token = null;
     items.innerHTML = '<div class="vacio">Cargando…</div>';
@@ -75,6 +82,11 @@ function pintarMigas() {
     const a = document.createElement('a'); a.textContent = texto; a.href = `#${encodeURIComponent(pref)}`; m.append(a);
   };
   enlace('🏠 Inicio', '');
+  if (estado.prefijo.startsWith(':')) {
+    const s = document.createElement('span'); s.textContent = '›'; m.append(s);
+    m.append(el('span', 'actual', VISTAS_PERFIL[estado.prefijo.slice(1)]?.titulo ?? ''));
+    return;
+  }
   partes.forEach((p, i) => {
     const s = document.createElement('span'); s.textContent = '›'; m.append(s);
     enlace(p, partes.slice(0, i + 1).join('/') + '/');
@@ -100,15 +112,13 @@ function pintar() {
   let otras = carpetas;
   if (!estado.prefijo) {
     otras = carpetas.filter((c) => !categoriaDe(c));
-    seccionesPerfil(items);
-    if (items.children.length) items.append(el('h2', 'seccion', 'Categorías'));
     items.append(portada(carpetas));
     if (otras.length || archivos.length) items.append(el('h2', 'seccion', 'Otras carpetas y archivos'));
   }
   for (const c of otras) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
-    if (estado.prefijo) conMeta(t, 'carpeta', c);
+    if (estado.prefijo) { conMeta(t, 'carpeta', c); estrella(t, c); }
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
@@ -118,7 +128,7 @@ function pintar() {
     t.dataset.tamano = f.tamano;
     barraVisto(t);
     items.append(t);
-    if (clase.startsWith('video')) conMeta(t, 'archivo', f.key);
+    if (clase.startsWith('video')) { conMeta(t, 'archivo', f.key); estrella(t, f.key, f); }
   });
   if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
   $('#mas').hidden = !estado.token;
@@ -252,21 +262,22 @@ function siguienteMeta() {
 
 const tituloDe = (d) => d.episodio
   ? `T${d.episodio.temporada}·E${d.episodio.numero} · ${d.episodio.titulo}`
-  : `${d.titulo}${d.anio ? ` (${d.anio})` : ''}`;
+  : `${d.titulo}${d.anio && !d.titulo.includes(d.anio) ? ` (${d.anio})` : ''}`;
 
 // Cambia la tarjeta del archivo por la carátula y el título de TMDB
 async function conMeta(t, clase, clave) {
   const d = await pedirMeta(clase, clave);
   if (!d?.encontrado || !t.isConnected) return;
   const temp = d.temporada;
-  const imagen = d.episodio?.imagen ?? temp?.poster ?? d.poster;
+  // Deportes: póster de la competición o, si no hay, imagen apaisada del partido o fotograma
+  const imagen = d.episodio?.imagen ?? temp?.poster ?? d.poster ?? d.imagen;
   const mini = t.querySelector('.mini');
   if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
     const visto = mini.querySelector('.visto'); // la barra de lo que ya has visto se queda
     mini.replaceChildren(img);
     if (visto) mini.append(visto);
-    mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
+    mini.classList.add(d.episodio?.imagen || (!d.poster && d.imagen) ? 'ancha' : 'cartel');
   }
   const meta = t.querySelector('.meta');
   const tam = t.dataset.tamano && bytes(Number(t.dataset.tamano));
@@ -313,7 +324,7 @@ const pista = (p, n) => [(p.titulo || p.idioma || `Pista ${n + 1}`).toUpperCase(
 // Ficha completa: datos de TMDB + datos técnicos del archivo (si se pasan)
 function fichaHtml(d, { archivo, medio, clave } = {}) {
   const f = el('div', 'ficha');
-  const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen);
+  const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen ?? d.imagen);
   if (poster) {
     const img = el('img', 'cartel'); img.src = poster; img.alt = ''; f.append(img);
   }
@@ -326,7 +337,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     const chips = el('div', 'chips');
     const chip = (t) => t && chips.append(el('span', 'chip', t));
     chip(d.valoracion && `★ ${d.valoracion}`);
-    chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
+    if (!d.deporte) chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
     chip((d.episodio?.duracion ?? d.duracion) && `${d.episodio?.duracion ?? d.duracion} min`);
     d.generos.forEach(chip);
     cuerpo.append(chips);
@@ -352,7 +363,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     linea('Reparto', d.reparto);
     const enlaces = el('div', 'chips');
     if (d.trailer) enlaces.append(Object.assign(el('a', 'boton', '▶ Tráiler'), { href: d.trailer, target: '_blank', rel: 'noopener' }));
-    enlaces.append(Object.assign(el('a', 'boton', 'TMDB ↗'), { href: d.tmdb, target: '_blank', rel: 'noopener' }));
+    if (d.tmdb) enlaces.append(Object.assign(el('a', 'boton', 'TMDB ↗'), { href: d.tmdb, target: '_blank', rel: 'noopener' }));
     const objetivo = archivo ? archivo.key : clave;
     if (yo && objetivo) enlaces.prepend(botonFavorito(objetivo, archivo));
     cuerpo.append(enlaces);
@@ -375,7 +386,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     }
     cuerpo.append(tec);
   }
-  if (clave && d) cuerpo.append(corrector(clave, d));
+  if (clave && d && !d.deporte) cuerpo.append(corrector(clave, d));
   return f;
 }
 
@@ -816,6 +827,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   $('#vtitulo').title = f.key;
   pedirMeta('archivo', f.key).then((d) => { if (actual === i && d && d.encontrado) $('#vtitulo').textContent = tituloDe(d).replace(/^T(\d+)·E/, `${d.titulo} · T$1·E`); });
   $('#vmeta').textContent = `${bytes(f.tamano)} · ${fecha(f.fecha)}`;
+  pintarFavVisor(f);
   $('#ant').hidden = i === 0; $('#sig').hidden = i === lista.length - 1;
   const c = $('#vcontenido'); c.innerHTML = '';
   if (clase === 'enlace') return abrirEnlace(f, i, c);
@@ -949,9 +961,9 @@ const TECLAS = {
 const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
 const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '#pestanas button, #perfil-actual, #salir-app, #migas a, #cabecera summary, #cabecera a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton, #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
+const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
@@ -1119,8 +1131,9 @@ if (window.MorvehApp && typeof window.MorvehApp.salir === 'function') {
 }
 
 const eventos = new EventSource('/api/eventos');
-eventos.onopen = () => { $('#directo').classList.add('vivo'); $('#directo').textContent = 'en directo'; };
-eventos.onerror = () => { $('#directo').classList.remove('vivo'); $('#directo').textContent = 'sin conexión'; };
+// El aviso de conexión solo aparece si se corta (su sitio lo ocupan las pestañas del perfil)
+eventos.onopen = () => { $('#directo').hidden = true; };
+eventos.onerror = () => { $('#directo').hidden = false; };
 eventos.addEventListener('cambios', (e) => refrescar(JSON.parse(e.data)).catch(() => {}));
 // Al publicar una versión nueva el servidor se reinicia y la conexión vuelve con otra versión:
 // la app se recarga sola para usarla (la tele y el móvil no se quedan con la antigua). Si estás
