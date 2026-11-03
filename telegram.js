@@ -176,6 +176,13 @@ async function enviar(tema, { texto, foto, boton }) {
   return llamar('sendMessage', { ...base, text: texto, link_preview_options: { is_disabled: true } });
 }
 
+// Lo que el panel de gestión solo ha movido o renombrado no es contenido nuevo (al copiarlo en
+// e2 cambia de fecha): esas claves no se avisan
+const ignorados = new Map(); // key → hasta cuándo
+export function ignorar(keys) {
+  for (const k of keys) ignorados.set(k, Date.now() + 3600000);
+}
+
 // ---------- Cada repaso del bucket ----------
 // `foto`: Map key → "tamaño:fecha" de todo el bucket. Avisa de los vídeos con fecha posterior al
 // último aviso (así también de lo subido mientras el servidor dormía).
@@ -191,8 +198,15 @@ export async function repaso(foto) {
     const masNueva = Math.max(0, ...videos.map((v) => v.fecha));
     // La primera vez no se avisa de todo el catálogo: solo de lo que llegue a partir de ahora
     if (!datos.ultimo) { datos.ultimo = masNueva || Date.now(); await guardarDatos(); estado = 'ok'; return; }
-    const nuevos = videos.filter((v) => v.fecha > datos.ultimo).sort((a, b) => a.fecha - b.fecha);
-    if (!nuevos.length) { estado = 'ok'; return; }
+    for (const [k, hasta] of ignorados) if (hasta < Date.now()) ignorados.delete(k);
+    const todos = videos.filter((v) => v.fecha > datos.ultimo);
+    const nuevos = todos.filter((v) => !ignorados.has(v.key)).sort((a, b) => a.fecha - b.fecha);
+    if (!nuevos.length) {
+      // Solo había cosas movidas: se dan por vistas
+      if (todos.length) { datos.ultimo = Math.max(datos.ultimo, ...todos.map((v) => v.fecha)); await guardarDatos(); }
+      estado = 'ok';
+      return;
+    }
 
     // Agrupados por sección y por título (la carpeta de la serie, como en la portada)
     const grupos = new Map();

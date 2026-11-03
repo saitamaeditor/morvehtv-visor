@@ -17,7 +17,7 @@ import * as acceso from './acceso.js';
 import * as perfiles from './perfiles.js';
 import * as telegram from './telegram.js';
 import * as xtream from './xtream.js';
-import * as subidas from './subidas.js';
+import * as panel from './panel.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -57,8 +57,8 @@ const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(ke
 await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
 // Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso
 xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales });
-// Panel de subida directa a e2, solo administradores (ver subidas.js)
-subidas.iniciar({ s3, bucket: E2_BUCKET, foto: async () => { if (!foto) await repasar(); return foto; }, sesion: perfiles.sesion, esAdmin: perfiles.esAdmin });
+// API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
+panel.iniciar({ s3, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar });
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);
 
 function firmar(key, { segundos = 4 * 3600 } = {}) {
@@ -486,7 +486,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'subidas.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -508,6 +508,8 @@ http
       if (permiso === 'fuera') return json(res, 403, { error: 'Solo se puede entrar desde la red de casa' });
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb() });
+      // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
+      if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
       if (xtream.esRuta(url.pathname)) return await xtream.atender(url.pathname, req, res, json, { ip: acceso.ipDe(req), nube: acceso.NUBE });
       // Sin sesión solo se llega a la pantalla de entrar o registrarse
@@ -520,7 +522,6 @@ http
 
       if (url.pathname === '/api/eventos') return eventos(req, res);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
-      if (subidas.RUTAS.includes(url.pathname)) return await subidas.atender(url.pathname, req, res, json);
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
       const ruta = rutas[url.pathname];

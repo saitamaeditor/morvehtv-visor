@@ -139,6 +139,22 @@ export async function credenciales(usuario, clave, ip) {
   return c;
 }
 
+// Token del panel de gestión (es otra web, así que no comparte la cookie): caduca a los 30 días
+// y deja de valer, como la cookie, al cambiar la contraseña o cerrar las sesiones (generación)
+const firmaPanel = (secreto, base) => createHmac('sha256', secreto).update(`panel:${base}`).digest('hex');
+export async function tokenPanel(c) {
+  const base = `${c.id}.${c.gen || 0}.${Date.now() + 30 * 864e5}`;
+  return `${base}.${firmaPanel((await leer()).secreto, base)}`;
+}
+export async function cuentaDeToken(token) {
+  const [id, gen, hasta, f] = String(token ?? '').split('.');
+  if (!f || !(Number(hasta) > Date.now())) return null;
+  const d = await leer();
+  const c = (d.cuentas || []).find((x) => x.id === id);
+  if (!c || String(c.gen || 0) !== gen) return null;
+  return mismoHash(f, firmaPanel(d.secreto, `${id}.${gen}.${hasta}`)) ? c : null;
+}
+
 async function necesitaCuenta(req) {
   const c = await sesion(req);
   if (!c) throw error(401, 'Inicia sesión');
