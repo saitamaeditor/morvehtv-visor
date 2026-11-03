@@ -4,7 +4,6 @@
 // una sola vez. Es una caché local: no toca el catálogo de MorvehTV.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import * as deportes from './deportes.js';
 
 // Se leen al usarlas: server.js carga el .env después de importar este módulo
 const tmdbKey = () => process.env.TMDB_KEY ?? '';
@@ -17,7 +16,6 @@ let cache = { archivos: {}, carpetas: {}, correcciones: {} };
 let guardando = null;
 
 export async function iniciar(dir) {
-  await deportes.iniciar(dir);
   archivoCache = path.join(dir, 'data', 'metadatos.json');
   try {
     cache = { ...cache, ...JSON.parse(await readFile(archivoCache, 'utf8')) };
@@ -50,6 +48,47 @@ async function pedir(ruta, params = {}) {
   const r = await fetch(url, { headers });
   if (!r.ok) throw Object.assign(new Error(`TMDB respondió ${r.status} en ${ruta}`), { status: r.status === 404 ? 404 : 502 });
   return r.json();
+}
+
+// ---------- Carpetas de plataforma («PELICULAS NETFLIX», «SERIES PRIME VIDEO»…) ----------
+// No son un título: no se buscan en TMDB y su tarjeta lleva el logo y los colores de la plataforma
+const PAIS = process.env.TMDB_PAIS || 'ES';
+const NOMBRES = [
+  [/netflix/i, 'Netflix'], [/amazon|prime video/i, 'Prime Video'], [/disney/i, 'Disney+'],
+  [/hbo|\bmax\b(?! ?\d)/i, 'Max'], [/movistar/i, 'Movistar Plus+'], [/apple ?tv/i, 'Apple TV+'],
+  [/skyshowtime/i, 'SkyShowtime'], [/filmin/i, 'Filmin'], [/rakuten/i, 'Rakuten TV'],
+  [/atres ?player/i, 'Atresplayer'], [/mitele/i, 'Mitele'], [/rtve/i, 'RTVE Play'],
+];
+const nombrePlataforma = (n) => NOMBRES.find(([re]) => re.test(n))?.[1] ?? null;
+// Las mismas reglas para la web
+export const patronesPlataforma = () => NOMBRES.map(([re, n]) => [re.source, re.flags, n]);
+
+// Las plataformas del país con su logo y sus códigos de TMDB (Netflix tiene varios: con
+// anuncios, básico…)
+let todas = null;
+export function listaPlataformas() {
+  if (!todas) {
+    todas = pedir('/watch/providers/movie', { watch_region: PAIS }).then((d) => {
+      const vistas = new Map();
+      for (const p of (d.results ?? []).sort((a, b) => (a.display_priorities?.[PAIS] ?? a.display_priority) - (b.display_priorities?.[PAIS] ?? b.display_priority))) {
+        const nombre = nombrePlataforma(p.provider_name);
+        if (!nombre) continue;
+        if (!vistas.has(nombre)) vistas.set(nombre, { nombre, logo: img(p.logo_path, 'w154'), ids: [] });
+        vistas.get(nombre).ids.push(p.provider_id);
+      }
+      return [...vistas.values()];
+    });
+    todas.catch(() => { todas = null; });
+  }
+  return todas;
+}
+
+// Fondo de una carpeta de plataforma («pl:pelicula:Netflix»): lo más visto de esa plataforma
+async function descubrirPlataforma(id) {
+  const [, tipo, nombre] = id.split(':');
+  const p = (await listaPlataformas()).find((x) => x.nombre === nombre);
+  if (!p) return null;
+  return [tipo === 'serie' ? '/discover/tv' : '/discover/movie', { with_watch_providers: p.ids.join('|'), watch_region: PAIS }];
 }
 
 // Las fichas de TMDB se reutilizan entre todos los episodios de una serie
@@ -224,12 +263,7 @@ async function identificar(clave, seccion, datos) {
   return cache[seccion][clave];
 }
 
-// Partidos y carreras de DEPORTES no son películas ni series: no se buscan en TMDB (saldría
-// cualquier película con un nombre parecido) sino en TheSportsDB (deportes.js)
-const esDeporte = (key) => /deport|sport/i.test(key.split('/')[0].normalize('NFD').replace(/[̀-ͯ]/g, ''));
-
 export async function deArchivo(key) {
-  if (esDeporte(key)) return deportes.ficha(key);
   const datos = analizar(key);
   if (!datos) return null;
   // Los episodios heredan la serie de su carpeta (o de otro episodio ya identificado)
@@ -261,10 +295,9 @@ export async function deArchivo(key) {
 // («…/Temporada 2/»: la ficha de la serie más el póster, la sinopsis y los episodios de esa
 // temporada). Las de categoría no tienen.
 export async function deCarpeta(prefijo) {
-  if (esDeporte(prefijo)) return prefijo.split('/').filter(Boolean).length < 2 ? null : deportes.ficha(prefijo, { carpeta: true });
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
-  if (partes.length < 2) return null;
+  if (partes.length < 2 || nombrePlataforma(n)) return null;
   const numero = n.match(CARPETA_TEMPORADA)?.[1];
   if (numero) {
     if (partes.length < 3) return null;
@@ -301,16 +334,15 @@ const DESCUBRIR = {
   'anime-serie': ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
   programa: ['/discover/tv', { with_genres: '10764' }],
   'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
-  // Películas de deporte o de fútbol (palabras clave de TMDB), sin las de dibujos
-  deporte: ['/discover/movie', { with_keywords: '6075|13042', without_genres: '16' }],
 };
 const portadas = new Map(); // categoría → { hasta, fondos }
 
 export async function portadaCategoria(id) {
-  if (!DESCUBRIR[id]) throw Object.assign(new Error('Categoría desconocida'), { status: 400 });
   const c = portadas.get(id);
   if (c && c.hasta > Date.now()) return { fondos: c.fondos };
-  const [ruta, filtro] = DESCUBRIR[id];
+  const desc = id.startsWith('pl:') ? await descubrirPlataforma(id) : DESCUBRIR[id];
+  if (!desc) throw Object.assign(new Error('Categoría desconocida'), { status: 400 });
+  const [ruta, filtro] = desc;
   const { results = [] } = await pedir(ruta, { sort_by: 'popularity.desc', 'vote_count.gte': '100', include_adult: 'false', ...filtro });
   const fondos = results.filter((r) => r.backdrop_path).slice(0, 8).map((r) => img(r.backdrop_path, 'w780'));
   portadas.set(id, { hasta: Date.now() + 24 * 3600000, fondos });

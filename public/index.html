@@ -358,6 +358,16 @@
   #perfil-actual + #salir-app { margin-left: 0; }
   .mini-avatar { width: 30px; height: 30px; border-radius: 8px; font-size: 18px; border-width: 0; }
   /* Mi lista */
+  /* Carpetas de plataforma («PELICULAS NETFLIX»…): logo y color de la plataforma */
+  .item.carpeta-plataforma { border-color: var(--c); box-shadow: inset 0 3px 0 var(--c); }
+  .item.carpeta-plataforma .mini { position: relative; background: linear-gradient(135deg, var(--c), #0b0c0f 85%); }
+  .item.carpeta-plataforma .mini::before { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--img) center / cover; opacity: 0; transition: opacity .5s; }
+  .item.carpeta-plataforma .mini::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.55)); }
+  .item.carpeta-plataforma .mini.con-fondo::before { opacity: 1; }
+  .item.carpeta-plataforma .logo-plataforma { position: relative; z-index: 1; width: 42%; max-width: 120px; height: auto; aspect-ratio: 1; object-fit: contain; border-radius: 18%; box-shadow: 0 4px 18px rgba(0,0,0,.6); }
+  .item.carpeta-plataforma .logo-plataforma.texto { width: auto; aspect-ratio: auto; padding: 8px 14px; background: var(--c); color: #fff; font-size: 18px; font-weight: 800; border-radius: 8px; }
+  .item.carpeta-plataforma:hover, .item.carpeta-plataforma:focus { border-color: var(--c); }
+
   /* Pestañas «Seguir viendo» y «Favoritos» junto al logo */
   #pestanas { display: flex; gap: 6px; }
   #pestanas[hidden], #directo[hidden] { display: none; }

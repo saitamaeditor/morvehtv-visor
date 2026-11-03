@@ -119,6 +119,7 @@ function pintar() {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
     if (estado.prefijo) { conMeta(t, 'carpeta', c); estrella(t, c); }
+    marcarPlataforma(t, c);
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
@@ -150,7 +151,6 @@ const CATEGORIAS = [
   { id: 'anime-serie', nombre: 'Series anime', icono: '🐉', color: '#8e4ec6', es: (n) => /anime/.test(n) && /serie/.test(n) },
   { id: 'programa', nombre: 'Programas de TV', icono: '📡', color: '#f76b15', es: (n) => /programa|\btv\b/.test(n) },
   { id: 'novela-turca', nombre: 'Novelas turcas', icono: '🌙', color: '#ffb224', es: (n) => /novela|turc/.test(n) },
-  { id: 'deporte', nombre: 'Deportes', icono: '⚽', color: '#00a2c7', es: (n) => /deport|sport/.test(n) },
 ];
 
 const limpiar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/^\d+\s*[-_.]?\s*/, '').trim();
@@ -218,6 +218,45 @@ function portada(carpetas) {
   return caja;
 }
 
+// ---------- Carpetas de plataforma ----------
+// Una carpeta con el nombre de una plataforma («PELICULAS NETFLIX», «SERIES PRIME VIDEO»…)
+// lleva el logo y el color de la plataforma y, de fondo, una de tus películas de esa carpeta o,
+// si aún está vacía, algo popular de esa plataforma
+const COLORES_PLATAFORMA = {
+  Netflix: '#e50914', 'Prime Video': '#00a8e1', 'Disney+': '#113ccf', Max: '#5822b4', 'Movistar Plus+': '#019df4',
+  'Apple TV+': '#6e7480', SkyShowtime: '#ff2d6f', Filmin: '#e6007e', 'Rakuten TV': '#bf0000', Atresplayer: '#ff6a00',
+  Mitele: '#00b3e3', 'RTVE Play': '#e2001a',
+};
+let plataformasConocidas = null;
+
+async function marcarPlataforma(t, carpeta) {
+  if (!plataformasConocidas) plataformasConocidas = api('/api/plataformas').catch(() => { plataformasConocidas = null; return null; });
+  const d = await plataformasConocidas;
+  if (!d || !t.isConnected) return;
+  const regla = d.patrones.map(([src, flags, n]) => [new RegExp(src, flags), n]).find(([re]) => re.test(nombre(carpeta)));
+  if (!regla) return;
+  const n = regla[1];
+  const pl = d.plataformas.find((p) => p.nombre === n);
+  t.classList.add('carpeta-plataforma');
+  t.style.setProperty('--c', COLORES_PLATAFORMA[n] || 'var(--acento)');
+  const mini = t.querySelector('.mini');
+  mini.className = 'mini cartel'; // mismo tamaño que los carteles de las películas de al lado
+  mini.textContent = '';
+  if (pl && pl.logo) { const i = el('img', 'logo-plataforma'); i.src = pl.logo; i.alt = n; mini.append(i); }
+  else mini.append(el('span', 'logo-plataforma texto', n));
+  const meta = t.querySelector('.meta');
+  meta.textContent = n;
+  if (!tamanos.has(carpeta)) tamanos.set(carpeta, api('/api/tamano', { prefijo: carpeta }).catch(() => null));
+  tamanos.get(carpeta).then((r) => { if (r) meta.textContent = `${n} · ${r.objetos ? `${r.objetos} archivos · ${bytes(r.bytes)}` : 'vacía'}`; });
+  const serie = /serie|novela|program/.test(limpiar(`${estado.prefijo} ${nombre(carpeta)}`));
+  fondoCategoria({ id: `pl:${serie ? 'serie' : 'pelicula'}:${n}` }, [carpeta]).then((url) => {
+    if (!url || !t.isConnected) return;
+    const img = new Image();
+    img.onload = () => { mini.style.setProperty('--img', `url("${url}")`); mini.classList.add('con-fondo'); };
+    img.src = url;
+  });
+}
+
 function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {
   const d = document.createElement('div'); d.className = 'item'; d.title = titulo;
   d.tabIndex = 0; d.setAttribute('role', 'button');
@@ -269,15 +308,14 @@ async function conMeta(t, clase, clave) {
   const d = await pedirMeta(clase, clave);
   if (!d?.encontrado || !t.isConnected) return;
   const temp = d.temporada;
-  // Deportes: póster de la competición o, si no hay, imagen apaisada del partido o fotograma
-  const imagen = d.episodio?.imagen ?? temp?.poster ?? d.poster ?? d.imagen;
+  const imagen = d.episodio?.imagen ?? temp?.poster ?? d.poster;
   const mini = t.querySelector('.mini');
   if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
     const visto = mini.querySelector('.visto'); // la barra de lo que ya has visto se queda
     mini.replaceChildren(img);
     if (visto) mini.append(visto);
-    mini.classList.add(d.episodio?.imagen || (!d.poster && d.imagen) ? 'ancha' : 'cartel');
+    mini.classList.add(d.episodio?.imagen ? 'ancha' : 'cartel');
   }
   const meta = t.querySelector('.meta');
   const tam = t.dataset.tamano && bytes(Number(t.dataset.tamano));
@@ -324,7 +362,7 @@ const pista = (p, n) => [(p.titulo || p.idioma || `Pista ${n + 1}`).toUpperCase(
 // Ficha completa: datos de TMDB + datos técnicos del archivo (si se pasan)
 function fichaHtml(d, { archivo, medio, clave } = {}) {
   const f = el('div', 'ficha');
-  const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen ?? d.imagen);
+  const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen);
   if (poster) {
     const img = el('img', 'cartel'); img.src = poster; img.alt = ''; f.append(img);
   }
@@ -337,7 +375,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     const chips = el('div', 'chips');
     const chip = (t) => t && chips.append(el('span', 'chip', t));
     chip(d.valoracion && `★ ${d.valoracion}`);
-    if (!d.deporte) chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
+    chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
     chip((d.episodio?.duracion ?? d.duracion) && `${d.episodio?.duracion ?? d.duracion} min`);
     d.generos.forEach(chip);
     cuerpo.append(chips);
@@ -386,7 +424,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     }
     cuerpo.append(tec);
   }
-  if (clave && d && !d.deporte) cuerpo.append(corrector(clave, d));
+  if (clave && d) cuerpo.append(corrector(clave, d));
   return f;
 }
 

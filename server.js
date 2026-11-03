@@ -5,7 +5,7 @@ import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
 import { readFile, mkdir, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -218,42 +218,6 @@ function medio(key) {
   return medios.get(key);
 }
 
-// ---------- Fotograma de portada ----------
-// Imagen sacada del propio vídeo (al 10 % o al minuto 2, lo que llegue antes) para lo que no
-// tiene carátula en ningún sitio, como un partido o una carrera de DEPORTES. Se guarda en una
-// carpeta temporal y se hacen de dos en dos para no cargar el servidor.
-const DIR_FOTOGRAMAS = path.join(os.tmpdir(), 'morvehtv-fotogramas');
-const fotogramas = new Map();
-let fotogramasEnMarcha = 0;
-const esperandoFotograma = [];
-
-async function fotograma(key) {
-  if (!esVideo(key)) throw Object.assign(new Error('No es un vídeo'), { status: 400 });
-  const destino = path.join(DIR_FOTOGRAMAS, `${createHash('sha1').update(key).digest('hex')}.jpg`);
-  if (existsSync(destino)) return destino;
-  if (!fotogramas.has(key)) {
-    const p = (async () => {
-      if (fotogramasEnMarcha >= 2) await new Promise((ok) => esperandoFotograma.push(ok));
-      fotogramasEnMarcha++;
-      try {
-        const [url, m] = await Promise.all([firmar(key), medio(key).catch(() => null)]);
-        const segundo = Math.floor(Math.min(120, (m?.duracion || 0) * 0.1));
-        await mkdir(DIR_FOTOGRAMAS, { recursive: true });
-        await new Promise((ok, mal) => execFile('ffmpeg',
-          ['-v', 'error', '-ss', String(segundo), '-i', url, '-frames:v', '1', '-vf', 'scale=640:-2', '-q:v', '4', '-y', destino],
-          { timeout: 60000 }, (err) => (err ? mal(new Error(`ffmpeg no pudo sacar el fotograma: ${err.message}`)) : ok())));
-        return destino;
-      } finally {
-        fotogramasEnMarcha--;
-        esperandoFotograma.shift()?.();
-      }
-    })();
-    p.finally(() => fotogramas.delete(key)).catch(() => {});
-    fotogramas.set(key, p);
-  }
-  return fotogramas.get(key);
-}
-
 // Cada sesión es un ffmpeg escribiendo trozos de 4 s en una carpeta temporal. Lee a 3× la
 // velocidad normal (no descarga la película entera de golpe) y se borra al cerrar el vídeo
 // o tras 10 minutos sin que nadie pida nada. Si una pausa dura más, el reproductor prepara
@@ -434,6 +398,7 @@ const rutas = {
   '/api/meta': (p) => meta.deArchivo(p.get('key')),
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo')),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
+  '/api/plataformas': async () => ({ plataformas: await meta.listaPlataformas().catch(() => []), patrones: meta.patronesPlataforma() }),
   '/api/catalogo': () => catalogo(),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
@@ -501,13 +466,6 @@ http
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json);
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
-      if (url.pathname === '/api/fotograma') {
-        const key = url.searchParams.get('key');
-        if (prohibido(key)) return json(res, 403, { error: 'Esta carpeta no se puede ver desde internet' });
-        const jpg = await readFile(await fotograma(key));
-        res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=604800' });
-        return res.end(jpg);
-      }
       const ruta = rutas[url.pathname];
       if (ruta && (prohibido(url.searchParams.get('key')) || prohibido(url.searchParams.get('prefijo')))) {
         return json(res, 403, { error: 'Esta carpeta no se puede ver desde internet' });
