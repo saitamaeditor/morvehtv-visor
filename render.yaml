@@ -18,6 +18,11 @@ services:
         sync: false
       - key: E2_SECRET_ACCESS_KEY
         sync: false
+      # Avisos en Telegram (ver telegram.js): token del bot y, opcional, id del grupo con temas
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT
+        sync: false
       - key: TMDB_KEY
         sync: false
       - key: TMDB_IDIOMA

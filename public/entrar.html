@@ -109,8 +109,10 @@
     function $(id) { return document.getElementById(id); }
     if (/Android TV|AFT|BRAVIA|SMART-TV|SmartTV|Tizen|Web0S|webOS|HbbTV|GoogleTV/i.test(navigator.userAgent)) document.documentElement.className += ' tele';
 
+    // Al entrar se vuelve a donde se quería ir (p. ej. la sección de un aviso de Telegram)
+    var destino = '/' + (location.hash && location.hash !== '#registro' ? location.hash : '');
     // Si ya hay sesión, directo a la app
-    fetch('/api/sesion', { credentials: 'same-origin' }).then(function (r) { if (r.ok) location.replace('/'); }).catch(function () {});
+    fetch('/api/sesion', { credentials: 'same-origin' }).then(function (r) { if (r.ok) location.replace(destino); }).catch(function () {});
 
     var modo = 'entrar';
     function cambiar(nuevo) {
@@ -163,7 +165,7 @@
         headers: { 'content-type': 'application/json' }, body: JSON.stringify(datos)
       }).then(function (r) {
         return r.json().then(function (d) {
-          if (r.ok) return location.replace('/');
+          if (r.ok) return location.replace(destino);
           boton.disabled = false;
           error.textContent = d.error || 'No se pudo completar';
         });

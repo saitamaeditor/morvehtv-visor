@@ -65,6 +65,10 @@ function cambiar(fn) {
 
 const error = (status, message) => Object.assign(new Error(message), { status });
 
+// Otros datos de MorvehTV que viven en el mismo archivo (los temas de Telegram…)
+export const leerAjuste = async (clave) => (await descargar())[clave] ?? null;
+export const guardarAjuste = (clave, valor) => cambiar((d) => { d[clave] = valor; });
+
 // ---------- Cuentas ----------
 // La contraseña se guarda con scrypt, nunca en claro. La sesión es una cookie firmada con el
 // secreto del archivo que lleva la «generación» de la cuenta: cambiar la contraseña o «cerrar
