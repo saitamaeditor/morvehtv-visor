@@ -181,15 +181,14 @@ function pintar() {
 
 // ---------- Portada por categorías ----------
 // Las mismas categorías que MorvehTV. Cada carpeta de primer nivel del bucket se asigna a
-// una por su nombre («05 - DOCUMENTALES», «SERIES ANIME», «Peliculas»…); la regla más
-// concreta va primero para que «SERIES ANIME» no caiga en Series.
+// una por su nombre («05 - DOCUMENTALES», «Peliculas»…); la regla más concreta va primero
+// para que «DOCUSERIES» o «SERIES TURCAS» no caigan en Series. El anime no tiene categoría
+// propia: va en Películas o Series (p. ej. «PELICULAS/PELICULAS NETFLIX ANIME/»).
 const CATEGORIAS = [
-  { id: 'pelicula', nombre: 'Películas', icono: '🎬', color: '#e5484d', es: (n) => /pelicul|cine|movie/.test(n) && !/anime/.test(n) },
-  { id: 'serie', nombre: 'Series', icono: '📺', color: '#4f8cff', es: (n) => /serie/.test(n) && !/anime|docu|turc/.test(n) },
+  { id: 'pelicula', nombre: 'Películas', icono: '🎬', color: '#e5484d', es: (n) => /pelicul|cine|movie/.test(n) },
+  { id: 'serie', nombre: 'Series', icono: '📺', color: '#4f8cff', es: (n) => /serie/.test(n) && !/docu|turc/.test(n) },
   { id: 'documental', nombre: 'Documentales', icono: '🌍', color: '#30a46c', es: (n) => /documental/.test(n) },
   { id: 'docuserie', nombre: 'Docuseries', icono: '🎞️', color: '#12a594', es: (n) => /docuserie/.test(n) },
-  { id: 'anime-pelicula', nombre: 'Películas anime', icono: '🍥', color: '#d6409f', es: (n) => /anime/.test(n) && !/serie/.test(n) },
-  { id: 'anime-serie', nombre: 'Series anime', icono: '🐉', color: '#8e4ec6', es: (n) => /anime/.test(n) && /serie/.test(n) },
   { id: 'programa', nombre: 'Programas de TV', icono: '📡', color: '#f76b15', es: (n) => /programa|\btv\b/.test(n) },
   { id: 'novela-turca', nombre: 'Novelas turcas', icono: '🌙', color: '#ffb224', es: (n) => /novela|turc/.test(n) },
 ];

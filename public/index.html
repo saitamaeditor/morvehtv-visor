@@ -415,9 +415,9 @@
   }
 
   /* ---------- Tarjetas de categoría: el mismo aspecto en móvil, tablet, ordenador y tele ----------
-     Todas con la misma proporción y el texto abajo; columnas según el ancho (8 categorías = 2
-     filas de 4 en pantallas grandes) y letra que crece con la pantalla */
-  .categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 22px); }
+     Todas con la misma proporción y el texto abajo; columnas según el ancho (6 categorías = 2
+     filas de 3 en pantallas grandes, 3 de 2 en el móvil) y letra que crece con la pantalla */
+  .categorias { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(10px, 1.4vw, 22px); }
   .cat { display: flex; flex-direction: column; justify-content: flex-end; aspect-ratio: 16 / 9; min-height: 0; padding: clamp(12px, 1.5vw, 24px); }
   /* (sin esto, la regla de los iconos del reproductor encogía el emoji y tapaba el nombre) */
   .cat .icono { width: auto; height: auto; line-height: 1; font-size: clamp(24px, 2.4vw, 40px); }
@@ -432,16 +432,16 @@
   }
   /* Móvil en vertical: un poco más altas, para que quepan el icono, el nombre y los datos */
   @media (max-width: 600px) { .cat { aspect-ratio: 4 / 3; } }
-  /* Móvil en horizontal: pantalla ancha y baja, 4 por fila */
+  /* Móvil en horizontal: pantalla ancha y baja, 3 por fila */
   @media (max-height: 500px) and (orientation: landscape) {
-    .categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .categorias { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .cat { aspect-ratio: 16 / 9; padding: 10px 12px; }
     .cat .icono { font-size: 22px; }
     .cat .nombre, .cat.con-imagen .nombre { font-size: 15px; }
   }
   /* Tele: medidas por el alto de la pantalla (las teles muestran la web a unos 960×540) */
-  .tele .categorias { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2.6vh 1.6vw; }
-  .tele .cat { aspect-ratio: 4 / 3; padding: 2.6vh 1.4vw; }
+  .tele .categorias { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2.6vh 1.6vw; }
+  .tele .cat { aspect-ratio: 16 / 9; padding: 2.6vh 1.4vw; }
   .tele .cat .icono { font-size: 5.2vh; }
   .tele .cat .nombre, .tele .cat.con-imagen .nombre { font-size: 3.6vh; }
   .tele .cat .meta { font-size: 2.2vh; }

@@ -529,7 +529,7 @@ export async function deArchivo(key) {
   };
 }
 
-// Carpeta de una serie («SERIES ANIME/¡A por Jiro!/») o de una de sus temporadas
+// Carpeta de una serie («SERIES/¡A por Jiro!/») o de una de sus temporadas
 // («…/Temporada 2/»: la ficha de la serie más el póster, la sinopsis y los episodios de esa
 // temporada). Las de categoría no tienen.
 export async function deCarpeta(prefijo) {
@@ -570,8 +570,6 @@ const DESCUBRIR = {
   serie: ['/discover/tv', { without_genres: '16,99,10764,10767' }],
   documental: ['/discover/movie', { with_genres: '99' }],
   docuserie: ['/discover/tv', { with_genres: '99' }],
-  'anime-pelicula': ['/discover/movie', { with_genres: '16', with_original_language: 'ja' }],
-  'anime-serie': ['/discover/tv', { with_genres: '16', with_original_language: 'ja' }],
   programa: ['/discover/tv', { with_genres: '10764' }],
   'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
 };
