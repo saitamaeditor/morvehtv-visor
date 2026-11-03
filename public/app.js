@@ -45,7 +45,14 @@ function irA(prefijo) {
   location.hash = encodeURIComponent(prefijo);
 }
 
+// Cada carga lleva un número: si mientras llega la respuesta ha empezado otra (elegir perfil y
+// cambiar de carpeta a la vez, doble pulsación en «Cargar más»…), la vieja se descarta. Antes
+// las dos se sumaban a la lista y los archivos salían duplicados.
+let cargaActual = 0;
+
 async function cargar(mas = false) {
+  if (mas && cargar.ocupado) return;
+  const n = ++cargaActual;
   const items = $('#items');
   pintarPestanas();
   // «Seguir viendo» y «Favoritos» (pestañas de arriba): listas del perfil, no carpetas de e2
@@ -60,17 +67,23 @@ async function cargar(mas = false) {
     pintarCabecera(estado.prefijo);
   }
   pintarMigas();
+  cargar.ocupado = true;
   try {
     const d = await api('/api/listar', { prefijo: estado.prefijo, token: estado.token ?? '' });
-    estado.carpetas.push(...d.carpetas);
-    estado.archivos.push(...d.archivos);
+    if (n !== cargaActual) return;
+    // Y por si acaso, nada que ya esté en la lista vuelve a entrar
+    const hay = new Set(estado.carpetas.concat(estado.archivos.map((f) => f.key)));
+    estado.carpetas.push(...d.carpetas.filter((c) => !hay.has(c)));
+    estado.archivos.push(...d.archivos.filter((f) => !hay.has(f.key)));
     estado.token = d.siguiente;
     // Mientras suena la intro no se dibuja la portada (los datos ya se han pedido): así la
     // intro va fluida en la tele y el móvil
     if (window.morvehIntroFin) { await window.morvehIntroFin; window.morvehIntroFin = null; }
     pintar();
   } catch (e) {
-    items.innerHTML = `<div class="vacio error">No se pudo leer el bucket: ${e.message}</div>`;
+    if (n === cargaActual) items.innerHTML = `<div class="vacio error">No se pudo leer el bucket: ${e.message}</div>`;
+  } finally {
+    if (n === cargaActual) cargar.ocupado = false;
   }
 }
 
