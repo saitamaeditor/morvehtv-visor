@@ -371,7 +371,8 @@ export function analizar(key) {
   if (ep || carpetaSerie) {
     const carpetaTemp = carpetas.map((c) => c.match(CARPETA_TEMPORADA)).find(Boolean);
     const temporada = Number(ep?.[2] ?? ep?.[4] ?? ep?.[6] ?? carpetaTemp?.[1] ?? 1);
-    const episodio = Number(ep?.[3] ?? ep?.[5] ?? ep?.[7] ?? archivo.match(/(\d{1,3})/)?.[1]);
+    // (sin la extensión: el «4» de «.mp4» no es un número de episodio)
+    const episodio = Number(ep?.[3] ?? ep?.[5] ?? ep?.[7] ?? archivo.replace(/\.[a-z0-9]{2,4}$/i, '').match(/(\d{1,3})/)?.[1]);
     // La carpeta de la serie manda sobre el nombre del archivo, que suele venir sin tildes
     const nombreCarpeta = [...carpetas].reverse().find((c) => !CARPETA_SERIE.test(c) && !CARPETA_TEMPORADA.test(c));
     const { anio, antes } = separarAnio(nombreCarpeta || ep?.[1] || '');

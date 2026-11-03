@@ -84,7 +84,8 @@ const ACENTOS = { peliculas: 'películas', pelicula: 'película', animacion: 'an
 const EMOJIS = [[/anime/, '🍥'], [/docu/, '🌍'], [/infantil|niñ|nin[oa]s|kids|anima/, '🧸'], [/turc/, '🇹🇷'], [/novela/, '💞'],
   [/music|músic|concierto/, '🎵'], [/programa|\btv\b|reality/, '📡'], [/terror|miedo/, '👻'], [/deport|futbol|fútbol/, '⚽'],
   [/estreno|nuevo/, '🆕'], [/serie/, '📺'], [/pel[ií]cula|cine|movie/, '🎬']];
-function nombreSeccion(carpeta) {
+// (también lo usa xtream.js para los nombres de las categorías)
+export function nombreSeccion(carpeta) {
   const texto = carpeta.replace(/\/$/, '').toLowerCase().split(/\s+/).map((p) => ACENTOS[p] ?? p).join(' ');
   const emoji = (EMOJIS.find(([re]) => re.test(texto)) ?? [null, '📁'])[1];
   return { emoji, nombre: texto.charAt(0).toUpperCase() + texto.slice(1) };

@@ -2,7 +2,7 @@
 // Todo se guarda en un único archivo oculto del bucket (_morvehtv/usuarios.json): así lo
 // comparten el servidor de casa y el de Render y no se pierde cuando Render se reinicia. Es lo
 // único que MorvehTV escribe en e2; los vídeos nunca se tocan.
-import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 
@@ -110,6 +110,28 @@ export async function sesion(req) {
   const d = await leer();
   const c = (d.cuentas || []).find((x) => x.id === id);
   return c && mismoHash(f, firma(d.secreto, c)) ? c : null;
+}
+
+// Usuario y contraseña que llegan de un reproductor externo (tipo Xtream), sin cookie. Cada
+// petición los trae, así que lo ya comprobado se recuerda 10 minutos (si cambia la contraseña,
+// deja de valer al momento). Devuelve la cuenta o null; con demasiados fallos, error 429.
+const comprobadas = new Map(); // usuario → { huella, clave, hasta }
+export async function credenciales(usuario, clave, ip) {
+  usuario = normalizar(usuario);
+  clave = String(clave ?? '');
+  const d = await leer();
+  const c = (d.cuentas || []).find((x) => x.usuario === usuario);
+  const huella = createHash('sha256').update(`${c ? c.sal : ''}:${clave}`).digest('hex');
+  const v = comprobadas.get(usuario);
+  if (c && v && v.huella === huella && v.clave === c.clave && v.hasta > Date.now()) return c;
+  const anotarIp = frenar(`login:${ip}`, 10, 10);
+  const anotarUsuario = frenar(`usuario:${usuario}`, 10, 10);
+  if (!c || !mismoHash(await hashClave(clave, c ? c.sal : 'sin-cuenta'), c.clave)) {
+    anotarIp(); anotarUsuario();
+    return null;
+  }
+  comprobadas.set(usuario, { huella, clave: c.clave, hasta: Date.now() + 10 * 60000 });
+  return c;
 }
 
 async function necesitaCuenta(req) {
