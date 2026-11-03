@@ -17,6 +17,7 @@ import * as acceso from './acceso.js';
 import * as perfiles from './perfiles.js';
 import * as telegram from './telegram.js';
 import * as xtream from './xtream.js';
+import * as subidas from './subidas.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,6 +57,8 @@ const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(ke
 await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
 // Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso
 xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales });
+// Panel de subida directa a e2, solo administradores (ver subidas.js)
+subidas.iniciar({ s3, bucket: E2_BUCKET, foto: async () => { if (!foto) await repasar(); return foto; }, sesion: perfiles.sesion, esAdmin: perfiles.esAdmin });
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);
 
 function firmar(key, { segundos = 4 * 3600 } = {}) {
@@ -483,7 +486,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'subidas.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -517,6 +520,7 @@ http
 
       if (url.pathname === '/api/eventos') return eventos(req, res);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
+      if (subidas.RUTAS.includes(url.pathname)) return await subidas.atender(url.pathname, req, res, json);
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
       const ruta = rutas[url.pathname];

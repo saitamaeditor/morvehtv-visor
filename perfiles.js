@@ -103,6 +103,11 @@ const cookieSesion = (valor, maxAge) =>
   `${COOKIE}=${valor}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${NUBE ? '; Secure' : ''}`;
 const ponerSesion = (res, d, c) => res.setHeader('set-cookie', cookieSesion(`${c.id}.${firma(d.secreto, c)}`, 31536000));
 
+// Los administradores (pueden subir contenido) se apuntan por usuario en el campo «admins» del
+// archivo; un servidor también puede añadir los suyos con VISOR_ADMINS («usuario1,usuario2»)
+const ADMINS_ENTORNO = String(process.env.VISOR_ADMINS ?? '').split(',').map(normalizar).filter(Boolean);
+export const esAdmin = async (c) => Boolean(c && [...((await leer()).admins || []), ...ADMINS_ENTORNO].includes(c.usuario));
+
 // La cuenta de quien hace la petición, o null (la usa también el servidor para dejar pasar)
 export async function sesion(req) {
   const [id, f] = String(cookies(req)[COOKIE] ?? '').split('.');
@@ -172,7 +177,7 @@ export async function atender(ruta, req, res, json, ip) {
     const c = await necesitaCuenta(req);
     const pendientes = posPendientes.get(c.id);
     const posiciones = { ...c.posiciones, ...(pendientes ? Object.fromEntries(pendientes) : {}) };
-    return json(res, 200, { ...publica(c), favoritos: c.favoritos, posiciones });
+    return json(res, 200, { ...publica(c), admin: await esAdmin(c), favoritos: c.favoritos, posiciones });
   }
   if (req.method !== 'POST') throw error(405, 'Método no permitido');
   const datos = await cuerpo(req);

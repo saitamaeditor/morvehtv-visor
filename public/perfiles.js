@@ -42,6 +42,15 @@ function pintarBotonCuenta() {
   b.hidden = !yo;
   b.innerHTML = '';
   if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
+  // Los administradores tienen al lado el panel de subida
+  if (yo && yo.admin && !$('#boton-subir')) {
+    const s = el('a', 'boton', '⬆ ');
+    s.id = 'boton-subir';
+    s.href = '/subir.html';
+    s.title = 'Subir contenido a e2';
+    s.append(el('span', 'txt', 'Subir'));
+    $('header').insertBefore(s, b);
+  }
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -98,6 +107,15 @@ function abrirCuenta() {
   x.onclick = cerrarCuenta;
   cab.append(el('div', 'inicial grande', inicial(yo)), datos, x);
   caja.append(cab);
+
+  // Administradores: acceso al panel de subida
+  if (yo.admin) {
+    const bsub = bloque('Subir contenido', 'Sube películas, series y subtítulos directamente a IDrive e2.');
+    const ir = el('a', 'boton boton-acento', '⬆ Abrir el panel de subida');
+    ir.href = '/subir.html';
+    bsub.s.append(ir);
+    caja.append(bsub.s);
+  }
 
   // Nombre visible
   const bn = bloque('Nombre', 'Es el que se ve arriba. Tu usuario para entrar no cambia.');

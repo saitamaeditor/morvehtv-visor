@@ -311,6 +311,13 @@
   #mi-cuenta { flex: none; margin-left: auto; padding: 3px 12px 3px 3px; border-radius: 999px; background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); }
   #mi-cuenta:hover, #mi-cuenta:focus { border-color: var(--acento); outline: none; }
   #mi-cuenta + #salir-app { margin-left: 0; }
+  #boton-subir { flex: none; margin-left: auto; border-radius: 999px; padding: 6px 14px; font-weight: 700; background: rgba(0,164,220,.15); border-color: rgba(0,164,220,.4); color: #fff; }
+  #boton-subir:hover, #boton-subir:focus { background: var(--acento); border-color: var(--acento); outline: none; }
+  #boton-subir + #mi-cuenta { margin-left: 0; }
+  /* En el móvil no cabe arriba: está dentro de «Mi cuenta» */
+  @media (max-width: 600px) { #boton-subir { display: none; } #boton-subir + #mi-cuenta { margin-left: auto; }
+    /* Logo, pestañas y cuenta en una sola fila: si no caben, las pestañas se deslizan */
+    header { flex-wrap: nowrap; } header .logo { flex: 1 1 auto; min-width: 0; } }
   .inicial { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; flex: none;
     background: linear-gradient(135deg, #00a4dc, #0072a8); color: #fff; font-weight: 800; font-size: 15px; }
   .inicial.grande { width: 64px; height: 64px; font-size: 30px; }
