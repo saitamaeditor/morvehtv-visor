@@ -261,14 +261,37 @@ function portada(carpetas) {
 
 // ---------- Carpetas de plataforma ----------
 // Una carpeta con el nombre de una plataforma («PELICULAS NETFLIX», «SERIES PRIME VIDEO»…)
-// lleva el logo y el color de la plataforma y, de fondo, una de tus películas de esa carpeta o,
-// si aún está vacía, algo popular de esa plataforma
+// lleva una portada propia: un mosaico con los carteles de lo que hay dentro (completado con
+// lo más visto de esa plataforma si aún hay pocos) y, abajo, el logo, el nombre y el color de
+// la plataforma
 const COLORES_PLATAFORMA = {
   Netflix: '#e50914', 'Prime Video': '#00a8e1', 'Disney+': '#113ccf', Max: '#5822b4', 'Movistar Plus+': '#019df4',
   'Apple TV+': '#6e7480', SkyShowtime: '#ff2d6f', Filmin: '#e6007e', 'Rakuten TV': '#bf0000', Atresplayer: '#ff6a00',
   Mitele: '#00b3e3', 'RTVE Play': '#e2001a',
 };
 let plataformasConocidas = null;
+
+// Hasta 4 carteles distintos: primero los de tus títulos de esa carpeta (los episodios de una
+// serie comparten cartel), luego los populares de la plataforma
+const cartelesPl = new Map();
+function cartelesPlataforma(id, carpeta) {
+  if (!cartelesPl.has(carpeta)) {
+    cartelesPl.set(carpeta, (async () => {
+      const d = await api('/api/buscar', { prefijo: carpeta, q: '' }).catch(() => null);
+      const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video')).slice(0, 16);
+      const metas = await Promise.all(videos.map((f) => pedirMeta('archivo', f.key)));
+      const lista = [];
+      const meter = (u) => { if (u && lista.indexOf(u) < 0 && lista.length < 4) lista.push(u); };
+      metas.forEach((m) => m && m.encontrado && meter(m.poster));
+      if (lista.length < 4) {
+        const r = await api('/api/portada', { cat: id }).catch(() => null);
+        ((r && r.carteles) || []).forEach(meter);
+      }
+      return lista;
+    })());
+  }
+  return cartelesPl.get(carpeta);
+}
 
 async function marcarPlataforma(t, carpeta) {
   if (!plataformasConocidas) plataformasConocidas = api('/api/plataformas').catch(() => { plataformasConocidas = null; return null; });
@@ -283,19 +306,26 @@ async function marcarPlataforma(t, carpeta) {
   const mini = t.querySelector('.mini');
   mini.className = 'mini cartel'; // mismo tamaño que los carteles de las películas de al lado
   mini.textContent = '';
-  if (pl && pl.logo) { const i = el('img', 'logo-plataforma'); i.src = pl.logo; i.alt = n; mini.append(i); }
-  else mini.append(el('span', 'logo-plataforma texto', n));
+  const serie = /serie|novela|program/.test(limpiar(`${estado.prefijo} ${nombre(carpeta)}`));
+  const mosaico = el('div', 'mosaico');
+  const sello = el('div', 'sello');
+  if (pl && pl.logo) { const i = el('img', 'logo-plataforma'); i.src = pl.logo; i.alt = ''; sello.append(i); }
+  sello.append(el('div', 'nombre-plataforma', n), el('div', 'tipo-plataforma', serie ? 'Series' : 'Películas'));
+  mini.append(mosaico, el('div', 'velo'), sello);
   const meta = t.querySelector('.meta');
   meta.textContent = n;
   if (!tamanos.has(carpeta)) tamanos.set(carpeta, api('/api/tamano', { prefijo: carpeta }).catch(() => null));
-  tamanos.get(carpeta).then((r) => { if (r) meta.textContent = `${n} · ${r.objetos ? `${r.objetos} archivos · ${bytes(r.bytes)}` : 'vacía'}`; });
-  const serie = /serie|novela|program/.test(limpiar(`${estado.prefijo} ${nombre(carpeta)}`));
-  fondoCategoria({ id: `pl:${serie ? 'serie' : 'pelicula'}:${n}` }, [carpeta]).then((url) => {
-    if (!url || !t.isConnected) return;
+  tamanos.get(carpeta).then((r) => { if (r) meta.textContent = r.objetos ? `${r.objetos} archivos · ${bytes(r.bytes)}` : 'Vacía'; });
+  const urls = await cartelesPlataforma(`pl:${serie ? 'serie' : 'pelicula'}:${n}`, carpeta);
+  if (!t.isConnected || !urls.length) return;
+  // Con 1–3 carteles se repiten para llenar las 4 casillas
+  for (let i = 0; i < 4; i++) {
+    const c = el('div', 'casilla');
     const img = new Image();
-    img.onload = () => { mini.style.setProperty('--img', `url("${url}")`); mini.classList.add('con-fondo'); };
-    img.src = url;
-  });
+    img.onload = () => { c.style.backgroundImage = `url("${img.src}")`; c.classList.add('cargada'); };
+    img.src = urls[i % urls.length];
+    mosaico.append(c);
+  }
 }
 
 function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {

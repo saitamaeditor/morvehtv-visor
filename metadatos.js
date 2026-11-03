@@ -335,18 +335,20 @@ const DESCUBRIR = {
   programa: ['/discover/tv', { with_genres: '10764' }],
   'novela-turca': ['/discover/tv', { with_original_language: 'tr' }],
 };
-const portadas = new Map(); // categoría → { hasta, fondos }
+const portadas = new Map(); // categoría → { hasta, fondos, carteles }
 
 export async function portadaCategoria(id) {
   const c = portadas.get(id);
-  if (c && c.hasta > Date.now()) return { fondos: c.fondos };
+  if (c && c.hasta > Date.now()) return { fondos: c.fondos, carteles: c.carteles };
   const desc = id.startsWith('pl:') ? await descubrirPlataforma(id) : DESCUBRIR[id];
   if (!desc) throw Object.assign(new Error('Categoría desconocida'), { status: 400 });
   const [ruta, filtro] = desc;
   const { results = [] } = await pedir(ruta, { sort_by: 'popularity.desc', 'vote_count.gte': '100', include_adult: 'false', ...filtro });
   const fondos = results.filter((r) => r.backdrop_path).slice(0, 8).map((r) => img(r.backdrop_path, 'w780'));
-  portadas.set(id, { hasta: Date.now() + 24 * 3600000, fondos });
-  return { fondos };
+  // Los carteles, para el mosaico de las carpetas de plataforma
+  const carteles = results.filter((r) => r.poster_path).slice(0, 8).map((r) => img(r.poster_path, 'w342'));
+  portadas.set(id, { hasta: Date.now() + 24 * 3600000, fondos, carteles });
+  return { fondos, carteles };
 }
 
 // Elegir a mano el título correcto cuando la búsqueda automática se equivoca

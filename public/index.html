@@ -358,15 +358,32 @@
   #perfil-actual + #salir-app { margin-left: 0; }
   .mini-avatar { width: 30px; height: 30px; border-radius: 8px; font-size: 18px; border-width: 0; }
   /* Mi lista */
-  /* Carpetas de plataforma («PELICULAS NETFLIX»…): logo y color de la plataforma */
-  .item.carpeta-plataforma { border-color: var(--c); box-shadow: inset 0 3px 0 var(--c); }
-  .item.carpeta-plataforma .mini { position: relative; background: linear-gradient(135deg, var(--c), #0b0c0f 85%); }
-  .item.carpeta-plataforma .mini::before { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: var(--img) center / cover; opacity: 0; transition: opacity .5s; }
-  .item.carpeta-plataforma .mini::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; background: linear-gradient(180deg, rgba(0,0,0,.15), rgba(0,0,0,.55)); }
-  .item.carpeta-plataforma .mini.con-fondo::before { opacity: 1; }
-  .item.carpeta-plataforma .logo-plataforma { position: relative; z-index: 1; width: 42%; max-width: 120px; height: auto; aspect-ratio: 1; object-fit: contain; border-radius: 18%; box-shadow: 0 4px 18px rgba(0,0,0,.6); }
-  .item.carpeta-plataforma .logo-plataforma.texto { width: auto; aspect-ratio: auto; padding: 8px 14px; background: var(--c); color: #fff; font-size: 18px; font-weight: 800; border-radius: 8px; }
-  .item.carpeta-plataforma:hover, .item.carpeta-plataforma:focus { border-color: var(--c); }
+  /* Carpetas de plataforma («PELICULAS NETFLIX»…): mosaico de carteles y, abajo, el sello de
+     la plataforma (logo, nombre y si son series o películas) sobre su color */
+  .item.carpeta-plataforma { border-color: var(--c); }
+  .item.carpeta-plataforma .mini { position: relative; display: block; background: radial-gradient(circle at 50% 30%, var(--c), #0b0c0f 75%); }
+  .item.carpeta-plataforma .mosaico { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: flex; flex-wrap: wrap; }
+  .item.carpeta-plataforma .casilla { width: 50%; height: 50%; background: center / cover no-repeat; opacity: 0; transition: opacity .6s, transform .4s; }
+  .item.carpeta-plataforma .casilla.cargada { opacity: 1; }
+  .item.carpeta-plataforma:hover .casilla, .item.carpeta-plataforma:focus .casilla { transform: scale(1.04); }
+  .item.carpeta-plataforma .velo { position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+    background: linear-gradient(180deg, rgba(11,12,15,.05) 0%, rgba(11,12,15,.25) 35%, rgba(11,12,15,.92) 72%, #0b0c0f 100%); }
+  .item.carpeta-plataforma .velo::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 45%; background: linear-gradient(0deg, var(--c), transparent); opacity: .45; }
+  .item.carpeta-plataforma .sello { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 8% 9%; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .item.carpeta-plataforma .logo-plataforma { width: 30%; max-width: 84px; height: auto; border-radius: 22%; box-shadow: 0 6px 20px rgba(0,0,0,.7), 0 0 0 2px rgba(255,255,255,.12); margin-bottom: 8%; }
+  .item.carpeta-plataforma .nombre-plataforma { font-size: 21px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; line-height: 1.05; color: #fff;
+    text-shadow: 0 2px 10px rgba(0,0,0,.9), 0 0 22px var(--c); }
+  .item.carpeta-plataforma .tipo-plataforma { margin-top: 6px; padding: 3px 10px; border-radius: 99px; background: var(--c); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .item.carpeta-plataforma .mini::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: var(--c); }
+  .item.carpeta-plataforma:hover, .item.carpeta-plataforma:focus { border-color: var(--c); box-shadow: 0 0 0 2px var(--c), 0 8px 28px rgba(0,0,0,.5); }
+  .lista .item.carpeta-plataforma .sello, .lista .item.carpeta-plataforma .velo { display: none; }
+  @media (max-width: 600px) {
+    .item.carpeta-plataforma .nombre-plataforma { font-size: 16px; }
+    .item.carpeta-plataforma .tipo-plataforma { font-size: 9px; padding: 2px 8px; margin-top: 5px; }
+  }
+  .tele .item.carpeta-plataforma .nombre-plataforma { font-size: 2.9vh; letter-spacing: .02em; }
+  .tele .item.carpeta-plataforma .tipo-plataforma { font-size: 1.6vh; padding: .4vh 1.2vh; margin-top: .8vh; }
+  .tele .item.carpeta-plataforma .logo-plataforma { max-width: 8vh; margin-bottom: 1vh; }
 
   /* Pestañas «Seguir viendo» y «Favoritos» junto al logo */
   #pestanas { display: flex; gap: 6px; }
