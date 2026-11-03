@@ -4,8 +4,8 @@
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
 import { readFile, mkdir, rm, stat } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { randomUUID, createHash } from 'node:crypto';
 import os from 'node:os';
 import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -388,7 +388,7 @@ function eventos(req, res) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
   res.write('retry: 3000\n\n');
   // Versión del servidor: si cambia (se publicó algo nuevo), la app se recarga sola
-  res.write(`event: version\ndata: ${JSON.stringify(ARRANQUE)}\n\n`);
+  res.write(`event: version\ndata: ${JSON.stringify(VERSION)}\n\n`);
   oyentes.add(res);
   const latido = setInterval(() => res.write(': latido\n\n'), 25000);
   res.on('close', () => { clearInterval(latido); oyentes.delete(res); });
@@ -435,8 +435,19 @@ async function js(fichero) {
   return code;
 }
 
-// Hora a la que arrancó el servidor (para saber si Render ya ha cargado la última versión)
+// Hora a la que arrancó el servidor. En el plan gratis de Render también cambia al despertar
+// de la inactividad, así que no dice qué código hay publicado: para eso está VERSION.
 const ARRANQUE = new Date().toISOString();
+
+// Huella del código: cambia con cada publicación y solo entonces. La página pide «app.js?v=…»
+// con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
+const VERSION = (() => {
+  const h = createHash('sha256');
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
+  return h.digest('hex').slice(0, 10);
+})();
+const CON_VERSION = /(src|href)="(polyfills\.js|intro\.css|intro\.js|app\.js|perfiles\.js)"/g;
 
 const json = (res, status, datos) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -455,7 +466,7 @@ http
       if (url.pathname === '/api/entrar' && req.method === 'POST') return await acceso.entrar(req, res);
       // Para la pantalla de entrada (¿PIN o contraseña?) y para que Render sepa que está viva
       if (url.pathname === '/api/modo') return json(res, 200, { nube: acceso.NUBE });
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, arranque: ARRANQUE, perfiles: perfiles.escritura });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura });
       if (permiso === 'pin' && !PUBLICO.includes(url.pathname)) {
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Falta el PIN' });
         res.writeHead(302, { location: '/entrar.html' });
@@ -479,6 +490,12 @@ http
       const fichero = path.join(dir, 'public', url.pathname === '/' ? 'index.html' : path.normalize(decodeURIComponent(url.pathname)));
       if (!fichero.startsWith(path.join(dir, 'public'))) throw Object.assign(new Error('No'), { status: 403 });
       const ext = path.extname(fichero);
+      // La página nunca se guarda en caché y enlaza sus archivos con la versión
+      if (ext === '.html') {
+        const html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
+        res.writeHead(200, { 'content-type': tipos[ext], 'cache-control': 'no-store' });
+        return res.end(html);
+      }
       const cuerpo = ext === '.js' ? await js(fichero) : await readFile(fichero);
       res.writeHead(200, { 'content-type': tipos[ext] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
       res.end(cuerpo);
