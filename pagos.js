@@ -35,7 +35,11 @@ export const USDC_BASE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
 export const CADENA = 8453;
 const TRANSFER = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'; // Transfer(address,address,uint256)
 const DIRECCION = String(process.env.CRIPTO_DIRECCION ?? '').trim().toLowerCase();
-const RPC = String(process.env.CRIPTO_RPC ?? 'https://mainnet.base.org').trim();
+// Nodos de Base para leer la blockchain: varios públicos que se turnan (el de Base limita las
+// peticiones por IP y Render comparte IP con muchos servicios). CRIPTO_RPC puede poner los tuyos
+// (separados por comas), por ejemplo uno gratuito de Alchemy o QuickNode con tu clave.
+const RPCS = String(process.env.CRIPTO_RPC ?? '').split(',').map((x) => x.trim()).filter((x) => /^https:\/\//.test(x) || /^http:\/\/127\./.test(x));
+if (!RPCS.length) RPCS.push('https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://base.drpc.org', 'https://1rpc.io/base');
 const OPCIONES = String(process.env.CRIPTO_PRECIOS ?? '4:1,10:3,40:12').split(',').map((x) => x.trim().split(':').map(Number))
   .filter(([u, m]) => u > 0 && m > 0 && Number.isFinite(u) && Number.isInteger(m))
   .map(([usdc, meses], i) => ({ id: String(i + 1), usdc, meses }));
@@ -43,18 +47,43 @@ const MES = 30 * 864e5;
 const CADUCA = 60 * 60000; // un pedido se puede pagar durante 1 hora…
 const RECONOCE = 48 * 3600000; // …y aun así se reconoce si llega en las 48 h siguientes
 const CONFIRMACIONES = 3; // bloques de margen (~6 s) antes de dar un pago por bueno
+// Direcciones que NO son una cartera y donde un pago se perdería: los contratos de las monedas
+// (USDC y USDT en las redes más usadas), la dirección cero y la de «quemar»
+const PROHIBIDAS = new Set([
+  '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC en Ethereum
+  USDC_BASE, // USDC en Base
+  '0xd9aaec86b65d86f6a7b5b1b0c42ffa531710b6ca', // USDbC (puente) en Base
+  '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359', '0x2791bca1f2de4661ed88a30c99a7a9449aa84174', // USDC en Polygon
+  '0xaf88d065e77c8cc2239327c5edb3a432268e5831', '0xff970a61a04b1ca14834a43f5de4533ebddb5cc8', // USDC en Arbitrum
+  '0x0b2c639c533813f4aa9d7837caf62653d097ff85', '0x7f5c764cbc14f9669b88837ca1490cca17c31607', // USDC en Optimism
+  '0xb97ef9ef8734c71904d8002f8b6bc66dd9c48a6e', // USDC en Avalanche
+  '0xdac17f958d2ee523a2206206994597c13d831ec7', '0xfde4c96c8593536e31f229ea8f37b2ada2699bb2', // USDT
+  '0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead',
+]);
 const valida = /^0x[0-9a-f]{40}$/.test(DIRECCION);
-export const activo = valida && OPCIONES.length > 0;
-export const estado = !DIRECCION ? 'falta CRIPTO_DIRECCION'
+let problema = !DIRECCION ? 'falta CRIPTO_DIRECCION'
   : !valida ? 'CRIPTO_DIRECCION no es una dirección válida (0x y 40 caracteres)'
-    : !OPCIONES.length ? 'CRIPTO_PRECIOS no es válido (formato 4:1,10:3,40:12)' : `ok (USDC en Base · ${DIRECCION.slice(0, 6)}…${DIRECCION.slice(-4)})`;
+    : PROHIBIDAS.has(DIRECCION) ? 'CRIPTO_DIRECCION es la dirección de un CONTRATO DE MONEDA, no de tu cartera: los pagos se perderían. Pon la dirección pública de tu cartera en Base'
+      : !OPCIONES.length ? 'CRIPTO_PRECIOS no es válido (formato 4:1,10:3,40:12)' : null;
+export let activo = !problema;
+export let estado = problema ?? `ok (USDC en Base · ${DIRECCION.slice(0, 6)}…${DIRECCION.slice(-4)})`;
+function desactivar(motivo) { problema = motivo; activo = false; estado = motivo; console.error(`Pagos: ${motivo}`); }
+
+// Al arrancar, se pregunta a Base si la dirección es una moneda (responde a «symbol()»): si lo
+// es, los pagos se desactivan para que nadie envíe nada a donde se perdería
+async function comprobarDireccion() {
+  try {
+    const r = await rpc('eth_call', [{ to: DIRECCION, data: '0x95d89b41' }, 'latest']);
+    if (r && r !== '0x' && r.length >= 130) desactivar('CRIPTO_DIRECCION es el contrato de una moneda o token, no tu cartera: los pagos se perderían. Pon la dirección pública de tu cartera en Base');
+  } catch { /* si Base no responde ahora, se sigue: la lista de arriba ya cubre las monedas conocidas */ }
+}
 
 let p; // perfiles.js
 let firmar = async () => null; // enlaces firmados de e2 (vídeos de anuncios)
 export function iniciar(opciones) {
   ({ perfiles: p } = opciones);
   firmar = opciones.firmar ?? firmar;
-  if (activo) setTimeout(vigilar, 5000);
+  if (activo) comprobarDireccion().then(() => { if (activo) setTimeout(vigilar, 5000); });
 }
 
 const error = (status, message) => Object.assign(new Error(message), { status });
@@ -88,12 +117,26 @@ const guardarEstado = (e) => p.guardarAjuste('cripto', {
 });
 
 // ---------- Lectura de la blockchain (JSON-RPC de Base) ----------
+// Si un nodo falla o dice que se ha pasado del límite, se prueba el siguiente
+let nodo = 0;
+const pausa = (ms) => new Promise((ok) => setTimeout(ok, ms));
 async function rpc(metodo, params) {
-  const r = await fetch(RPC, { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: metodo, params }) });
-  const d = await r.json().catch(() => ({}));
-  if (d.error || !r.ok) throw new Error(`Base: ${d.error?.message ?? r.status}`);
-  return d.result;
+  let ultimoError;
+  for (let intento = 0; intento < RPCS.length; intento++) {
+    const url = RPCS[(nodo + intento) % RPCS.length];
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(15000),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: metodo, params }) });
+      const d = await r.json().catch(() => ({}));
+      if (d.error || !r.ok || d.result === undefined) throw new Error(d.error?.message ?? `HTTP ${r.status}`);
+      nodo = (nodo + intento) % RPCS.length; // el que funcionó, primero la próxima vez
+      return d.result;
+    } catch (e) {
+      ultimoError = e;
+      await pausa(300);
+    }
+  }
+  throw new Error(`Base: ${ultimoError?.message ?? 'sin respuesta'}`);
 }
 const hex = (n) => `0x${n.toString(16)}`;
 const tema = (dir) => `0x${'0'.repeat(24)}${dir.slice(2)}`;
@@ -111,10 +154,13 @@ async function repaso() {
   let desde = ultimoBloque ? ultimoBloque + 1 : ultimo - 1800; // la primera vez, la última hora
   if (ultimo - desde > 50000) desde = ultimo - 50000; // tras mucho tiempo dormido, como mucho ~28 h atrás
   if (desde > ultimo) return;
+  // De 1000 en 1000 bloques (los nodos públicos no dejan pedir más de golpe) y con una pausa entre
+  // peticiones para no pasarse de su límite
   const logs = [];
-  for (let a = desde; a <= ultimo; a += 2000) {
-    const b = Math.min(ultimo, a + 1999);
+  for (let a = desde; a <= ultimo; a += 1000) {
+    const b = Math.min(ultimo, a + 999);
     logs.push(...await rpc('eth_getLogs', [{ address: USDC_BASE, fromBlock: hex(a), toBlock: hex(b), topics: [TRANSFER, null, tema(DIRECCION)] }]));
+    if (b < ultimo) await pausa(250);
   }
   await conEstado(async (e) => {
     for (const l of logs) await recibido(e, l);
@@ -152,16 +198,21 @@ export async function darMeses(cuentaId, meses, pago) {
   return p.ponerPlan({ id: cuentaId }, { proveedor: 'usdc', estado: 'pagado', hasta: desde + meses * MES, pagos });
 }
 
-// Repaso automático: cada 10 s si hay pedidos esperando; si no, cada 2 min
+// Repaso automático: cada 15 s si hay pedidos esperando; si no, cada 10 min (solo para apuntar
+// pagos que lleguen sin pedido). Si Base no responde, se espera cada vez más (hasta 5 min).
+let fallos = 0;
 async function vigilar() {
-  let espera = 120000;
+  if (!activo) return;
+  let espera = 600000;
   try {
     const e = await leerEstado();
-    if (e.pedidos.some((x) => !x.tx && Date.now() - x.creado < RECONOCE)) espera = 10000;
+    if (e.pedidos.some((x) => !x.tx && Date.now() - x.creado < RECONOCE)) espera = 15000;
     await repasar();
+    fallos = 0;
   } catch (err) {
-    console.error(`Pagos: no se pudo leer Base (${err.message})`);
-    espera = 30000;
+    fallos++;
+    if (fallos === 1 || fallos % 10 === 0) console.error(`Pagos: no se pudo leer Base (${err.message}); se reintenta`);
+    espera = Math.min(300000, 15000 * 2 ** Math.min(fallos, 5));
   }
   setTimeout(vigilar, espera).unref?.();
 }
@@ -238,7 +289,7 @@ export async function atender(ruta, req, res, json, cuenta) {
     let e = await leerEstado();
     let x = e.pedidos.find((y) => y.id === id && y.cuenta === cuenta.id);
     if (!x) throw error(404, 'Ese pedido no existe');
-    if (!x.tx && Date.now() - ultimoRepaso > 5000) {
+    if (!x.tx && Date.now() - ultimoRepaso > 12000) {
       await repasar().catch(() => {});
       e = await leerEstado();
       x = e.pedidos.find((y) => y.id === id);
