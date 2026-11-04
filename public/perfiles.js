@@ -410,20 +410,21 @@ function anuncioBanner(donde) {
   return caja;
 }
 
-// ---------- Anuncio antes de reproducir (plan Básico) ----------
-// Un anuncio en vídeo antes de cada vídeo: de Google (VAST, solo en la web) o uno de los tuyos
-// subidos desde el gestor. Se puede saltar a los 5 s y, si acaba antes, el vídeo empieza solo.
-// Si no hay anuncios en vídeo, uno con imagen durante 5 s. Como mucho uno cada 5 minutos, para
-// no cortar cada capítulo seguido. Devuelve una promesa que se cumple cuando hay que seguir.
-const ESPERA_ENTRE_ANUNCIOS = 5 * 60000;
+// ---------- Anuncios antes de reproducir (plan Básico) ----------
+// Antes de cada vídeo, una tanda de varios anuncios seguidos («Anuncio 1 de 3»…; cuántos y cada
+// cuánto lo dice el servidor): primero el de Google (VAST, solo en la web), luego tus vídeos de
+// anuncio y tus anuncios con imagen, sin repetir ninguno en la misma tanda; si faltan, el aviso
+// de Premium. Cada uno se salta a los 5 s y, si acaba antes, pasa solo al siguiente. Devuelve
+// una promesa que se cumple cuando hay que empezar el vídeo.
 const SALTAR_EN = 5;
 let ultimoPrevio = 0;
+let marcaAnuncio = 'Anuncio';
 
 function capaAnuncio() {
   const capa = el('div', 'anuncio-previo');
   const caja = el('div', 'caja');
   const arriba = el('div', 'arriba');
-  const etiqueta = el('small', 'etiqueta-anuncio', 'Anuncio');
+  const etiqueta = el('small', 'etiqueta-anuncio', marcaAnuncio);
   arriba.append(etiqueta);
   const escena = el('div', 'escena');
   const pie = el('div', 'pie');
@@ -452,14 +453,32 @@ function cuentaAtras(c, terminar) {
   return () => clearInterval(reloj);
 }
 
-function anuncioPrevio() {
-  if (!conAnuncios() || Date.now() - ultimoPrevio < ESPERA_ENTRE_ANUNCIOS) return Promise.resolve();
+const barajar = (l) => l.map((x) => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
+async function anuncioPrevio() {
+  if (!conAnuncios()) return;
   const a = planInfo.anuncios;
-  const videos = (a.propios || []).filter((x) => x.video);
+  const conf = a.previos || { cantidad: 3, esperaMin: 0 };
+  if (Date.now() - ultimoPrevio < conf.esperaMin * 60000) return;
   ultimoPrevio = Date.now();
-  if (a.vast && !enApp()) return anuncioVast(a.vast).then((hecho) => (hecho ? null : videos.length ? anuncioVideo(azar(videos)) : anuncioImagen()));
-  if (videos.length) return anuncioVideo(azar(videos));
-  return anuncioImagen();
+  // La tanda: Google, tus vídeos, tus imágenes y, si aún faltan, el aviso de Premium
+  const tanda = [];
+  if (a.vast && !enApp()) tanda.push({ tipo: 'vast' });
+  barajar((a.propios || []).filter((x) => x.video)).forEach((x) => tanda.push({ tipo: 'video', x }));
+  barajar((a.propios || []).filter((x) => !x.video && (x.imagen || x.titulo))).forEach((x) => tanda.push({ tipo: 'imagen', x }));
+  if (planInfo.activo) tanda.push({ tipo: 'promo' });
+  const total = Math.min(conf.cantidad, tanda.length);
+  let hechos = 0;
+  for (const t of tanda) {
+    if (hechos >= total) break;
+    // Si se cerró el vídeo (o se fue a hacerse Premium), no siguen los anuncios
+    if (!$('#visor').classList.contains('abierto')) break;
+    marcaAnuncio = total > 1 ? `Anuncio ${hechos + 1} de ${total}` : 'Anuncio';
+    if (t.tipo === 'vast') { if (await anuncioVast(a.vast)) hechos++; continue; } // si Google no da anuncio, cuenta el siguiente
+    if (t.tipo === 'video') await anuncioVideo(t.x);
+    else await anuncioImagen(t.tipo === 'imagen' ? t.x : null);
+    hechos++;
+  }
+  marcaAnuncio = 'Anuncio';
 }
 
 // Uno de tus vídeos de anuncio
@@ -496,11 +515,9 @@ function anuncioVideo(x) {
   });
 }
 
-// Sin vídeos: uno con imagen (o el aviso de Premium) durante 5 s
-function anuncioImagen() {
-  const a = planInfo.anuncios;
-  const conImagen = (a.propios || []).filter((x) => x.imagen || x.titulo);
-  const contenido = conImagen.length ? tarjetaAnuncio(azar(conImagen)) : promoPremium(false);
+// Un anuncio con imagen (o, sin «x», el aviso de Premium) durante 5 s
+function anuncioImagen(x) {
+  const contenido = x ? tarjetaAnuncio(x) : promoPremium(false);
   if (!contenido) return Promise.resolve();
   return new Promise((listo) => {
     const c = capaAnuncio();
