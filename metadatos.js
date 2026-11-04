@@ -35,7 +35,18 @@ function guardar() {
 }
 
 // ---------- TMDB ----------
-async function pedir(ruta, params = {}) {
+// Como mucho 6 peticiones a TMDB a la vez: con miles de vídeos nuevos no se le satura (y si
+// aun así responde 429, se espera lo que diga y se repite)
+const MAX_TMDB = 6;
+let tmdbEnVuelo = 0;
+const tmdbEspera = [];
+async function turnoTmdb(fn) {
+  if (tmdbEnVuelo >= MAX_TMDB) await new Promise((ok) => tmdbEspera.push(ok));
+  tmdbEnVuelo++;
+  try { return await fn(); } finally { tmdbEnVuelo--; tmdbEspera.shift()?.(); }
+}
+const pausa = (ms) => new Promise((ok) => setTimeout(ok, ms));
+async function pedir(ruta, params = {}, intento = 1) {
   const TMDB_KEY = tmdbKey();
   if (!TMDB_KEY) throw Object.assign(new Error('Falta TMDB_KEY en el .env'), { status: 503 });
   const url = new URL(`https://api.themoviedb.org/3${ruta}`);
@@ -45,7 +56,8 @@ async function pedir(ruta, params = {}) {
   const headers = {};
   if (TMDB_KEY.length > 40) headers.Authorization = `Bearer ${TMDB_KEY}`;
   else url.searchParams.set('api_key', TMDB_KEY);
-  const r = await fetch(url, { headers });
+  const r = await turnoTmdb(() => fetch(url, { headers, signal: AbortSignal.timeout(15000) }));
+  if (r.status === 429 && intento < 3) { await pausa((Number(r.headers.get('retry-after')) || 2) * 1000); return pedir(ruta, params, intento + 1); }
   if (!r.ok) throw Object.assign(new Error(`TMDB respondió ${r.status} en ${ruta}`), { status: r.status === 404 ? 404 : 502 });
   return r.json();
 }
@@ -465,15 +477,25 @@ async function encontrar(datos) {
 // ---------- Lo que pide la interfaz ----------
 // Qué título es cada vídeo o carpeta: corrección a mano > caché > búsqueda. Se guarda
 // { tmdbId, tipo } o, si lo encontró otra fuente, { fuente, id, tipo }
+// Con mucho contenido, muchas tarjetas piden lo mismo a la vez: una sola búsqueda por título,
+// y lo que no se encuentra no se vuelve a buscar hasta pasada una hora
+const buscando = new Map(); // `${seccion}|${clave}` → promesa
+const noEncontrados = new Map(); // `${seccion}|${clave}` → hasta cuándo
 async function identificar(clave, seccion, datos) {
   if (cache.correcciones[clave]) return cache.correcciones[clave];
   if (clave in cache[seccion]) return cache[seccion][clave];
-  const r = await encontrar(datos);
-  // Solo se guarda lo encontrado: lo que no aparece se vuelve a buscar la próxima vez
-  if (!r) return null;
-  cache[seccion][clave] = r;
-  guardar();
-  return cache[seccion][clave];
+  const id = `${seccion}|${clave}`;
+  if (noEncontrados.get(id) > Date.now()) return null;
+  if (!buscando.has(id)) {
+    buscando.set(id, encontrar(datos).then((r) => {
+      // Solo se guarda lo encontrado: lo demás se reintenta dentro de una hora
+      if (!r) { noEncontrados.set(id, Date.now() + 3600000); return null; }
+      cache[seccion][clave] = r;
+      guardar();
+      return r;
+    }).finally(() => buscando.delete(id)));
+  }
+  return buscando.get(id);
 }
 
 export async function deArchivo(key) {
@@ -508,6 +530,9 @@ export async function deArchivo(key) {
 // Carpeta de una serie («SERIES/¡A por Jiro!/») o de una de sus temporadas
 // («…/Temporada 2/»: la ficha de la serie más el póster, la sinopsis y los episodios de esa
 // temporada). Las de categoría no tienen.
+// Al corregir un título a mano se olvida el «no encontrado»
+export const olvidarNoEncontrado = (clave) => { for (const s of ['archivos', 'carpetas']) noEncontrados.delete(`${s}|${clave}`); };
+
 export async function deCarpeta(prefijo) {
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
@@ -576,6 +601,7 @@ export async function portadaCategoria(id) {
 export function corregir(clave, tmdbId, tipo) {
   if (tmdbId) cache.correcciones[clave] = { tmdbId: Number(tmdbId), tipo: tipo === 'serie' ? 'serie' : 'pelicula' };
   else delete cache.correcciones[clave];
+  olvidarNoEncontrado(clave);
   guardar();
   return { ok: true };
 }

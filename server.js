@@ -6,6 +6,7 @@ import { spawn, execFile } from 'node:child_process';
 import { readFile, mkdir, rm, stat } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import os from 'node:os';
 import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -93,6 +94,69 @@ async function listarNivel(prefijo, token) {
 // «NETFLIX»…) no salen como carpetas, sale su contenido directamente. En la raíz no: allí
 // cada carpeta es una categoría. Solo en la primera página (las siguientes son de la propia
 // carpeta) y con tope, por si alguien anida muchísimas.
+// ---------- Listados desde la memoria ----------
+// Con mucho contenido, pedirle a e2 cada carpeta en cada visita es lo que más carga: aquí se
+// sacan de la foto del último repaso (en memoria, al día cada pocos segundos) y se guardan
+// hechos hasta que cambia algo. Se entregan por páginas para no mandar miles de golpe.
+const POR_PAGINA = 200;
+const listadosHechos = new Map(); // `${huella}|${prefijo}` → { carpetas, archivos }
+function nivelDeFoto(prefijo) {
+  const carpetas = new Set();
+  const archivos = [];
+  for (const [key, v] of foto) {
+    if (key.length <= prefijo.length || !key.startsWith(prefijo)) continue;
+    const resto = key.slice(prefijo.length);
+    const i = resto.indexOf('/');
+    if (i >= 0) carpetas.add(prefijo + resto.slice(0, i + 1));
+    else {
+      const [t, ms] = v.split(':');
+      archivos.push({ key, tamano: Number(t), fecha: new Date(Number(ms)) });
+    }
+  }
+  return { carpetas: [...carpetas], archivos };
+}
+// Intl.Collator es mucho más rápido que localeCompare con decenas de miles de nombres
+const colador = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+const ordenClaves = colador.compare;
+function juntoDeFoto(prefijo) {
+  const id = `${huella}|${prefijo}`;
+  if (listadosHechos.has(id)) return listadosHechos.get(id);
+  const r = nivelDeFoto(prefijo);
+  // Igual que listarJunto: las carpetas que solo agrupan enseñan su contenido directamente
+  if (prefijo) {
+    const pendientes = r.carpetas.filter((c) => meta.esAgrupadora(nombreDe(c)));
+    r.carpetas = r.carpetas.filter((c) => !meta.esAgrupadora(nombreDe(c)));
+    for (let vistas = 0; pendientes.length && vistas < 200; vistas++) {
+      const s = nivelDeFoto(pendientes.shift());
+      r.archivos.push(...s.archivos);
+      for (const sub of s.carpetas) (meta.esAgrupadora(nombreDe(sub)) ? pendientes : r.carpetas).push(sub);
+    }
+    r.carpetas.push(...pendientes);
+  }
+  r.carpetas.sort(ordenClaves);
+  r.archivos.sort((a, b) => ordenClaves(a.key, b.key));
+  if (listadosHechos.size > 400) listadosHechos.clear();
+  listadosHechos.set(id, r);
+  return r;
+}
+async function listar(prefijo, token) {
+  // Sin foto todavía (recién arrancado) o en carpetas internas (en casa), como siempre: a e2
+  if (!foto || esInterna(prefijo)) return listarJunto(prefijo, token);
+  const r = juntoDeFoto(prefijo);
+  // Carpetas y archivos van seguidos en las mismas páginas (una sección con mil series tampoco
+  // se manda de golpe)
+  const desde = Math.max(0, Number(token) || 0);
+  const total = r.carpetas.length + r.archivos.length;
+  const carpetas = r.carpetas.slice(desde, desde + POR_PAGINA);
+  const pagina = r.archivos.slice(Math.max(0, desde - r.carpetas.length), desde + POR_PAGINA - r.carpetas.length);
+  return {
+    carpetas,
+    archivos: await Promise.all(pagina.map(async (o) => ({ ...o, ...(esImagen(o.key) && { miniatura: await firmar(o.key) }) }))),
+    siguiente: desde + POR_PAGINA < total ? String(desde + POR_PAGINA) : null,
+    total,
+  };
+}
+
 async function listarJunto(prefijo, token) {
   const r = await listarNivel(prefijo, token);
   if (!prefijo || token) return r;
@@ -125,7 +189,26 @@ async function* recorrer(prefijo) {
 
 const normalizar = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-async function buscar(prefijo, q) {
+// Buscar y contar desde la foto en memoria (sin recorrer e2). Con «azar=N» devuelve N vídeos
+// al azar de esa carpeta (la portada los usa para elegir carteles)
+async function buscar(prefijo, q, azar) {
+  if (foto && !esInterna(prefijo)) {
+    if (azar) {
+      const videos = [...foto.keys()].filter((k) => k.startsWith(prefijo) && esVideo(k));
+      const elegidos = [];
+      for (let i = 0; i < Math.min(azar, videos.length); i++) elegidos.push(...videos.splice(Math.floor(Math.random() * videos.length), 1));
+      return { archivos: elegidos.map((key) => ({ key, ...datosFoto(key) })), recortado: false };
+    }
+    const terminos = normalizar(q).split(/\s+/).filter(Boolean);
+    const resultados = [];
+    for (const key of foto.keys()) {
+      if (!key.startsWith(prefijo) || key.endsWith('/')) continue;
+      if (!terminos.every((t) => normalizar(key.slice(prefijo.length)).includes(t))) continue;
+      resultados.push({ key, ...datosFoto(key), ...(esImagen(key) && { miniatura: await firmar(key) }) });
+      if (resultados.length >= 500) return { archivos: resultados, recortado: true };
+    }
+    return { archivos: resultados, recortado: false };
+  }
   const terminos = normalizar(q).split(/\s+/).filter(Boolean);
   const resultados = [];
   for await (const o of recorrer(prefijo)) {
@@ -139,7 +222,19 @@ async function buscar(prefijo, q) {
   return { archivos: resultados, recortado: false };
 }
 
+const datosFoto = (key) => { const [t, ms] = foto.get(key).split(':'); return { tamano: Number(t), fecha: new Date(Number(ms)) }; };
+const tamanosHechos = new Map(); // `${huella}|${prefijo}` → { objetos, bytes }
 async function tamano(prefijo) {
+  if (foto && !esInterna(prefijo)) {
+    const id = `${huella}|${prefijo}`;
+    if (!tamanosHechos.has(id)) {
+      let objetos = 0; let bytes = 0;
+      for (const [key, v] of foto) if (key.startsWith(prefijo) && !key.endsWith('/')) { objetos++; bytes += Number(v.split(':')[0]); }
+      if (tamanosHechos.size > 400) tamanosHechos.clear();
+      tamanosHechos.set(id, { objetos, bytes });
+    }
+    return tamanosHechos.get(id);
+  }
   let objetos = 0;
   let bytes = 0;
   for await (const o of recorrer(prefijo)) {
@@ -361,42 +456,83 @@ function avisar(evento, datos) {
   for (const res of oyentes) res.write(msg);
 }
 
+// Fichas de TMDB de lo recién subido, en segundo plano y de 2 en 2: una subida de miles de
+// vídeos no atasca los repasos ni satura TMDB
+const fichasPendientes = new Set();
+let buscandoFichas = 0;
+function prepararFichas(keys) {
+  for (const k of keys) if (fichasPendientes.size < 5000) fichasPendientes.add(k);
+  while (buscandoFichas < 2 && fichasPendientes.size) {
+    const k = fichasPendientes.values().next().value;
+    fichasPendientes.delete(k);
+    buscandoFichas++;
+    meta.deArchivo(k).catch(() => {}).finally(() => { buscandoFichas--; prepararFichas([]); });
+  }
+}
+
+// Si cambian miles de cosas de golpe, el aviso no lleva la lista entera: la app lo recarga todo
+const MAX_AVISO = 300;
 async function repasar() {
   const ahora = new Map();
   for await (const o of recorrer('')) {
     if (!esInterna(o.Key)) ahora.set(o.Key, `${o.Size}:${o.LastModified?.getTime()}`);
   }
   const antes = foto;
-  // La foto nueva va primero: el catálogo que pida la app al recibir el aviso ya la incluye
+  const nuevos = antes ? [...ahora.keys()].filter((k) => !antes.has(k)) : [];
+  const cambiados = antes ? [...ahora.keys()].filter((k) => antes.has(k) && antes.get(k) !== ahora.get(k)) : [];
+  const borrados = antes ? [...antes.keys()].filter((k) => !ahora.has(k)) : [];
+  const hayCambios = nuevos.length || cambiados.length || borrados.length;
+  // La foto nueva va primero: el catálogo que pida la app al recibir el aviso ya la incluye.
+  // La huella (y con ella las cachés) solo se recalcula si algo ha cambiado.
   foto = ahora;
-  huella = huellaDe(ahora);
+  if (!antes || hayCambios) huella = huellaDe(ahora);
   telegram.repaso(ahora); // por su cuenta: no frena los repasos
-  if (!antes) return;
-  const nuevos = [...ahora.keys()].filter((k) => !antes.has(k));
-  const cambiados = [...ahora.keys()].filter((k) => antes.has(k) && antes.get(k) !== ahora.get(k));
-  const borrados = [...antes.keys()].filter((k) => !ahora.has(k));
-  if (!nuevos.length && !cambiados.length && !borrados.length) return;
+  if (!antes || !hayCambios) return;
   console.log(`Cambios en e2: ${nuevos.length} nuevos, ${cambiados.length} cambiados, ${borrados.length} borrados`);
-  // Aviso al momento; los metadatos de los vídeos nuevos se buscan después (la app ya los pide
-  // ella misma al pintar la tarjeta)
-  avisar('cambios', { nuevos, cambiados, borrados, huella });
-  for (const k of nuevos.filter((k) => esVideo(k))) await meta.deArchivo(k).catch(() => {});
+  const total = nuevos.length + cambiados.length + borrados.length;
+  avisar('cambios', total > MAX_AVISO
+    ? { nuevos: nuevos.slice(0, MAX_AVISO), cambiados: [], borrados: [], todo: true, huella }
+    : { nuevos, cambiados, borrados, huella });
+  prepararFichas(nuevos.filter((k) => esVideo(k)));
 }
 
+// El repaso se adapta: con un bucket enorme (repasarlo tarda) se espera más entre uno y otro, y
+// si nadie está usando MorvehTV se repasa más despacio. Nunca menos de cada SEGUNDOS_ESCANEO.
+let ultimaVisita = Date.now();
+let duracionRepaso = 0;
 async function vigilar() {
+  const inicio = Date.now();
   try {
     await repasar();
   } catch (err) {
     console.error(`No se pudo repasar el bucket: ${err.message}`);
   }
-  setTimeout(vigilar, SEGUNDOS_ESCANEO * 1000);
+  duracionRepaso = Date.now() - inicio;
+  let espera = Math.max(SEGUNDOS_ESCANEO * 1000, duracionRepaso * 3);
+  if (!oyentes.size && Date.now() - ultimaVisita > 120000) espera = Math.max(espera, 30000);
+  setTimeout(vigilar, Math.min(espera, 120000));
 }
 
 // ---------- Catálogo para la portada ----------
 // Por cada carpeta de primer nivel, sus títulos del más nuevo al más antiguo: los vídeos
 // sueltos son películas; lo que va en subcarpetas («SERIES/Serie/Temporada 1/…») es la serie.
 // Sale de la foto del último repaso del bucket (o de un repaso nuevo si aún no hay).
-async function catalogo() {
+// Hecho una vez por cada estado del contenido (huella); «max» recorta los títulos por carpeta
+// (la portada solo enseña los 20 últimos de cada una)
+const catalogosHechos = new Map(); // `${huella}|${max}` → catálogo
+async function catalogo(max) {
+  const tope = Math.min(Math.max(Number(max) || 0, 0), 100000) || 0;
+  const id = `${huella}|${tope}`;
+  if (foto && catalogosHechos.has(id)) return catalogosHechos.get(id);
+  const c = await catalogoEntero();
+  const r = tope ? { carpetas: c.carpetas.map((x) => ({ ...x, titulos: x.titulos.slice(0, tope), total: x.titulos.length })) } : c;
+  if (foto) {
+    if (catalogosHechos.size > 20) catalogosHechos.clear();
+    catalogosHechos.set(id, r);
+  }
+  return r;
+}
+async function catalogoEntero() {
   let objetos;
   if (foto) {
     objetos = [...foto].map(([key, v]) => {
@@ -451,17 +587,22 @@ function eventos(req, res) {
 
 const rutas = {
   '/api/meta': (p) => meta.deArchivo(p.get('key')),
+  '/api/metas': async (p) => {
+    const keys = p.getAll('key').slice(0, 30);
+    if (keys.some((k) => prohibido(k))) throw Object.assign(new Error('No'), { status: 403 });
+    return Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await meta.deArchivo(k).catch(() => null)])));
+  },
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo')),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
-  '/api/catalogo': () => catalogo(),
+  '/api/catalogo': (p) => catalogo(p.get('max')),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
   '/api/hls': (p, req, quien) => { defensa.permitirVideo(quien.cuenta, quien.ip, p.get('key'), quien.admin); return hlsIniciar(p, quien); },
   '/api/hls-parar': (p) => hlsParar(p.get('id')),
   '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),
   '/api/info': () => ({ bucket: E2_BUCKET }),
-  '/api/listar': (p) => listarJunto(p.get('prefijo') ?? '', p.get('token')),
-  '/api/buscar': (p) => buscar(p.get('prefijo') ?? '', p.get('q') ?? ''),
+  '/api/listar': (p) => listar(p.get('prefijo') ?? '', p.get('token')),
+  '/api/buscar': (p) => buscar(p.get('prefijo') ?? '', p.get('q') ?? '', Math.min(50, Number(p.get('azar')) || 0)),
   '/api/tamano': (p) => tamano(p.get('prefijo') ?? ''),
   '/api/url': async (p, req, quien) => {
     if (esVideo(p.get('key') ?? '')) defensa.permitirVideo(quien.cuenta, quien.ip, p.get('key'), quien.admin);
@@ -506,10 +647,19 @@ const VERSION = (() => {
 })();
 const CON_VERSION = /(src|href)="(polyfills\.js|intro\.css|intro\.js|app\.js|perfiles\.js)"/g;
 
-const json = (res, status, datos) => {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
-  res.end(JSON.stringify(datos));
-};
+// Las respuestas grandes (catálogo, listados) van comprimidas: con mucho contenido pesan 5-10
+// veces menos y la tele o el móvil las reciben antes
+const aceptaGzip = (res) => /\bgzip\b/.test(String(res.req?.headers['accept-encoding'] ?? ''));
+function enviar(res, status, cabeceras, cuerpo) {
+  const buf = Buffer.isBuffer(cuerpo) ? cuerpo : Buffer.from(cuerpo);
+  if (buf.length > 2048 && aceptaGzip(res)) {
+    res.writeHead(status, { ...cabeceras, 'content-encoding': 'gzip', vary: 'accept-encoding' });
+    return res.end(gzipSync(buf, { level: 5 }));
+  }
+  res.writeHead(status, cabeceras);
+  res.end(buf);
+}
+const json = (res, status, datos) => enviar(res, status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, JSON.stringify(datos));
 
 // Lo que se puede abrir sin haber entrado: la pantalla de entrada y los iconos
 const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
@@ -523,7 +673,7 @@ http
       if (permiso === 'fuera') return json(res, 403, { error: 'Solo se puede entrar desde la red de casa' });
       const ip = acceso.ipDe(req);
       // Límite de peticiones por conexión (Render lo comprueba en /api/salud: esa no cuenta)
-      if (url.pathname !== '/api/salud') defensa.limitar(ip, url.pathname);
+      if (url.pathname !== '/api/salud') { defensa.limitar(ip, url.pathname); ultimaVisita = Date.now(); }
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb() });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
@@ -550,8 +700,7 @@ http
       if (ruta) return json(res, 200, await ruta(url.searchParams, req, { cuenta, ip, admin: await perfiles.esAdmin(cuenta) }));
 
       if (VENDOR[url.pathname]) {
-        res.writeHead(200, { 'content-type': tipos['.js'], 'cache-control': 'max-age=86400' });
-        return res.end(await readFile(path.join(dir, VENDOR[url.pathname])));
+        return enviar(res, 200, { 'content-type': tipos['.js'], 'cache-control': 'max-age=86400' }, await readFile(path.join(dir, VENDOR[url.pathname])));
       }
       const fichero = path.join(dir, 'public', url.pathname === '/' ? 'index.html' : path.normalize(decodeURIComponent(url.pathname)));
       if (!fichero.startsWith(path.join(dir, 'public'))) throw Object.assign(new Error('No'), { status: 403 });
@@ -559,12 +708,10 @@ http
       // La página nunca se guarda en caché y enlaza sus archivos con la versión
       if (ext === '.html') {
         const html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
-        res.writeHead(200, { 'content-type': tipos[ext], 'cache-control': 'no-store' });
-        return res.end(html);
+        return enviar(res, 200, { 'content-type': tipos[ext], 'cache-control': 'no-store' }, html);
       }
       const cuerpo = ext === '.js' ? await js(fichero) : await readFile(fichero);
-      res.writeHead(200, { 'content-type': tipos[ext] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
-      res.end(cuerpo);
+      enviar(res, 200, { 'content-type': tipos[ext] ?? 'application/octet-stream', 'cache-control': 'no-cache' }, cuerpo);
     } catch (err) {
       if (err.espera && !res.headersSent) res.setHeader('retry-after', String(err.espera));
       if (res.headersSent) return res.end();

@@ -23,7 +23,8 @@ const bytes = (n) => {
 const fecha = (f) => new Date(f).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 
 // (la cadena se monta a mano: las teles antiguas no aceptan un objeto en URLSearchParams)
-const consulta = (params = {}) => Object.keys(params).map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(params[k])}`).join('&');
+// (un valor que sea una lista se repite: key=a&key=b)
+const consulta = (params = {}) => Object.keys(params).map((k) => [].concat(params[k]).map((v) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')).join('&');
 
 async function api(ruta, params) {
   const r = await fetch(`${ruta}?${consulta(params)}`, { credentials: 'same-origin' });
@@ -227,7 +228,8 @@ function pintarInicio(carpetas, archivos) {
   // Últimos añadidos de cada categoría, en el mismo orden que «Mis medios»
   const sitio = el('div', 'ultimos');
   items.append(sitio);
-  catalogoPedido = catalogoPedido || api('/api/catalogo').catch(() => null);
+  // Solo los 20 últimos de cada categoría: con mucho contenido el catálogo entero pesaría demasiado
+  catalogoPedido = catalogoPedido || api('/api/catalogo', { max: 20 }).catch(() => null);
   const pedido = catalogoPedido;
   pedido.then((d) => {
     if (catalogoPedido === pedido) catalogoPedido = null; // la próxima vez, datos frescos
@@ -329,7 +331,8 @@ function arteCategoria(cat, suyas) {
       const carteles = [];
       const fondos = [];
       for (const c of suyas) {
-        const d = await api('/api/buscar', { prefijo: c, q: '' }).catch(() => null);
+        // 12 vídeos al azar de la categoría (el servidor los elige sin mandar la lista entera)
+        const d = await api('/api/buscar', { prefijo: c, q: '', azar: 12 }).catch(() => null);
         const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video'));
         // Al azar, para que la portada cambie de una visita a otra
         videos.sort(() => Math.random() - 0.5);
@@ -412,21 +415,38 @@ function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {
 
 // ---------- Metadatos de TMDB ----------
 // El servidor reconoce cada vídeo por su nombre y lo guarda en caché; aquí se piden de 4 en
-// 4 para no saturar TMDB con carpetas grandes.
+// 4 para no saturar TMDB con carpetas grandes. Las de vídeos van en grupos de hasta 20 por
+// petición (una carpeta con cientos de capítulos no lanza cientos de peticiones).
 const metas = new Map();
 let enVuelo = 0;
 const cola = [];
+let lote = null; // { keys: [], oks: {} } de fichas de vídeo esperando a salir juntas
 
 function pedirMeta(clase, clave) {
   const id = `${clase}:${clave}`;
   if (!metas.has(id)) {
     metas.set(id, new Promise((ok) => {
-      cola.push(() => (clase === 'carpeta' ? api('/api/meta-carpeta', { prefijo: clave }) : api('/api/meta', { key: clave }))
-        .catch(() => null).then(ok));
-      siguienteMeta();
+      if (clase === 'carpeta') {
+        cola.push(() => api('/api/meta-carpeta', { prefijo: clave }).catch(() => null).then(ok));
+        return siguienteMeta();
+      }
+      if (!lote) {
+        const l = lote = { keys: [], oks: {} };
+        // Se juntan las que se piden casi a la vez (al pintar una carpeta)
+        setTimeout(() => { if (lote === l) soltarLote(); }, 40);
+      }
+      lote.keys.push(clave); lote.oks[clave] = ok;
+      if (lote.keys.length >= 20) soltarLote();
     }));
   }
   return metas.get(id);
+}
+function soltarLote() {
+  const l = lote; lote = null;
+  if (!l || !l.keys.length) return;
+  cola.push(() => api('/api/metas', { key: l.keys }).catch(() => ({}))
+    .then((d) => { l.keys.forEach((k) => l.oks[k](d[k] || null)); }));
+  siguienteMeta();
 }
 
 function siguienteMeta() {
@@ -442,7 +462,21 @@ const tituloDe = (d) => d.episodio
 
 // Cambia la tarjeta del archivo por la carátula y el título de TMDB
 // Con { ancha: true } usa la imagen apaisada (la del episodio o el fondo de la película)
+// La ficha se pide cuando la tarjeta está a punto de verse en pantalla, no antes: en una
+// carpeta con cientos de títulos solo se buscan los que de verdad se miran
+const observador = typeof IntersectionObserver === 'function'
+  ? new IntersectionObserver((entradas) => entradas.forEach((e) => {
+    if (!e.isIntersecting) return;
+    observador.unobserve(e.target);
+    const listo = e.target._alVer; e.target._alVer = null;
+    if (listo) listo();
+  }), { rootMargin: '600px 600px' })
+  : null;
+const cuandoSeVea = (t) => (observador ? new Promise((ok) => { t._alVer = ok; observador.observe(t); }) : Promise.resolve());
+
 async function conMeta(t, clase, clave, { ancha = false } = {}) {
+  await cuandoSeVea(t);
+  if (!t.isConnected) return;
   const d = await pedirMeta(clase, clave);
   if (!d?.encontrado || !t.isConnected) return;
   const temp = d.temporada;

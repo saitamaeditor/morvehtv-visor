@@ -21,7 +21,8 @@ const GRUPOS = {
   panel: [600, 60], // el gestor (subir un archivo grande pide muchas firmas)
   xtream: [600, 60], // reproductores externos: navegan por el catálogo a base de peticiones
 };
-const PESADAS = ['/api/buscar', '/api/tamano', '/api/hls', '/api/medio', '/api/enlace', '/api/tmdb-buscar'];
+// (buscar y tamaño ya salen de la memoria: no cuentan como pesadas)
+const PESADAS = ['/api/hls', '/api/medio', '/api/enlace', '/api/tmdb-buscar'];
 const cuentas = new Map(); // `${grupo}|${ip}` → { n, desde }
 const avisos = new Map(); // ip → [marcas de veces que se pasó]
 const bloqueadas = new Map(); // ip → hasta cuándo
