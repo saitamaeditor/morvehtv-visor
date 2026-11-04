@@ -87,26 +87,35 @@ async function cargar(mas = false) {
   }
 }
 
+// Ruta de navegación: una sola fila de «pastillas» (Inicio › Sección › Serie › Temporada) con la
+// carpeta actual resaltada. Los nombres largos se recortan con «…» (el nombre entero sale al
+// pasar el ratón) y, si no cabe todo, la fila se desliza de lado mostrando siempre el final.
 function pintarMigas() {
   const partes = estado.prefijo.split('/').filter(Boolean);
   const m = $('#migas'); m.innerHTML = '';
   // En el inicio la ruta sobra (solo diría «Inicio»): la pestaña ya lo marca
   m.hidden = !partes.length && !estado.prefijo.startsWith(':');
-  const enlace = (texto, pref) => {
+  const separador = () => { const s = el('span', 'sep', '›'); s.setAttribute('aria-hidden', 'true'); m.append(s); };
+  const enlace = (texto, pref, actual) => {
     // Con href: así el enlace recibe el foco del mando y se abre con OK
-    const a = document.createElement('a'); a.textContent = texto; a.href = `#${encodeURIComponent(pref)}`; m.append(a);
+    const a = document.createElement('a'); a.textContent = texto; a.title = texto; a.href = `#${encodeURIComponent(pref)}`;
+    if (actual) { a.className = 'actual'; a.setAttribute('aria-current', 'page'); }
+    m.append(a);
   };
-  enlace('🏠 Inicio', '');
+  const casa = document.createElement('a'); casa.href = '#'; casa.className = 'casa'; casa.title = 'Inicio';
+  casa.innerHTML = '<span aria-hidden="true">🏠</span><span class="txt-casa">Inicio</span>';
+  m.append(casa);
   if (estado.prefijo.startsWith(':')) {
-    const s = document.createElement('span'); s.textContent = '›'; m.append(s);
+    separador();
     m.append(el('span', 'actual', VISTAS_PERFIL[estado.prefijo.slice(1)]?.titulo ?? ''));
-    return;
+  } else {
+    partes.forEach((p, i) => { separador(); enlace(p, partes.slice(0, i + 1).join('/') + '/', i === partes.length - 1); });
   }
-  partes.forEach((p, i) => {
-    const s = document.createElement('span'); s.textContent = '›'; m.append(s);
-    enlace(p, partes.slice(0, i + 1).join('/') + '/');
-  });
+  // Que se vea siempre dónde estás (el final de la ruta)
+  requestAnimationFrame(() => { m.scrollLeft = m.scrollWidth; });
 }
+// (también al girar el móvil o cambiar el tamaño de la ventana)
+window.addEventListener('resize', () => { const m = $('#migas'); if (m && !m.hidden) m.scrollLeft = m.scrollWidth; });
 
 // Orden natural hecho a mano («Episodio 2» antes que «Episodio 10»): el { numeric: true } de
 // localeCompare no existe en los navegadores de muchas teles y allí salía E1, E10, E11, E2…
