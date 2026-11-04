@@ -1,6 +1,6 @@
 // Planes de MorvehTV: «Básico» (gratis, con anuncios) y «Premium» (sin anuncios). Premium se
 // consigue con una donación en USDC por la red Base: cada importe da unos meses de Premium
-// (por ejemplo 4 USDC = 1 mes). No hay suscripción ni cobros automáticos: se paga cuando se
+// (por defecto, 15 USDC = 12 meses). No hay suscripción ni cobros automáticos: se paga cuando se
 // quiere y, si se vuelve a pagar, los meses se suman.
 //
 // Por qué USDC en Base:
@@ -21,7 +21,8 @@
 // Variables de entorno (nunca en el código: el repositorio es público):
 //  · CRIPTO_DIRECCION: tu dirección de cartera en Base (0x…). Solo la dirección pública: la
 //    frase secreta o la clave privada NUNCA van en ningún sitio.
-//  · CRIPTO_PRECIOS (opcional): «USDC:meses» separados por comas; por defecto 4:1,10:3,40:12
+//  · CRIPTO_PRECIOS (opcional): «USDC:meses» separados por comas; por defecto 15:12 (un año
+//    por 15 USDC, un único pago al año)
 //  · CRIPTO_RPC (opcional): nodo de Base para leer la blockchain; por defecto el público
 //    https://mainnet.base.org
 //
@@ -40,7 +41,7 @@ const DIRECCION = String(process.env.CRIPTO_DIRECCION ?? '').trim().toLowerCase(
 // (separados por comas), por ejemplo uno gratuito de Alchemy o QuickNode con tu clave.
 const RPCS = String(process.env.CRIPTO_RPC ?? '').split(',').map((x) => x.trim()).filter((x) => /^https:\/\//.test(x) || /^http:\/\/127\./.test(x));
 if (!RPCS.length) RPCS.push('https://mainnet.base.org', 'https://base-rpc.publicnode.com', 'https://base.drpc.org', 'https://1rpc.io/base');
-const OPCIONES = String(process.env.CRIPTO_PRECIOS ?? '4:1,10:3,40:12').split(',').map((x) => x.trim().split(':').map(Number))
+const OPCIONES = String(process.env.CRIPTO_PRECIOS ?? '15:12').split(',').map((x) => x.trim().split(':').map(Number))
   .filter(([u, m]) => u > 0 && m > 0 && Number.isFinite(u) && Number.isInteger(m))
   .map(([usdc, meses], i) => ({ id: String(i + 1), usdc, meses }));
 const MES = 30 * 864e5;

@@ -726,7 +726,8 @@ function bloquePlan() {
       opciones.remove(); acepto.remove(); seguir.remove();
       pantallaPago(b, d);
     });
-    b.s.append(el('p', 'pago-paso', premium ? 'Ampliar:' : 'Elige cuánto tiempo:'), opciones, acepto, seguir);
+    const unica = planInfo.opciones.length === 1;
+    b.s.append(el('p', 'pago-paso', premium ? (unica ? 'Ampliar un año más:' : 'Ampliar:') : (unica ? 'Un año de Premium, en un solo pago:' : 'Elige cuánto tiempo:')), opciones, acepto, seguir);
   }
   // Últimos pagos, con su enlace público
   if (planInfo.pagos && planInfo.pagos.length) {
