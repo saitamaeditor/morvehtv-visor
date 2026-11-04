@@ -111,7 +111,7 @@ export const esAdmin = async (c) => Boolean(c && [...((await leer()).admins || [
 
 // ---------- Plan de cada cuenta ----------
 // «premium» si tiene la suscripción al día (o es administrador); si no, «basico» (con anuncios)
-// Premium de por vida: SOLO los administradores. Los demás, solo mientras sean miembros de pago en Patreon
+// Premium de por vida: SOLO los administradores. Los demás, solo durante el tiempo que hayan pagado en USDC
 // esté pagada (no hay otra forma de tener Premium gratis).
 export async function planDe(c) {
   if (!c) return { tipo: 'basico' };
@@ -119,6 +119,10 @@ export async function planDe(c) {
   if (pagos.esPremium(c.plan)) return { tipo: 'premium', hasta: c.plan.hasta, cancelado: c.plan.cancelado };
   return { tipo: 'basico' };
 }
+export const cuentaPorUsuario = async (u) => ((await leer()).cuentas || []).find((x) => x.usuario === normalizar(u)) ?? null;
+// Una cuenta por su id (o null), leída del archivo
+export const cuentaPorId = async (id) => ((await leer()).cuentas || []).find((x) => x.id === id) ?? null;
+
 // Versión de las condiciones (cambia si se modifican) y apunte de cuándo las aceptó cada cuenta
 export const VERSION_CONDICIONES = '2026-11-04';
 export const anotarAceptacion = (id, que) => cambiar((d) => {
@@ -136,7 +140,7 @@ export async function resumenPlanes() {
   const premium = cuentas.filter((c) => !admins.has(c.usuario) && pagos.esPremium(c.plan)).length;
   return { cuentas: cuentas.length, admins: deAdmin, premium, basico: cuentas.length - premium - deAdmin };
 }
-// Lo apuntan la conexión con Patreon y su webhook: por id de cuenta o por su suscripción.
+// Lo apuntan los pagos en USDC (al leerlos en la blockchain) y el gestor: por id de cuenta o por su suscripción.
 // Avisa al momento a la web y la app abiertas de esa cuenta (alCambiarPlan, ver server.js).
 let avisoPlan = () => {};
 export const alCambiarPlan = (fn) => { avisoPlan = fn; };

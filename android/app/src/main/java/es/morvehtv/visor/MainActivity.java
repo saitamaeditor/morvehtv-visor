@@ -219,6 +219,16 @@ public class MainActivity extends Activity {
             if (!pedido.isForMainFrame()) return false;
             Uri u = pedido.getUrl();
             String esquema = u.getScheme();
+            // «Abrir en mi cartera» (pago de Premium en USDC): un toque abre la app de cartera del
+            // móvil (MetaMask, Coinbase Wallet…) con el pago ya preparado
+            if ("ethereum".equals(esquema)) {
+                if (pedido.hasGesture()) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception e) {
+                        android.widget.Toast.makeText(MainActivity.this, "No hay ninguna cartera instalada: copia la dirección y el importe", android.widget.Toast.LENGTH_LONG).show();
+                    }
+                }
+                return true;
+            }
             if (!"http".equals(esquema) && !"https".equals(esquema)) return true; // intent:, market:…
             // MorvehTV y lo que abras tú con un toque (tráiler, TMDB) se quedan dentro de la app;
             // una redirección automática a otro sitio, no

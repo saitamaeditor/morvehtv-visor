@@ -158,7 +158,7 @@ function abrirCuenta() {
   const borrar = el('button', 'boton boton-peligro', 'Borrar mi cuenta');
   borrar.onclick = () => accion(borrar, bb.msg, async () => {
     if (!cb.i.value) throw new Error('Escribe tu contraseña');
-    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.' + (planInfo && planInfo.conectado ? '\n\nOjo: tu membresía de Patreon no se cancela sola; cancélala en Patreon si no quieres que se te siga cobrando.' : ''))) return;
+    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.' + (planInfo && planInfo.plan === 'premium' && !planInfo.admin ? ' Perderás el tiempo de Premium que te quede.' : ''))) return;
     await enviar('/api/cuenta-borrar', { actual: cb.i.value });
     location.replace('/entrar.html#registro');
   });
@@ -316,7 +316,7 @@ function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
 
 // ---------- Planes: Básico (con anuncios) y Premium (sin anuncios) ----------
 // El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner.
-// Se paga en Patreon; al conectar la cuenta, Premium se activa al momento y el servidor avisa a todas las
+// Se paga con USDC (red Base); en cuanto llega el pago, Premium se activa al momento y el servidor avisa a todas las
 // pestañas y aparatos abiertos de la cuenta (evento «plan») para quitar los anuncios ya.
 let planInfo = null; // { activo, plan, hasta, cancelado, precio, anuncios }
 const enApp = () => !!window.MorvehApp;
@@ -343,21 +343,8 @@ async function planCambiado(avisar) {
 // Al volver a la app (estaba en segundo plano mientras se pagaba) se mira el plan otra vez
 document.addEventListener('visibilitychange', () => { if (!document.hidden && yo) planCambiado(false); });
 
-// Vuelta de Patreon tras conectar la cuenta: ?pago=ok | sin-suscripcion | otra-cuenta | cancelado | error
-async function vueltaDelPago() {
-  const q = new URLSearchParams(location.search).get('pago');
-  if (!q) return;
-  history.replaceState(null, '', location.pathname + location.hash);
-  if (q === 'ok') return planCambiado(true);
-  const textos = {
-    'sin-suscripcion': 'Tu Patreon está conectado, pero no tiene activo el nivel Premium de MorvehTV. Únete en Patreon y vuelve a pulsar «Conectar».',
-    'otra-cuenta': 'Esa cuenta de Patreon ya está conectada a otra cuenta de MorvehTV.',
-    cancelado: 'No se ha conectado Patreon: sigues con el plan Básico.',
-  };
-  aviso(textos[q] || 'No se pudo conectar con Patreon. Prueba otra vez en un momento.', 7000);
-  await planCambiado(false);
-  if (q === 'sin-suscripcion') abrirCuenta();
-}
+// (Premium con USDC no sale de la web: no hay vuelta de ninguna página de pago)
+function vueltaDelPago() {}
 
 let adsenseCargado = false;
 function cargarAdsense(cliente) {
@@ -589,73 +576,170 @@ function anuncioVast(etiqueta) {
   });
 }
 
-// Ir a Patreon (para conectar la cuenta). En la app de Android solo se puede salir a otra web con
-// un toque, así que allí se enseña un botón que lleva a ella.
-async function irAPago(ruta, boton, msg, datos) {
-  await accion(boton, msg, async () => {
-    const r = await enviar(ruta, datos);
-    if (!enApp()) { location.href = r.url; return; }
-    const a = el('a', 'boton boton-acento', 'Continuar en Patreon ›');
-    a.href = r.url;
-    boton.replaceWith(a);
-    a.focus();
-  });
+// ---------- Premium con USDC (red Base) ----------
+// Se paga una sola vez por un tiempo (sin suscripción): se elige cuánto, se envía el importe
+// exacto a la dirección y el servidor lo ve en la blockchain y activa Premium solo.
+function fechaLarga(ms) { return new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); }
+function copiar(texto, boton) {
+  const listo = () => { const t = boton.textContent; boton.textContent = '✓ Copiado'; setTimeout(() => { boton.textContent = t; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(texto).then(listo, () => copiarViejo(texto, listo));
+  copiarViejo(texto, listo);
+}
+function copiarViejo(texto, listo) {
+  const t = el('textarea'); t.value = texto; t.style.position = 'fixed'; t.style.opacity = '0'; document.body.append(t);
+  t.select(); try { document.execCommand('copy'); listo(); } catch (e) {} t.remove();
 }
 
-function fechaLarga(ms) { return new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); }
+// Explicación sencilla de qué es USDC, por qué es de fiar y cómo pagar (sale en «Mi cuenta»)
+function guiaUsdc(abierta) {
+  const d = el('details', 'guia-usdc');
+  d.open = !!abierta;
+  d.append(el('summary', null, '¿Qué es USDC y cómo pago? (guía sencilla)'));
+  const c = el('div', 'guia-cuerpo');
+  c.innerHTML = [
+    '<h4>💵 ¿Qué es USDC?</h4>',
+    '<p>Es un <b>dólar digital</b>: 1 USDC vale siempre 1 dólar (unos 0,92 €). No sube ni baja como el bitcoin. Lo emite <b>Circle</b>, una empresa regulada en EE. UU. y autorizada en la Unión Europea como dinero electrónico, que guarda 1 dólar de reserva por cada USDC y lo publica auditado cada mes.</p>',
+    '<h4>🛣️ ¿Qué es «Base»?</h4>',
+    '<p>Es la «carretera» por la que viaja el USDC hasta nosotros: la red de <b>Coinbase</b>. El envío llega en segundos y la comisión es de céntimos (desde la app de Coinbase, gratis).</p>',
+    '<h4>🛡️ ¿Por qué es seguro?</h4>',
+    '<ul>',
+    '<li><b>No es una suscripción:</b> pagas una vez por el tiempo que eliges. Nunca se te cobrará nada sin que tú lo envíes.</li>',
+    '<li><b>No damos ni guardamos datos de tu banco ni de tu tarjeta:</b> solo vemos que ha llegado el pago.</li>',
+    '<li><b>Todo es comprobable:</b> cada pago queda registrado públicamente y puedes verlo en <a href="https://basescan.org" target="_blank" rel="noopener">basescan.org</a>.</li>',
+    '<li><b>MorvehTV nunca te pedirá tu frase secreta, tu contraseña de Coinbase ni que instales nada.</b> Si alguien te lo pide en nuestro nombre, es una estafa.</li>',
+    '</ul>',
+    '<h4>✅ Cómo pagar (por ejemplo, con la app de Coinbase)</h4>',
+    '<ol>',
+    '<li>Compra USDC en la app (con tarjeta o transferencia).</li>',
+    '<li>Pulsa <b>Enviar</b> → <b>USDC</b>.</li>',
+    '<li>Pega nuestra <b>dirección</b> (o escanea el QR).</li>',
+    '<li>Como red elige <b>Base</b>.</li>',
+    '<li>Escribe el <b>importe exacto, con los céntimos</b>, y envía.</li>',
+    '</ol>',
+    '<p>Sirve cualquier plataforma que deje <b>enviar USDC por la red Base</b> (Coinbase, Binance, Kraken…: comprueba que aparece «Base» al enviar). Con una cartera propia como MetaMask o Coinbase Wallet también: necesitarás unos céntimos de ETH en Base para la comisión.</p>',
+    '<h4>⚠️ Tres cosas importantes</h4>',
+    '<ul>',
+    '<li><b>Solo USDC y solo por la red Base.</b> Si lo envías por otra red (Ethereum, Solana, Polygon, Tron…) o envías otra moneda, se puede perder.</li>',
+    '<li><b>El importe exacto, con sus céntimos:</b> es lo que nos dice que el pago es tuyo. Si envías otra cantidad no se pierde, pero hay que activarlo a mano: avísanos.</li>',
+    '<li>Los envíos en blockchain <b>no se pueden deshacer</b>: revisa la dirección antes de enviar.</li>',
+    '</ul>',
+    '<p class="suave">¿Dudas o algún problema? Escríbenos (contacto en la <a href="/legal.html#aviso-legal" target="_blank">información legal</a>).</p>',
+  ].join('');
+  d.append(c);
+  return d;
+}
+
+// Pantalla de pago de un pedido: importe exacto, red, dirección, QR y aviso en cuanto llega
+let vigiaPago = null;
+function pantallaPago(b, d) {
+  clearInterval(vigiaPago);
+  const caja = el('div', 'pago-usdc');
+  const titulo = el('p', 'pago-paso', `Para ${d.meses} ${d.meses === 1 ? 'mes' : 'meses'} de Premium, envía exactamente:`);
+  const importe = el('div', 'pago-importe');
+  importe.append(el('b', null, d.importeTexto), el('span', null, ' USDC'));
+  const cImporte = el('button', 'boton', 'Copiar importe'); cImporte.onclick = () => copiar(d.importeExacto, cImporte);
+  importe.append(cImporte);
+  const red = el('p', 'pago-red');
+  red.innerHTML = 'Red: <b>Base</b> · Moneda: <b>USDC</b> &nbsp;⚠️ Solo por la red Base';
+  const dirT = el('p', 'pago-paso', 'A esta dirección:');
+  const dir = el('div', 'pago-direccion');
+  dir.append(el('code', null, d.direccion));
+  const cDir = el('button', 'boton', 'Copiar dirección'); cDir.onclick = () => copiar(d.direccion, cDir);
+  dir.append(cDir);
+  const comprueba = el('small', 'suave', `Comprueba al pegarla que empieza por ${d.direccion.slice(0, 6)} y acaba por ${d.direccion.slice(-4)}.`);
+  const qr = el('div', 'pago-qr');
+  qr.innerHTML = d.qr;
+  const enCartera = el('a', 'boton boton-acento', 'Abrir en mi cartera');
+  enCartera.href = d.enlace;
+  const qrTexto = el('small', 'suave', 'Escanéalo con MetaMask, Coinbase Wallet o tu cartera: el importe, la moneda y la red ya van puestos.');
+  const lado = el('div', 'pago-qr-texto'); lado.append(qrTexto, enCartera);
+  const qrFila = el('div', 'pago-qr-fila'); qrFila.append(qr, lado);
+  const estado = el('div', 'pago-estado');
+  const cancelar = el('button', 'boton', 'Cancelar este pago');
+  cancelar.onclick = async () => { clearInterval(vigiaPago); await enviar('/api/pago/usdc/cancelar', { id: d.id }).catch(() => {}); await planCambiado(false); abrirCuenta(); };
+  caja.append(titulo, importe, red, dirT, dir, comprueba, qrFila, estado, cancelar);
+  b.s.append(caja);
+
+  const pintarEspera = () => {
+    const falta = Math.max(0, d.caduca - Date.now());
+    const m = Math.floor(falta / 60000), s = Math.floor((falta % 60000) / 1000);
+    estado.className = 'pago-estado esperando';
+    estado.innerHTML = falta > 0
+      ? '<span class="girando"></span> Esperando tu pago… Se detecta solo unos segundos después de enviarlo. Puedes dejar esta pantalla abierta o volver más tarde.'
+        + `<br><small>Este importe está reservado para ti ${m}:${String(s).padStart(2, '0')} más.</small>`
+      : 'El tiempo para este importe ha terminado. Si ya lo enviaste, se reconocerá igualmente en las próximas horas; si no, cancela y empieza otro.';
+  };
+  pintarEspera();
+  let n = 0;
+  vigiaPago = setInterval(async () => {
+    if (!caja.isConnected) return clearInterval(vigiaPago);
+    pintarEspera();
+    if (++n % 5) return; // cada 5 s se pregunta al servidor
+    try {
+      const r = await api('/api/pago/usdc/estado', { id: d.id });
+      if (r.estado === 'pagado') {
+        clearInterval(vigiaPago);
+        estado.className = 'pago-estado hecho';
+        estado.innerHTML = '✅ <b>¡Pago recibido!</b> Premium activado. ' + (r.tx ? `<a href="https://basescan.org/tx/${r.tx}" target="_blank" rel="noopener">Ver el pago en basescan.org ↗</a>` : '');
+        await planCambiado(true);
+      }
+    } catch (e) {}
+  }, 1000);
+}
 
 function bloquePlan() {
   if (!planInfo) return null;
+  clearInterval(vigiaPago);
   const premium = planInfo.plan === 'premium';
-  const precio = planInfo.precio ? ' (' + planInfo.precio + ')' : '';
   let texto;
   if (premium && planInfo.admin) texto = 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.';
-  else if (premium) texto = 'Premium con Patreon: sin anuncios en la web y la app.' + (planInfo.hasta ? ' Próximo cobro en Patreon el ' + fechaLarga(planInfo.hasta) + '.' : '');
-  else texto = 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Se paga en Patreon (tarjeta, PayPal, Apple Pay…) y se cancela allí cuando quieras.' : '');
+  else if (premium) texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. No hay cobros automáticos; cuando quieras, amplíalo y los meses se suman.`;
+  else texto = 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium lo ves todo sin anuncios, en la web y la app. Se paga una sola vez con USDC (un dólar digital) por el tiempo que elijas: sin suscripción ni cobros automáticos.' : '');
   const b = bloque('Plan', texto);
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
-  const fila = el('div', 'cuenta-botones');
 
-  if (!premium && planInfo.activo) {
-    if (planInfo.conectado && planInfo.estadoPatreon !== 'active_patron') {
-      b.s.append(el('p', 'cuenta-texto', 'Tu Patreon está conectado, pero ahora no tiene activo el nivel Premium de MorvehTV.'));
-    }
-    // Consentimiento expreso (contenido digital que empieza ya: sin derecho de desistimiento)
+  // Un pago a medias: se vuelve a su pantalla
+  if (planInfo.activo && planInfo.pendiente) {
+    pantallaPago(b, planInfo.pendiente);
+    b.s.append(guiaUsdc(false), b.msg);
+    return b.s;
+  }
+  if (planInfo.activo && !planInfo.admin) {
+    const opciones = el('div', 'opciones-usdc');
+    let elegida = planInfo.opciones[0] && planInfo.opciones[0].id;
+    planInfo.opciones.forEach((o, i) => {
+      const op = el('button', 'opcion-usdc' + (i === 0 ? ' activa' : ''));
+      const porMes = Math.round((o.usdc / o.meses) * 100) / 100;
+      op.innerHTML = `<b>${o.meses} ${o.meses === 1 ? 'mes' : 'meses'}</b><span>${o.texto}</span>${o.meses > 1 ? `<small>${porMes.toLocaleString('es-ES')} USDC/mes</small>` : ''}`;
+      op.onclick = () => { elegida = o.id; opciones.querySelectorAll('.opcion-usdc').forEach((x) => x.classList.remove('activa')); op.classList.add('activa'); };
+      opciones.append(op);
+    });
     const acepto = el('label', 'acepto-premium');
     const casilla = el('input'); casilla.type = 'checkbox';
     const txt = el('span');
-    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> (cuota mensual en Patreon, cancelable cuando quiera) y pido que Premium empiece <b>ya</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
+    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> y pido que Premium empiece <b>en cuanto llegue el pago</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
     acepto.append(casilla, txt);
-    const pasos = el('ol', 'pasos-patreon');
-    const p1 = el('li');
-    const unirse = el('a', 'boton', '1 · Únete en Patreon' + (planInfo.precio ? ' · ' + planInfo.precio : '') + ' ↗');
-    unirse.href = planInfo.pagina; unirse.target = '_blank'; unirse.rel = 'noopener';
-    p1.append(unirse, el('small', null, 'Elige el nivel Premium de MorvehTV. Si ya eres miembro, salta al paso 2.'));
-    const p2 = el('li');
-    const conectar = el('button', 'boton boton-acento', '2 · Conectar mi Patreon');
-    conectar.onclick = () => {
-      if (!casilla.checked) { b.msg.className = 'cuenta-msg mal'; b.msg.textContent = 'Marca la casilla de las condiciones para continuar'; casilla.focus(); return; }
-      irAPago('/api/pago/patreon/conectar', conectar, b.msg, { acepta: true });
-    };
-    p2.append(conectar, el('small', null, 'Entra con tu cuenta de Patreon y autoriza a MorvehTV: el Premium se activa al momento.'));
-    pasos.append(p1, p2);
-    b.s.append(acepto, pasos);
-  }
-  if (premium && !planInfo.admin && planInfo.conectado) {
-    const gestionar = el('a', 'boton', 'Gestionar o cancelar en Patreon ↗');
-    gestionar.href = 'https://www.patreon.com/settings/memberships'; gestionar.target = '_blank'; gestionar.rel = 'noopener';
-    fila.append(gestionar);
-  }
-  if (planInfo.conectado && !planInfo.admin) {
-    const quitar = el('button', 'boton', 'Desconectar Patreon');
-    quitar.onclick = () => accion(quitar, b.msg, async () => {
-      if (!confirm('¿Desconectar tu Patreon de esta cuenta? Perderás Premium aquí (tu membresía en Patreon no se cancela: eso se hace en Patreon).')) return;
-      await enviar('/api/pago/patreon/desconectar');
-      await planCambiado(true);
+    const seguir = el('button', 'boton boton-acento', premium ? '⭐ Ampliar Premium con USDC' : '⭐ Hazte Premium con USDC');
+    seguir.onclick = () => accion(seguir, b.msg, async () => {
+      if (!casilla.checked) { casilla.focus(); throw new Error('Marca la casilla de las condiciones para continuar'); }
+      const d = await enviar('/api/pago/usdc/pedido', { opcion: elegida, acepta: true });
+      opciones.remove(); acepto.remove(); seguir.remove();
+      pantallaPago(b, d);
     });
-    fila.append(quitar);
+    b.s.append(el('p', 'pago-paso', premium ? 'Ampliar:' : 'Elige cuánto tiempo:'), opciones, acepto, seguir);
   }
-  if (fila.children.length) b.s.append(fila);
+  // Últimos pagos, con su enlace público
+  if (planInfo.pagos && planInfo.pagos.length) {
+    const l = el('ul', 'pagos-hechos');
+    planInfo.pagos.forEach((x) => {
+      const li = el('li');
+      li.innerHTML = `${fechaLarga(x.fecha)} · ${x.meses} ${x.meses === 1 ? 'mes' : 'meses'}${x.importe ? ` · ${x.importe} USDC` : ''}`
+        + (x.tx ? ` · <a href="https://basescan.org/tx/${x.tx}" target="_blank" rel="noopener">ver ↗</a>` : '');
+      l.append(li);
+    });
+    b.s.append(el('p', 'pago-paso', 'Tus pagos:'), l);
+  }
+  if (planInfo.activo && !planInfo.admin) b.s.append(guiaUsdc(!premium && !(planInfo.pagos && planInfo.pagos.length)));
   b.s.append(b.msg);
   return b.s;
 }

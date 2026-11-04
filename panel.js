@@ -24,10 +24,12 @@ const ORIGENES = String(process.env.PANEL_ORIGENES ?? 'https://saitamaeditor.git
 
 let s3; let bucket; let foto; let nube; let p; let alMover = () => {};
 let pagosEstado = () => 'desactivado';
+let pagos = null; // pagos.js (USDC)
 export function iniciar(opciones) {
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
   alMover = opciones.alMover ?? alMover;
   pagosEstado = opciones.pagosEstado ?? pagosEstado;
+  pagos = opciones.pagos ?? null;
   // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
   if (nube) { setTimeout(purgar, 120000).unref(); setInterval(purgar, 6 * 3600000).unref(); }
   // Borra las IPs que guardó el registro antes de dejar de apuntarlas
@@ -308,6 +310,21 @@ export async function atender(ruta, req, res, json, ip) {
     })) });
   }
   if (ruta === '/api/panel/registro') return json(res, 200, ((await p.leerAjuste('registro')) ?? []).map(sinIp));
+
+  // Pagos en USDC: pedidos recientes y lo que llegó sin poder identificarse
+  if (ruta === '/api/panel/cripto' && req.method === 'GET') {
+    if (!pagos) throw error(503, 'Pagos no disponibles');
+    return json(res, 200, await pagos.resumenAdmin());
+  }
+  if (ruta === '/api/panel/cripto/asignar') {
+    const quien = await p.cuentaPorUsuario(String(datos.usuario ?? ''));
+    if (!quien) throw error(404, 'No hay ninguna cuenta con ese usuario');
+    const meses = Number(datos.meses);
+    if (!Number.isInteger(meses) || meses < 1 || meses > 60) throw error(400, 'Meses no válidos (1 a 60)');
+    await pagos.asignarSuelto(String(datos.tx ?? ''), quien.id, meses, c.usuario);
+    await registrar(c, ip, `asigna un pago USDC a ${quien.usuario} (${meses} meses)`, [String(datos.tx ?? '')]);
+    return json(res, 200, { ok: true });
+  }
 
   // Anuncios propios (los ve el plan Básico en la web y la app) y cómo van los planes
   if (ruta === '/api/panel/anuncios' && req.method === 'GET') {

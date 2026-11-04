@@ -404,11 +404,41 @@
   .cuenta-bloque .acepto-premium input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; accent-color: var(--acento); }
   .acepto-premium a, .cuenta-legal a { color: var(--acento); }
   .acepto-premium b { color: var(--texto); }
-  .pasos-patreon { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 12px; width: 100%; }
-  .pasos-patreon li { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-  .pasos-patreon small { color: var(--suave); font-size: 12.5px; }
-  .pasos-patreon a.boton, .cuenta-botones a.boton { text-decoration: none; display: inline-flex; align-items: center; }
-  .tele .pasos-patreon small { font-size: 16px; }
+  /* Premium con USDC: opciones, pantalla de pago y guía */
+  .opciones-usdc { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; width: 100%; }
+  .opcion-usdc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 10px; cursor: pointer;
+    background: var(--panel2); border: 2px solid var(--borde); color: var(--texto); font: inherit; text-align: left; }
+  .opcion-usdc b { font-size: 15px; } .opcion-usdc span { font-size: 14px; } .opcion-usdc small { color: var(--suave); font-size: 12px; }
+  .opcion-usdc.activa { border-color: var(--acento); background: rgba(79,140,255,.12); }
+  .opcion-usdc:focus { outline: 3px solid var(--acento); outline-offset: 2px; }
+  .pago-paso { margin: 6px 0 0; color: var(--suave); font-size: 14px; }
+  .pago-usdc { width: 100%; display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: var(--fondo); border: 1px solid var(--borde); }
+  .pago-importe { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+  .pago-importe b { font-size: 30px; letter-spacing: .01em; } .pago-importe span { font-size: 18px; color: var(--suave); }
+  .pago-importe .boton { margin-left: auto; align-self: center; }
+  .pago-red { margin: 0; font-size: 13.5px; color: #ffcf70; }
+  .pago-direccion { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pago-direccion code { flex: 1 1 220px; min-width: 0; padding: 8px 10px; border-radius: 8px; background: var(--panel2); font-size: 13px; word-break: break-all; }
+  .pago-qr-fila { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .pago-qr { width: 150px; height: 150px; padding: 6px; background: #fff; border-radius: 10px; flex: none; }
+  .pago-qr svg { width: 100%; height: 100%; display: block; }
+  .pago-qr-texto { display: flex; flex-direction: column; gap: 8px; flex: 1 1 180px; align-items: flex-start; }
+  .pago-qr-texto a.boton { text-decoration: none; }
+  .pago-estado { padding: 10px 12px; border-radius: 10px; font-size: 14px; line-height: 1.45; }
+  .pago-estado.esperando { background: rgba(79,140,255,.1); border: 1px solid rgba(79,140,255,.35); }
+  .pago-estado.hecho { background: rgba(48,164,108,.14); border: 1px solid rgba(48,164,108,.5); }
+  .pago-estado a { color: var(--acento); }
+  .girando { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--acento); border-right-color: transparent; border-radius: 50%; animation: girar 1s linear infinite; vertical-align: -1px; }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  .pagos-hechos { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--suave); } .pagos-hechos a { color: var(--acento); }
+  .guia-usdc { width: 100%; border: 1px solid var(--borde); border-radius: 10px; padding: 0; }
+  .guia-usdc summary { cursor: pointer; padding: 10px 12px; font-weight: 700; }
+  .guia-cuerpo { padding: 0 14px 12px; font-size: 14px; line-height: 1.55; color: var(--suave); }
+  .guia-cuerpo h4 { margin: 12px 0 4px; color: var(--texto); font-size: 14.5px; }
+  .guia-cuerpo p { margin: 0; } .guia-cuerpo ul, .guia-cuerpo ol { margin: 4px 0; padding-left: 20px; }
+  .guia-cuerpo b { color: var(--texto); } .guia-cuerpo a { color: var(--acento); }
+  .tele .pago-importe b { font-size: 40px; } .tele .pago-qr { width: 220px; height: 220px; } .tele .guia-cuerpo { font-size: 18px; }
+  @media (max-width: 420px) { .pago-importe b { font-size: 26px; } .pago-qr { width: 130px; height: 130px; } }
   .cuenta-legal { margin: 14px 0 0; font-size: 13px; color: var(--suave); text-align: center; }
   .tele .acepto-premium { font-size: 18px; } .tele .acepto-premium input { width: 28px; height: 28px; }
   .cuenta-bloque.plan-premium h3::after { content: ' ⭐ Premium'; color: #ffb224; }
