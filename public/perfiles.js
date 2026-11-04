@@ -325,7 +325,24 @@ async function cargarPlan() {
   try { planInfo = await api('/api/pago/info'); } catch (e) { planInfo = null; }
   document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.plan === 'premium'));
   pintarBotonCuenta();
+  avisoRenovar();
   return planInfo;
+}
+// Recordatorio de renovación (una vez al día por aparato): en el último mes de Premium y cuando
+// ya ha terminado
+function avisoRenovar() {
+  if (!planInfo || !planInfo.activo || planInfo.admin) return;
+  let t = null;
+  if (planInfo.plan === 'premium' && planInfo.puedeRenovar) {
+    const dias = Math.ceil((planInfo.hasta - Date.now()) / 864e5);
+    t = `⭐ Tu Premium termina en ${dias} ${dias === 1 ? 'día' : 'días'}. Renuévalo en «Mi cuenta» para seguir sin anuncios.`;
+  } else if (planInfo.plan !== 'premium' && planInfo.vencio) {
+    t = '⭐ Tu Premium ha terminado. Renuévalo en «Mi cuenta» para volver a verlo todo sin anuncios.';
+  }
+  if (!t) return;
+  const hoy = new Date().toISOString().slice(0, 10);
+  try { if (localStorage.getItem('morvehtv-aviso-renovar') === hoy) return; localStorage.setItem('morvehtv-aviso-renovar', hoy); } catch (e) {}
+  setTimeout(() => aviso(t, 7000), 2500);
 }
 const conAnuncios = () => !!(planInfo && planInfo.plan !== 'premium' && planInfo.anuncios);
 
@@ -710,8 +727,13 @@ function bloquePlan() {
   const premium = planInfo.plan === 'premium';
   let texto;
   if (premium && planInfo.admin) texto = 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.';
-  else if (premium) texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. No hay cobros automáticos; cuando quieras, amplíalo y los meses se suman.`;
-  else texto = 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium lo ves todo sin anuncios, en la web y la app. Se paga una sola vez con USDC (un dólar digital) por el tiempo que elijas: sin suscripción ni cobros automáticos.' : '');
+  else if (premium) {
+    const dias = Math.ceil((planInfo.hasta - Date.now()) / 864e5);
+    texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. Es un pago de 12 meses que no se renueva solo: `
+      + (planInfo.puedeRenovar ? `termina en ${dias} ${dias === 1 ? 'día' : 'días'}, ya puedes renovarlo (el año nuevo empieza cuando acabe este).` : 'podrás renovarlo en su último mes.');
+  }
+  else texto = (planInfo.vencio ? `Tu Premium terminó el ${fechaLarga(planInfo.vencio)}: renuévalo para volver a verlo todo sin anuncios. ` : '')
+    + 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium lo ves todo sin anuncios, en la web y la app, durante 12 meses. Se paga una vez con USDC (un dólar digital) y no se renueva solo: al terminar, tú decides si renovarlo.' : '');
   const b = bloque('Plan', texto);
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
 
@@ -721,7 +743,7 @@ function bloquePlan() {
     b.s.append(guiaUsdc(false), b.msg);
     return b.s;
   }
-  if (planInfo.activo && !planInfo.admin) {
+  if (planInfo.activo && !planInfo.admin && planInfo.puedeRenovar) {
     const opciones = el('div', 'opciones-usdc');
     let elegida = planInfo.opciones[0] && planInfo.opciones[0].id;
     planInfo.opciones.forEach((o, i) => {
@@ -736,7 +758,7 @@ function bloquePlan() {
     const txt = el('span');
     txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> y pido que Premium empiece <b>en cuanto llegue el pago</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
     acepto.append(casilla, txt);
-    const seguir = el('button', 'boton boton-acento', premium ? '⭐ Ampliar Premium con USDC' : '⭐ Hazte Premium con USDC');
+    const seguir = el('button', 'boton boton-acento', premium || planInfo.vencio ? '⭐ Renovar Premium con USDC' : '⭐ Hazte Premium con USDC');
     seguir.onclick = () => accion(seguir, b.msg, async () => {
       if (!casilla.checked) { casilla.focus(); throw new Error('Marca la casilla de las condiciones para continuar'); }
       const d = await enviar('/api/pago/usdc/pedido', { opcion: elegida, acepta: true });
@@ -744,7 +766,7 @@ function bloquePlan() {
       pantallaPago(b, d);
     });
     const unica = planInfo.opciones.length === 1;
-    b.s.append(el('p', 'pago-paso', premium ? (unica ? 'Ampliar un año más:' : 'Ampliar:') : (unica ? 'Un año de Premium, en un solo pago:' : 'Elige cuánto tiempo:')), opciones, acepto, seguir);
+    b.s.append(el('p', 'pago-paso', premium || planInfo.vencio ? 'Renovar 12 meses más:' : (unica ? 'Un año de Premium, en un solo pago:' : 'Elige cuánto tiempo:')), opciones, acepto, seguir);
   }
   // Últimos pagos, con su enlace público
   if (planInfo.pagos && planInfo.pagos.length) {

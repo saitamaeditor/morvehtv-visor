@@ -45,6 +45,11 @@ const OPCIONES = String(process.env.CRIPTO_PRECIOS ?? '15:12').split(',').map((x
   .filter(([u, m]) => u > 0 && m > 0 && Number.isFinite(u) && Number.isInteger(m))
   .map(([usdc, meses], i) => ({ id: String(i + 1), usdc, meses }));
 const MES = 30 * 864e5;
+// Premium es un pago de 12 meses que NO se renueva solo: al terminar hay que volver a pagar. Se
+// puede renovar a partir de 30 días antes de que acabe (el año nuevo empieza cuando termine el
+// actual, así no se pierde ningún día); antes de eso no se puede volver a pagar.
+const RENOVAR_ANTES = 30 * 864e5;
+const puedeRenovar = (plan) => !esPremium(plan) || plan.hasta - Date.now() <= RENOVAR_ANTES;
 const CADUCA = 60 * 60000; // un pedido se puede pagar durante 1 hora…
 const RECONOCE = 48 * 3600000; // …y aun así se reconoce si llega en las 48 h siguientes
 const CONFIRMACIONES = 3; // bloques de margen (~6 s) antes de dar un pago por bueno
@@ -196,7 +201,10 @@ export async function darMeses(cuentaId, meses, pago) {
   if (!yo) throw error(404, 'Esa cuenta ya no existe');
   const desde = Math.max(Date.now(), esPremium(yo.plan) ? yo.plan.hasta : 0);
   const pagos = [...((yo.plan?.proveedor === 'usdc' && yo.plan.pagos) || []), { ...pago, meses, fecha: Date.now() }].slice(-50);
-  return p.ponerPlan({ id: cuentaId }, { proveedor: 'usdc', estado: 'pagado', hasta: desde + meses * MES, pagos });
+  // Meses de calendario (12 meses = un año exacto: del 4 de noviembre al 4 de noviembre)
+  const fin = new Date(desde);
+  fin.setMonth(fin.getMonth() + meses);
+  return p.ponerPlan({ id: cuentaId }, { proveedor: 'usdc', estado: 'pagado', hasta: fin.getTime(), pagos });
 }
 
 // Repaso automático: cada 15 s si hay pedidos esperando; si no, cada 10 min (solo para apuntar
@@ -279,6 +287,9 @@ export async function atender(ruta, req, res, json, cuenta) {
     }
     return json(res, 200, {
       activo, proveedor: 'usdc', red: 'Base', plan: plan.tipo, hasta: plan.hasta ?? null, admin: !!plan.admin,
+      // Renovación: se puede pagar sin Premium o en su último mes; «vencio» = cuándo acabó el anterior
+      puedeRenovar: !plan.admin && puedeRenovar(cuenta.plan),
+      vencio: cuenta.plan?.proveedor === 'usdc' && cuenta.plan.hasta && cuenta.plan.hasta <= Date.now() ? cuenta.plan.hasta : null,
       opciones: OPCIONES.map((o) => ({ ...o, texto: `${fmt(o.usdc * 1e6)} USDC` })),
       precio: await precioTexto(), pendiente,
       pagos: (cuenta.plan?.proveedor === 'usdc' ? cuenta.plan.pagos ?? [] : []).slice(-5).reverse()
@@ -312,6 +323,9 @@ export async function atender(ruta, req, res, json, cuenta) {
   if (ruta === '/api/pago/usdc/pedido') {
     const plan = await p.planDe(cuenta);
     if (plan.admin) throw error(409, 'Los administradores ya tienen Premium de por vida');
+    if (!puedeRenovar(cuenta.plan)) {
+      throw error(409, `Ya tienes Premium hasta el ${new Date(cuenta.plan.hasta).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}. Podrás renovarlo en su último mes.`);
+    }
     if (datos.acepta !== true) throw error(400, 'Tienes que aceptar las condiciones y el inicio inmediato del servicio');
     const o = OPCIONES.find((x) => x.id === String(datos.opcion));
     if (!o) throw error(400, 'Elige una de las opciones');
