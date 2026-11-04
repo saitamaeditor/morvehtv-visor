@@ -709,6 +709,13 @@ http
       const ip = acceso.ipDe(req);
       // Límite de peticiones por conexión (Render lo comprueba en /api/salud: esa no cuenta)
       if (url.pathname !== '/api/salud') { defensa.limitar(ip, url.pathname); ultimaVisita = Date.now(); }
+      // ads.txt de Google (público: lo lee el rastreador de Google)
+      if (url.pathname === '/ads.txt') {
+        const t = pagos.adsTxt();
+        if (!t) return json(res, 404, { error: 'Sin anuncios de Google configurados' });
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
+        return res.end(t);
+      }
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado,
         legal: faltanLegal().length ? `faltan ${faltanLegal().join(', ')}` : 'ok' });

@@ -419,7 +419,8 @@ function promoPremium(conBoton) {
 }
 
 function anuncioBanner(donde) {
-  if (!conAnuncios()) return null;
+  // Banners en la portada y las carpetas: solo si están activados (ANUNCIOS_BANNERS=1)
+  if (!conAnuncios() || !planInfo.anuncios.banners) return null;
   const contenido = contenidoBanner();
   if (!contenido) return null;
   const caja = el('aside', 'anuncio anuncio-' + donde);
