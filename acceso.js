@@ -6,9 +6,11 @@ import os from 'node:os';
 
 export const NUBE = Boolean(process.env.RENDER || process.env.VISOR_NUBE === '1');
 
-// Detrás del proxy de Render la IP real llega en x-forwarded-for
+// Render está detrás de Cloudflare, que pone la IP real en cf-connecting-ip (y la sobrescribe
+// si alguien la manda inventada). x-forwarded-for la puede rellenar el propio visitante, así
+// que solo se usa si no está la de Cloudflare.
 export const ipDe = (req) =>
-  (NUBE ? String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') ||
+  (NUBE ? String(req.headers['cf-connecting-ip'] ?? '').trim() || String(req.headers['x-forwarded-for'] ?? '').split(',')[0].trim() : '') ||
   (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
 
 // Solo direcciones de red doméstica: 10.x, 172.16-31.x, 192.168.x, enlace local e IPv6 privadas

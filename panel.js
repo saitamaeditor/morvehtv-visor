@@ -11,6 +11,7 @@ import {
   AbortMultipartUploadCommand, GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { randomUUID } from 'node:crypto';
 import * as meta from './metadatos.js';
 
 const TAM_PARTE = 32 * 1024 * 1024; // subidas: 32 MB por trozo, hasta ~320 GB
@@ -25,6 +26,8 @@ let s3; let bucket; let foto; let nube; let p; let alMover = () => {};
 export function iniciar(opciones) {
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
   alMover = opciones.alMover ?? alMover;
+  // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
+  if (nube) { setTimeout(purgar, 120000).unref(); setInterval(purgar, 6 * 3600000).unref(); }
 }
 
 export const esRuta = (ruta) => ruta.startsWith('/api/panel/');
@@ -106,6 +109,91 @@ async function borrarClaves(keys) {
   }
 }
 
+// ---------- Papelera ----------
+// Borrar no borra: lo mueve a «_papelera/<lote>/<ruta de antes>» (carpeta interna, que no ve
+// nadie más que el panel). Desde ahí se recupera tal cual. Vaciar un lote sí es para siempre, y
+// pide la contraseña y que el lote tenga al menos un día: si alguien roba una cuenta de
+// administrador, no puede destruir nada al momento. Lo de más de 30 días se vacía solo.
+const PAPELERA = '_papelera/';
+const DIAS_PAPELERA = Math.max(1, Number(process.env.VISOR_PAPELERA_DIAS) || 30);
+const HORAS_ANTES_DE_VACIAR = 24;
+const MANIFIESTO = '_lote.json';
+const trabajos = new Map(); // id → { tipo, total, hechos, estado, error, fin }
+
+function nuevoTrabajo(tipo, total) {
+  const id = randomUUID();
+  const t = { id, tipo, total, hechos: 0, estado: 'en curso' };
+  trabajos.set(id, t);
+  for (const [k, x] of trabajos) if (x.fin && Date.now() - x.fin > 3600000) trabajos.delete(k);
+  return t;
+}
+const terminar = (t, e) => { t.estado = e ? 'error' : 'hecho'; t.error = e?.message; t.fin = Date.now(); };
+async function esperarTrabajo(t) {
+  while (t.estado === 'en curso') await new Promise((ok) => setTimeout(ok, 200));
+  if (t.estado === 'error') throw error(500, t.error);
+}
+
+// Mueve objetos a un lote nuevo de la papelera (uno a uno: copiar y borrar, así un corte a medias
+// no pierde nada). Devuelve el trabajo, que sigue en segundo plano.
+async function aPapelera(objetos, c, ip, motivo, claves) {
+  const lote = `${new Date().toISOString().replace(/[:.]/g, '-')}_${c.usuario}`;
+  const tamano = objetos.reduce((t, o) => t + (o.Size || 0), 0);
+  await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `${PAPELERA}${lote}/${MANIFIESTO}`, ContentType: 'application/json',
+    Body: JSON.stringify({ lote, usuario: c.usuario, ip, fecha: new Date().toISOString(), motivo, claves, objetos: objetos.length, tamano }) }));
+  const t = nuevoTrabajo('papelera', objetos.length);
+  t.lote = lote;
+  (async () => {
+    for (const o of objetos) {
+      await copiar(o.Key, `${PAPELERA}${lote}/${o.Key}`, o.Size || 0);
+      await borrarClaves([o.Key]);
+      t.hechos++;
+    }
+  })().then(() => terminar(t), (e) => { terminar(t, e); console.error(`Panel: papelera ${lote}: ${e.message}`); });
+  return t;
+}
+
+const lote2fecha = (lote) => lote.replace(/^(\d{4}-\d\d-\d\dT\d\d)-(\d\d)-(\d\d)-(\d{3})Z.*$/, '$1:$2:$3.$4Z');
+const loteValido = (l) => { if (!/^[\w.-]{10,80}$/.test(String(l ?? ''))) throw error(400, 'Lote no válido'); return String(l); };
+
+async function lotes() {
+  const lista = new Map();
+  for (const o of await todos(PAPELERA)) {
+    const [, lote, ...resto] = o.Key.split('/');
+    if (!lote) continue;
+    if (!lista.has(lote)) lista.set(lote, { lote, objetos: [], tamano: 0, info: null });
+    const l = lista.get(lote);
+    if (resto.join('/') === MANIFIESTO) l.manifiesto = o.Key;
+    else { l.objetos.push(o); l.tamano += o.Size || 0; }
+  }
+  for (const l of lista.values()) {
+    if (l.manifiesto) {
+      try { l.info = JSON.parse(await (await s3.send(new GetObjectCommand({ Bucket: bucket, Key: l.manifiesto }))).Body.transformToString()); } catch { /* sin datos */ }
+    }
+    l.fecha = l.info?.fecha ?? lote2fecha(l.lote);
+  }
+  return [...lista.values()].sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+}
+
+async function purgar() {
+  try {
+    for (const l of await lotes()) {
+      if (Date.now() - new Date(l.fecha).getTime() < DIAS_PAPELERA * 864e5) continue;
+      await borrarClaves([...l.objetos.map((o) => o.Key), ...(l.manifiesto ? [l.manifiesto] : [])]);
+      await registrar({ usuario: 'sistema' }, null, 'papelera vaciada sola', [l.lote], l.objetos.length);
+      console.log(`Panel: papelera ${l.lote} vaciada (más de ${DIAS_PAPELERA} días)`);
+    }
+  } catch (e) { console.error(`Panel: no se pudo repasar la papelera (${e.message})`); }
+}
+
+// ---------- Registro: quién hizo qué (en el archivo de cuentas, las últimas 500 acciones) ----------
+async function registrar(c, ip, accion, claves = [], objetos) {
+  try {
+    const lista = (await p.leerAjuste('registro')) ?? [];
+    lista.unshift({ fecha: new Date().toISOString(), usuario: c.usuario, ip, accion, claves: claves.slice(0, 20), total: claves.length, ...(objetos != null && { objetos }) });
+    await p.guardarAjuste('registro', lista.slice(0, 500));
+  } catch (e) { console.error(`Panel: no se pudo apuntar en el registro (${e.message})`); }
+}
+
 // ---------- CORS ----------
 function cors(req, res) {
   const origen = req.headers.origin;
@@ -133,6 +221,7 @@ export async function atender(ruta, req, res, json, ip) {
     try { c = await p.credenciales(datos.usuario, datos.clave, ip); } catch (e) { if (e.status === 429) throw e; }
     if (!c) throw error(401, 'Usuario o contraseña incorrectos');
     if (!(await p.esAdmin(c))) throw error(403, 'Esta cuenta no es administradora');
+    await registrar(c, ip, 'entra en el gestor');
     return json(res, 200, { token: await p.tokenPanel(c), usuario: c.usuario, nombre: c.nombre });
   }
 
@@ -189,6 +278,21 @@ export async function atender(ruta, req, res, json, ip) {
       ...(descargar && { ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` }) }), { expiresIn: 3600 }) });
   }
 
+  // Cómo va un borrado o una recuperación (van en segundo plano)
+  if (ruta === '/api/panel/trabajo') {
+    const t = trabajos.get(String(url.searchParams.get('id')));
+    if (!t) throw error(404, 'Ese trabajo ya no existe');
+    return json(res, 200, t);
+  }
+  if (ruta === '/api/panel/papelera') {
+    return json(res, 200, { dias: DIAS_PAPELERA, horasAntesDeVaciar: HORAS_ANTES_DE_VACIAR, lotes: (await lotes()).map((l) => ({
+      lote: l.lote, fecha: l.fecha, usuario: l.info?.usuario ?? l.lote.split('_').slice(1).join('_'), motivo: l.info?.motivo ?? 'borrado',
+      claves: l.info?.claves ?? [], objetos: l.objetos.filter((o) => !o.Key.endsWith('/')).length, tamano: l.tamano,
+      seVaciaSola: new Date(new Date(l.fecha).getTime() + DIAS_PAPELERA * 864e5).toISOString(),
+    })) });
+  }
+  if (ruta === '/api/panel/registro') return json(res, 200, (await p.leerAjuste('registro')) ?? []);
+
   // Elegir el título antes de subirlo: buscar por nombre o IMDb y su ficha con los capítulos
   if (ruta === '/api/panel/titulos') {
     const q = String(url.searchParams.get('q') ?? '').trim();
@@ -212,6 +316,7 @@ export async function atender(ruta, req, res, json, ip) {
     if (!lista.length || lista.length > 100) throw error(400, 'Carpetas no válidas');
     for (const x of lista) await s3.send(new PutObjectCommand({ Bucket: bucket, Key: x, Body: '' }));
     console.log(`Panel: ${c.usuario} crea ${lista.join(', ')}`);
+    await registrar(c, ip, 'crea carpetas', lista);
     return json(res, 200, { carpetas: lista });
   }
 
@@ -229,25 +334,87 @@ export async function atender(ruta, req, res, json, ip) {
       return json(res, 409, { error: 'Ya existe algo con ese nombre en el destino', existe: true });
     }
     const destino = (k) => a + k.slice(de.length);
+    // Lo que se reemplaza en el destino no se pierde: va a la papelera
+    if (datos.reemplazar) {
+      const pisados = a.endsWith('/') ? await todos(a)
+        : await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: a })).then((h) => [{ Key: a, Size: h.ContentLength }], () => []);
+      if (pisados.length) await esperarTrabajo(await aPapelera(pisados, c, ip, 'reemplazado al mover', [a]));
+    }
     alMover(origen.map((o) => destino(o.Key)));
     for (const o of origen) await copiar(o.Key, destino(o.Key), o.Size);
     await borrarClaves(origen.map((o) => o.Key));
     console.log(`Panel: ${c.usuario} mueve ${de} → ${a} (${origen.length})`);
+    await registrar(c, ip, `mueve a ${a}`, [de], origen.length);
     return json(res, 200, { ok: true, movidos: origen.length });
   }
 
-  // Borrar archivos o carpetas enteras (no se puede deshacer: lo confirma la web antes)
+  // Borrar archivos o carpetas enteras: van a la papelera (se pueden recuperar). Si es mucho de
+  // golpe (más de 20 archivos o una sección entera) hay que confirmarlo escribiendo «BORRAR».
   if (ruta === '/api/panel/borrar') {
     const claves = (Array.isArray(datos.claves) ? datos.claves : []).map(claveValida);
     if (!claves.length || claves.length > 500) throw error(400, 'Nada que borrar');
-    const lista = new Set();
+    const lista = new Map();
     for (const k of claves) {
-      if (k.endsWith('/')) (await todos(k)).forEach((o) => lista.add(o.Key));
-      lista.add(k);
+      if (k.endsWith('/')) {
+        (await todos(k)).forEach((o) => lista.set(o.Key, o));
+        if (!lista.has(k)) lista.set(k, { Key: k, Size: 0 });
+      } else if (!lista.has(k)) {
+        const h = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: k })).catch(() => null);
+        if (h) lista.set(k, { Key: k, Size: h.ContentLength });
+      }
     }
-    await borrarClaves([...lista]);
-    console.log(`Panel: ${c.usuario} borra ${claves.join(', ')} (${lista.size} objetos)`);
-    return json(res, 200, { ok: true, borrados: lista.size });
+    const objetos = [...lista.values()];
+    const archivos = objetos.filter((o) => !o.Key.endsWith('/')).length;
+    const tamano = objetos.reduce((t, o) => t + (o.Size || 0), 0);
+    const seccion = claves.some((k) => k.endsWith('/') && k.split('/').length === 2);
+    if ((archivos > 20 || seccion) && datos.confirmacion !== 'BORRAR') {
+      return json(res, 428, { error: 'Hay que confirmarlo escribiendo BORRAR', confirmar: true, archivos, tamano, seccion });
+    }
+    const t = await aPapelera(objetos, c, ip, 'borrado', claves);
+    console.log(`Panel: ${c.usuario} manda a la papelera ${claves.join(', ')} (${objetos.length} objetos)`);
+    await registrar(c, ip, 'borra (a la papelera)', claves, archivos);
+    return json(res, 200, { ok: true, trabajo: t.id, lote: t.lote, borrados: archivos });
+  }
+
+  // Recuperar un lote de la papelera a donde estaba (lo que ya exista en su sitio no se pisa)
+  if (ruta === '/api/panel/papelera/recuperar') {
+    const lote = loteValido(datos.lote);
+    const l = (await lotes()).find((x) => x.lote === lote);
+    if (!l) throw error(404, 'Ese lote ya no está en la papelera');
+    const base = `${PAPELERA}${lote}/`;
+    const t = nuevoTrabajo('recuperar', l.objetos.length);
+    t.saltados = 0;
+    alMover(l.objetos.map((o) => o.Key.slice(base.length)));
+    (async () => {
+      for (const o of l.objetos) {
+        const destino = o.Key.slice(base.length);
+        if (!destino.endsWith('/') && await existe(destino)) { t.saltados++; t.hechos++; continue; }
+        await copiar(o.Key, destino, o.Size || 0);
+        await borrarClaves([o.Key]);
+        t.hechos++;
+      }
+      if (!t.saltados && l.manifiesto) await borrarClaves([l.manifiesto]);
+    })().then(() => terminar(t), (e) => terminar(t, e));
+    await registrar(c, ip, 'recupera de la papelera', l.info?.claves ?? [lote], l.objetos.length);
+    return json(res, 200, { ok: true, trabajo: t.id });
+  }
+
+  // Vaciar un lote para siempre: con la contraseña y solo si lleva al menos un día en la papelera
+  if (ruta === '/api/panel/papelera/vaciar') {
+    const lote = loteValido(datos.lote);
+    let ok = null;
+    try { ok = await p.credenciales(c.usuario, datos.clave, ip); } catch (e) { if (e.status === 429) throw e; }
+    if (!ok || ok.id !== c.id) throw error(403, 'Contraseña incorrecta');
+    const l = (await lotes()).find((x) => x.lote === lote);
+    if (!l) throw error(404, 'Ese lote ya no está en la papelera');
+    const horas = (Date.now() - new Date(l.fecha).getTime()) / 3600000;
+    if (horas < HORAS_ANTES_DE_VACIAR) {
+      throw error(423, `Por seguridad, lo borrado no se puede eliminar del todo hasta que pasen ${HORAS_ANTES_DE_VACIAR} horas (faltan ${Math.ceil(HORAS_ANTES_DE_VACIAR - horas)}).`);
+    }
+    await borrarClaves([...l.objetos.map((o) => o.Key), ...(l.manifiesto ? [l.manifiesto] : [])]);
+    console.log(`Panel: ${c.usuario} vacía de la papelera ${lote} (${l.objetos.length} objetos)`);
+    await registrar(c, ip, 'elimina para siempre de la papelera', l.info?.claves ?? [lote], l.objetos.length);
+    return json(res, 200, { ok: true });
   }
 
   // ---------- Subidas ----------
@@ -257,7 +424,12 @@ export async function atender(ruta, req, res, json, ip) {
     const key = carpetaValida(datos.carpeta) + nombre;
     const tamano = Number(datos.tamano);
     if (!(tamano > 0) || tamano > TAM_PARTE * 10000) throw error(400, 'Tamaño no válido');
-    if (!datos.reemplazar && await existe(key)) return json(res, 409, { error: 'Ya existe un archivo con ese nombre en esta carpeta', existe: true });
+    if (await existe(key)) {
+      if (!datos.reemplazar) return json(res, 409, { error: 'Ya existe un archivo con ese nombre en esta carpeta', existe: true });
+      // El que se reemplaza va a la papelera (por si la subida nueva sale mal)
+      const h = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
+      await esperarTrabajo(await aPapelera([{ Key: key, Size: h.ContentLength }], c, ip, 'reemplazado al subir', [key]));
+    }
     const ext = key.match(/\.(\w+)$/)[1].toLowerCase();
     const { UploadId } = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: TIPOS[ext] ?? 'application/octet-stream' }));
     console.log(`Panel: ${c.usuario} sube ${key} (${(tamano / 2 ** 30).toFixed(2)} GB)`);
@@ -281,6 +453,7 @@ export async function atender(ruta, req, res, json, ip) {
       if (!partes.length) throw error(400, 'Faltan las partes');
       await s3.send(new CompleteMultipartUploadCommand({ Bucket: bucket, Key: key, UploadId: uploadId, MultipartUpload: { Parts: partes } }));
       console.log(`Panel: ${c.usuario} terminó ${key}`);
+      await registrar(c, ip, 'sube', [key]);
       return json(res, 200, { ok: true, key });
     }
     if (ruta === '/api/panel/subir/cancelar') {

@@ -18,6 +18,7 @@ import * as perfiles from './perfiles.js';
 import * as telegram from './telegram.js';
 import * as xtream from './xtream.js';
 import * as panel from './panel.js';
+import * as defensa from './defensa.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,7 +57,7 @@ const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(ke
 // Avisos de lo nuevo en Telegram, con un tema por sección (ver telegram.js)
 await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
 // Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso
-xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales });
+xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales, esAdmin: perfiles.esAdmin });
 // API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
 panel.iniciar({ s3, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar });
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);
@@ -261,8 +262,18 @@ const RAFAGA = ayudaFfmpeg.includes('readrate_initial_burst') ? ['-readrate_init
 const sesionesHls = new Map(); // id → { ff, carpeta, ultimo, errores }
 await rm(DIR_HLS, { recursive: true, force: true });
 
-async function hlsIniciar(p) {
+// Cada vídeo preparado es un ffmpeg en marcha: con tope en total y por cuenta, para que nadie
+// tumbe el servidor abriendo vídeos sin parar
+const MAX_FFMPEG = Math.max(1, Number(process.env.VISOR_MAX_FFMPEG) || 8);
+const MAX_FFMPEG_CUENTA = 2;
+async function hlsIniciar(p, quien) {
   const key = p.get('key');
+  if (quien && !quien.admin) {
+    // Los de esta cuenta que siguen abiertos: el más viejo se cierra para dejar sitio al nuevo
+    const suyos = [...sesionesHls].filter(([, s]) => s.usuario === quien.cuenta.usuario).sort((a, b) => a[1].ultimo - b[1].ultimo);
+    while (suyos.length >= MAX_FFMPEG_CUENTA) hlsParar(suyos.shift()[0]);
+  }
+  if (sesionesHls.size >= MAX_FFMPEG) throw Object.assign(new Error('El servidor está ocupado preparando otros vídeos. Prueba en un minuto.'), { status: 503 });
   const desde = Math.max(0, Math.floor(Number(p.get('desde')) || 0));
   const info = await medio(key);
   const audio = Math.min(Math.max(0, Number(p.get('audio')) || 0), Math.max(0, info.audios.length - 1));
@@ -286,7 +297,7 @@ async function hlsIniciar(p) {
     '-hls_segment_filename', path.join(carpeta, 's%05d.ts'), path.join(carpeta, 'index.m3u8'),
   ];
   const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-  const sesion = { ff, carpeta, ultimo: Date.now(), errores: '' };
+  const sesion = { ff, carpeta, ultimo: Date.now(), errores: '', usuario: quien?.cuenta.usuario };
   sesionesHls.set(id, sesion);
   ff.stderr.on('data', (d) => (sesion.errores = (sesion.errores + d).slice(-2000)));
   ff.on('close', (code) => code && sesion.errores && console.error(`ffmpeg (${key} @${desde}s): ${sesion.errores.trim().slice(-300)}`));
@@ -445,14 +456,17 @@ const rutas = {
   '/api/catalogo': () => catalogo(),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
-  '/api/hls': (p) => hlsIniciar(p),
+  '/api/hls': (p, req, quien) => { defensa.permitirVideo(quien.cuenta, quien.ip, p.get('key'), quien.admin); return hlsIniciar(p, quien); },
   '/api/hls-parar': (p) => hlsParar(p.get('id')),
   '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),
   '/api/info': () => ({ bucket: E2_BUCKET }),
   '/api/listar': (p) => listarJunto(p.get('prefijo') ?? '', p.get('token')),
   '/api/buscar': (p) => buscar(p.get('prefijo') ?? '', p.get('q') ?? ''),
   '/api/tamano': (p) => tamano(p.get('prefijo') ?? ''),
-  '/api/url': async (p) => ({ url: await firmar(p.get('key')) }),
+  '/api/url': async (p, req, quien) => {
+    if (esVideo(p.get('key') ?? '')) defensa.permitirVideo(quien.cuenta, quien.ip, p.get('key'), quien.admin);
+    return { url: await firmar(p.get('key')) };
+  },
   '/api/texto': (p) => texto(p.get('key')),
   '/api/enlace': (p) => enlace(p.get('key')),
 };
@@ -486,7 +500,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -503,9 +517,13 @@ const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/ic
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    defensa.cabeceras(res, acceso.NUBE);
     try {
       const permiso = acceso.permiso(req);
       if (permiso === 'fuera') return json(res, 403, { error: 'Solo se puede entrar desde la red de casa' });
+      const ip = acceso.ipDe(req);
+      // Límite de peticiones por conexión (Render lo comprueba en /api/salud: esa no cuenta)
+      if (url.pathname !== '/api/salud') defensa.limitar(ip, url.pathname);
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb() });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
@@ -514,7 +532,8 @@ http
       if (xtream.esRuta(url.pathname)) return await xtream.atender(url.pathname, req, res, json, { ip: acceso.ipDe(req), nube: acceso.NUBE });
       // Sin sesión solo se llega a la pantalla de entrar o registrarse
       if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
-      if (!PUBLICO.includes(url.pathname) && !(await perfiles.sesion(req))) {
+      const cuenta = PUBLICO.includes(url.pathname) ? null : await perfiles.sesion(req);
+      if (!PUBLICO.includes(url.pathname) && !cuenta) {
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Inicia sesión' });
         res.writeHead(302, { location: '/entrar.html', 'cache-control': 'no-store' });
         return res.end();
@@ -528,7 +547,7 @@ http
       if (ruta && (prohibido(url.searchParams.get('key')) || prohibido(url.searchParams.get('prefijo')))) {
         return json(res, 403, { error: 'Esta carpeta no se puede ver desde internet' });
       }
-      if (ruta) return json(res, 200, await ruta(url.searchParams, req));
+      if (ruta) return json(res, 200, await ruta(url.searchParams, req, { cuenta, ip, admin: await perfiles.esAdmin(cuenta) }));
 
       if (VENDOR[url.pathname]) {
         res.writeHead(200, { 'content-type': tipos['.js'], 'cache-control': 'max-age=86400' });
@@ -547,6 +566,8 @@ http
       res.writeHead(200, { 'content-type': tipos[ext] ?? 'application/octet-stream', 'cache-control': 'no-cache' });
       res.end(cuerpo);
     } catch (err) {
+      if (err.espera && !res.headersSent) res.setHeader('retry-after', String(err.espera));
+      if (res.headersSent) return res.end();
       json(res, err.status ?? (err.code === 'ENOENT' ? 404 : err.$metadata?.httpStatusCode ?? 500), { error: err.message });
     }
   })

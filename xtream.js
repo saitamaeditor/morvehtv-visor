@@ -7,12 +7,14 @@
 //   /get.php?username=…&password=…                      lista M3U con todo
 //   /xmltv.php                                          guía de TV (vacía: no hay canales)
 import { createHash } from 'node:crypto';
+import * as defensa from './defensa.js';
 import * as meta from './metadatos.js';
 import { nombreSeccion } from './telegram.js';
 
-let foto; let firmar; let esVideo; let credenciales;
+let foto; let firmar; let esVideo; let credenciales; let esAdmin = async () => false;
 export function iniciar(opciones) {
   ({ foto, firmar, esVideo, credenciales } = opciones);
+  esAdmin = opciones.esAdmin ?? esAdmin;
 }
 
 export const esRuta = (ruta) => ['/player_api.php', '/get.php', '/xmltv.php'].includes(ruta)
@@ -199,6 +201,10 @@ export async function atender(ruta, req, res, json, { ip, nube }) {
     if (!cuenta) { res.writeHead(401); return res.end(); }
     const x = (await modelo()).porId.get(Number(ver[4]));
     if (!x || x.tipo === 'serie' || (ver[1] === 'movie') !== (x.tipo === 'pelicula')) { res.writeHead(404); return res.end(); }
+    // La misma vigilancia que en la web: cuentas compartidas o descargas masivas
+    try { defensa.permitirVideo(cuenta, ip, x.key, await esAdmin(cuenta)); } catch (e) {
+      res.writeHead(e.status ?? 429, { 'content-type': 'text/plain; charset=utf-8' }); return res.end(e.message);
+    }
     res.writeHead(302, { location: await firmar(x.key, { segundos: 12 * 3600 }), 'cache-control': 'no-store' });
     return res.end();
   }
