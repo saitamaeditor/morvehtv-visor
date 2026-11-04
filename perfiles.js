@@ -119,6 +119,14 @@ export async function planDe(c) {
   if (pagos.esPremium(c.plan)) return { tipo: 'premium', hasta: c.plan.hasta, cancelado: c.plan.cancelado };
   return { tipo: 'basico' };
 }
+// Versión de las condiciones (cambia si se modifican) y apunte de cuándo las aceptó cada cuenta
+export const VERSION_CONDICIONES = '2026-11-04';
+export const anotarAceptacion = (id, que) => cambiar((d) => {
+  const c = (d.cuentas || []).find((x) => x.id === id);
+  if (!c) return;
+  c.acepto = { ...(c.acepto || {}), [que]: { fecha: new Date().toISOString(), version: VERSION_CONDICIONES } };
+});
+
 // Cuántas cuentas hay de cada plan (para el gestor)
 export async function resumenPlanes() {
   const d = await leer();
@@ -241,6 +249,7 @@ export async function atender(ruta, req, res, json, ip) {
     const nombre = String(datos.nombre ?? '').trim().slice(0, 30) || usuario;
     if (!usuarioValido(usuario)) throw error(400, 'El usuario debe tener de 3 a 20 caracteres: letras, números, punto, guion o guion bajo');
     claveNueva(clave);
+    if (datos.acepta !== true) throw error(400, 'Tienes que aceptar las condiciones de uso y la política de privacidad');
     const anotar = frenar(`registro:${ip}`, 5, 60);
     const sal = randomBytes(16).toString('hex');
     const hash = await hashClave(clave, sal);
@@ -249,7 +258,8 @@ export async function atender(ruta, req, res, json, ip) {
       if (d.cuentas.length >= MAX_CUENTAS) throw error(403, 'No se admiten más registros por ahora');
       if (d.cuentas.some((x) => x.usuario === usuario)) throw error(409, 'Ese usuario ya existe');
       const c = { id: randomBytes(8).toString('hex'), usuario, nombre, sal, clave: hash, gen: 0,
-        creado: new Date().toISOString(), favoritos: [], posiciones: {} };
+        creado: new Date().toISOString(), favoritos: [], posiciones: {},
+        acepto: { registro: { fecha: new Date().toISOString(), version: VERSION_CONDICIONES } } };
       d.cuentas.push(c);
       return { c, d };
     });

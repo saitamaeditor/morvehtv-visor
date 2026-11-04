@@ -1540,7 +1540,9 @@ document.addEventListener('keydown', (e) => {
   const k = tecla(e);
   if (!k) return;
   const a = document.activeElement;
-  const escribiendo = a && (a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || (a.tagName === 'INPUT' && a.type !== 'range'));
+  // OK del mando sobre una casilla (condiciones de Premium): la marca o desmarca
+  if (k === 'ok' && a && a.type === 'checkbox') { e.preventDefault(); a.click(); return; }
+  const escribiendo = a && (a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || (a.tagName === 'INPUT' && a.type !== 'range' && a.type !== 'checkbox'));
   if (['arriba', 'abajo', 'izq', 'der'].includes(k)) document.documentElement.classList.add('usa-mando');
 
   if (k === 'atras') {

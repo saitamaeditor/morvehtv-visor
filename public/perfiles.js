@@ -104,7 +104,7 @@ function abrirCuenta() {
   caja.append(cab);
 
   // Plan: Básico o Premium
-  const bp = bloquePlan();
+  const bp = typeof bloquePlan === 'function' ? bloquePlan() : null;
   if (bp) caja.append(bp);
 
   // Nombre visible
@@ -164,6 +164,11 @@ function abrirCuenta() {
   });
   bb.s.append(cb.l, borrar, bb.msg);
   caja.append(bb.s);
+
+  // Información legal
+  const leg = el('p', 'cuenta-legal');
+  leg.innerHTML = '<a href="/legal.html#aviso-legal" target="_blank">Aviso legal</a> · <a href="/legal.html#condiciones" target="_blank">Condiciones</a> · <a href="/legal.html#privacidad" target="_blank">Privacidad</a> · <a href="/legal.html#cookies" target="_blank">Cookies</a>';
+  caja.append(leg);
 
   x.focus();
 }
@@ -589,9 +594,9 @@ function anuncioVast(etiqueta) {
 
 // Ir a la página de PayPal. En la app de Android solo se puede salir a otra web con un toque,
 // así que allí se enseña un botón que lleva a ella.
-async function irAPago(ruta, boton, msg) {
+async function irAPago(ruta, boton, msg, datos) {
   await accion(boton, msg, async () => {
-    const r = await enviar(ruta);
+    const r = await enviar(ruta, datos);
     if (!enApp()) { location.href = r.url; return; }
     const a = el('a', 'boton boton-acento', 'Continuar en PayPal (pago seguro) ›');
     a.href = r.url;
@@ -614,8 +619,18 @@ function bloquePlan() {
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
   const fila = el('div', 'cuenta-botones');
   if (!premium && planInfo.activo) {
+    // Consentimiento expreso (contenido digital que empieza ya: sin derecho de desistimiento)
+    const acepto = el('label', 'acepto-premium');
+    const casilla = el('input'); casilla.type = 'checkbox';
+    const txt = el('span');
+    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> (renovación mensual automática, cancelable cuando quiera) y pido que Premium empiece <b>ya</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
+    acepto.append(casilla, txt);
     const ir = el('button', 'boton boton-acento', '⭐ Hazte Premium' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
-    ir.onclick = () => irAPago('/api/pago/suscribir', ir, b.msg);
+    ir.onclick = () => {
+      if (!casilla.checked) { b.msg.className = 'cuenta-msg mal'; b.msg.textContent = 'Marca la casilla de las condiciones para continuar'; casilla.focus(); return; }
+      irAPago('/api/pago/suscribir', ir, b.msg, { acepta: true });
+    };
+    b.s.append(acepto);
     fila.append(ir);
   }
   if (premium && !planInfo.admin && planInfo.activo && !planInfo.cancelado) {

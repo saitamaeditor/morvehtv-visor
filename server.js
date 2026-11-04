@@ -673,10 +673,31 @@ function enviar(res, status, cabeceras, cuerpo) {
   res.writeHead(status, cabeceras);
   res.end(buf);
 }
+// ---------- Páginas legales ----------
+// Los datos del titular (obligatorios por la LSSI para cobrar) van en variables de entorno de
+// Render, no en el código: el repositorio es público. Lo que falte sale como «pendiente».
+const LEGAL = { TITULAR: 'LEGAL_TITULAR', NIF: 'LEGAL_NIF', DIRECCION: 'LEGAL_DIRECCION', EMAIL: 'LEGAL_EMAIL' };
+const faltanLegal = () => Object.values(LEGAL).filter((v) => !String(process.env[v] ?? '').trim());
+const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+async function legal(html, req) {
+  const valores = Object.fromEntries(Object.entries(LEGAL).map(([k, v]) => {
+    const x = String(process.env[v] ?? '').trim();
+    if (!x) return [k, '<em style="color:#ffb224">[pendiente de completar]</em>'];
+    return [k, k === 'EMAIL' ? `<a href="mailto:${escHtml(x)}">${escHtml(x)}</a>` : escHtml(x)];
+  }));
+  const web = process.env.VISOR_URL || `https://${req.headers.host}`;
+  valores.WEB = `<a href="${escHtml(web)}">${escHtml(web.replace(/^https?:\/\//, ''))}</a>`;
+  valores.PRECIO = escHtml((await pagos.precioTexto().catch(() => null)) || 'el indicado antes de pagar');
+  valores.ANIO = String(new Date().getFullYear());
+  // (en el pie, sin enlaces ni avisos: solo el nombre)
+  return html.replace(/© \{\{ANIO\}\} \{\{TITULAR\}\}/, `© ${valores.ANIO} ${escHtml(String(process.env.LEGAL_TITULAR ?? '').trim())}`)
+    .replace(/\{\{([A-Z]+)\}\}/g, (m, k) => valores[k] ?? m);
+}
+
 const json = (res, status, datos) => enviar(res, status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, JSON.stringify(datos));
 
 // Lo que se puede abrir sin haber entrado: la pantalla de entrada y los iconos
-const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
+const PUBLICO = ['/entrar.html', '/legal.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
 
 http
   .createServer(async (req, res) => {
@@ -689,7 +710,8 @@ http
       // Límite de peticiones por conexión (Render lo comprueba en /api/salud: esa no cuenta)
       if (url.pathname !== '/api/salud') { defensa.limitar(ip, url.pathname); ultimaVisita = Date.now(); }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado,
+        legal: faltanLegal().length ? `faltan ${faltanLegal().join(', ')}` : 'ok' });
       // Avisos de PayPal (cobros, renovaciones, cancelaciones): sin sesión, con su firma
       if (url.pathname === '/api/pago/webhook' && req.method === 'POST') return await pagos.webhook(req, res, json);
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
@@ -724,7 +746,8 @@ http
       const ext = path.extname(fichero);
       // La página nunca se guarda en caché y enlaza sus archivos con la versión
       if (ext === '.html') {
-        const html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
+        let html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
+        if (url.pathname === '/legal.html') html = await legal(html, req);
         return enviar(res, 200, { 'content-type': tipos[ext], 'cache-control': 'no-store' }, html);
       }
       const cuerpo = ext === '.js' ? await js(fichero) : await readFile(fichero);

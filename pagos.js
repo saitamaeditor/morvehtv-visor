@@ -80,6 +80,8 @@ async function textoPrecio() {
   return precio.texto;
 }
 
+export const precioTexto = () => textoPrecio();
+
 // Dirección pública de MorvehTV (para volver desde PayPal)
 function base(req) {
   if (process.env.VISOR_URL) return process.env.VISOR_URL.replace(/\/$/, '');
@@ -139,6 +141,8 @@ export async function atender(ruta, req, res, json, cuenta) {
   // Hacerse Premium: la página de PayPal para aprobar la suscripción mensual
   if (ruta === '/api/pago/suscribir') {
     if ((await p.planDe(cuenta)).tipo === 'premium') throw error(409, 'Ya tienes Premium');
+    if (datos.acepta !== true) throw error(400, 'Tienes que aceptar las condiciones y el inicio inmediato del servicio');
+    await p.anotarAceptacion(cuenta.id, 'premium');
     const b = base(req);
     const s = await paypal('POST', '/v1/billing/subscriptions', {
       plan_id: PLAN,
