@@ -346,6 +346,47 @@
     .controles .boton { padding: 8px 9px; min-width: 40px; }
     .controles .boton span { display: none; }
   }
+  /* ---------- Planes y anuncios (solo plan Básico) ---------- */
+  .anuncio { grid-column: 1 / -1; position: relative; display: flex; flex-direction: column; gap: 6px; margin: 4px 0 18px; }
+  .etiqueta-anuncio { color: var(--suave); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .anuncio-propio { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-radius: 12px; text-decoration: none; color: inherit;
+    background: var(--panel); border: 1px solid var(--borde); min-height: 72px; }
+  a.anuncio-propio:hover, a.anuncio-propio:focus { border-color: var(--acento); outline: none; }
+  .anuncio-propio img { width: 160px; max-width: 34%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; flex: none; }
+  .anuncio-propio .texto { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+  .anuncio-propio .texto b { font-size: 16px; }
+  .anuncio-propio .texto span { color: var(--suave); font-size: 14px; line-height: 1.4; }
+  .anuncio-propio.promo { background: linear-gradient(110deg, rgba(79,140,255,.18), rgba(255,178,36,.12)); border-color: rgba(255,178,36,.35); }
+  .anuncio-propio .boton { flex: none; }
+  .anuncio ins.adsbygoogle { min-height: 90px; }
+  .tele .anuncio-propio { padding: 2vh 2vw; } .tele .anuncio-propio .texto b { font-size: 22px; } .tele .anuncio-propio .texto span { font-size: 17px; }
+  /* Anuncio antes del vídeo: centrado sobre el reproductor, 5 s y luego «Ver el vídeo» */
+  .anuncio-previo { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px;
+    background: rgba(0,0,0,.92); padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .anuncio-previo .caja { width: min(720px, 100%); display: flex; flex-direction: column; gap: 12px; }
+  .anuncio-previo .anuncio-propio { flex-direction: column; align-items: stretch; text-align: left; padding: 0; overflow: hidden; }
+  .anuncio-previo .anuncio-propio img { width: 100%; max-width: none; border-radius: 0; }
+  .anuncio-previo .anuncio-propio .texto { padding: 12px 16px 0; }
+  .anuncio-previo .anuncio-propio .boton { margin: 0 16px 14px; align-self: flex-start; }
+  .anuncio-previo .anuncio-propio.promo { padding: 18px 0 0; }
+  .anuncio-previo .pie { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  .anuncio-previo .pie .boton[disabled] { opacity: .75; cursor: default; }
+  .tele .anuncio-previo .caja { width: 62vw; } .tele .anuncio-previo .pie .boton { font-size: 20px; padding: 12px 22px; }
+  @media (max-height: 500px) and (orientation: landscape) {
+    .anuncio-previo .caja { width: min(560px, 100%); }
+    .anuncio-previo .anuncio-propio img { max-height: 46vh; }
+  }
+  @media (max-width: 600px) {
+    .anuncio-propio { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
+    .anuncio-propio img { width: 100%; max-width: none; }
+    .anuncio-propio .texto b { font-size: 15px; } .anuncio-propio .texto span { font-size: 13px; }
+    .anuncio-previo .pie { justify-content: stretch; } .anuncio-previo .pie .boton { flex: 1; }
+  }
+  /* Premium: insignia junto al nombre y bloque del plan en «Mi cuenta» */
+  #mi-cuenta .insignia { margin-left: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; color: #1a1300; background: #ffb224; border-radius: 999px; padding: 2px 7px; }
+  @media (max-width: 600px) { #mi-cuenta .insignia { display: none; } .premium #mi-cuenta .inicial { box-shadow: 0 0 0 2px #ffb224; } }
+  .cuenta-bloque.plan-premium h3::after { content: ' ⭐ Premium'; color: #ffb224; }
+  .cuenta-bloque.plan-basico .boton-acento { background: linear-gradient(90deg, #4f8cff, #7b5cff); border-color: transparent; }
   /* Botón para salir (solo en la app de Android) */
   #salir-app { flex: none; margin-left: auto; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px; }
   /* Seguir viendo: barra de lo visto en la tarjeta y botón para empezar de cero */

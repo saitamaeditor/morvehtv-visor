@@ -23,9 +23,11 @@ const TIPOS = { mp4: 'video/mp4', m4v: 'video/mp4', mkv: 'video/x-matroska', web
 const ORIGENES = String(process.env.PANEL_ORIGENES ?? 'https://saitamaeditor.github.io').split(',').map((o) => o.trim()).filter(Boolean);
 
 let s3; let bucket; let foto; let nube; let p; let alMover = () => {};
+let pagosEstado = () => 'desactivado';
 export function iniciar(opciones) {
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
   alMover = opciones.alMover ?? alMover;
+  pagosEstado = opciones.pagosEstado ?? pagosEstado;
   // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
   if (nube) { setTimeout(purgar, 120000).unref(); setInterval(purgar, 6 * 3600000).unref(); }
   // Borra las IPs que guardó el registro antes de dejar de apuntarlas
@@ -302,6 +304,26 @@ export async function atender(ruta, req, res, json, ip) {
     })) });
   }
   if (ruta === '/api/panel/registro') return json(res, 200, ((await p.leerAjuste('registro')) ?? []).map(sinIp));
+
+  // Anuncios propios (los ve el plan Básico en la web y la app) y cómo van los planes
+  if (ruta === '/api/panel/anuncios' && req.method === 'GET') {
+    return json(res, 200, { anuncios: (await p.leerAjuste('anuncios')) ?? [], planes: await p.resumenPlanes(), pagos: pagosEstado(),
+      adsense: Boolean(process.env.ANUNCIOS_ADSENSE) });
+  }
+  if (ruta === '/api/panel/anuncios') {
+    const https = (u) => { try { return new URL(u).protocol === 'https:' ? String(u).slice(0, 1000) : null; } catch { return null; } };
+    const lista = (Array.isArray(datos.anuncios) ? datos.anuncios : []).slice(0, 30).map((a) => ({
+      id: String(a.id || randomUUID()).slice(0, 40),
+      titulo: String(a.titulo ?? '').trim().slice(0, 60),
+      texto: String(a.texto ?? '').trim().slice(0, 160),
+      imagen: a.imagen ? https(a.imagen) : null,
+      enlace: a.enlace ? https(a.enlace) : null,
+      activo: a.activo !== false,
+    })).filter((a) => a.titulo || a.imagen);
+    await p.guardarAjuste('anuncios', lista);
+    await registrar(c, ip, `guarda los anuncios (${lista.length})`);
+    return json(res, 200, { anuncios: lista });
+  }
 
   // Elegir el título antes de subirlo: buscar por nombre o IMDb y su ficha con los capítulos
   if (ruta === '/api/panel/titulos') {

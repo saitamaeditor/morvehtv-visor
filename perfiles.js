@@ -5,6 +5,7 @@
 import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import * as pagos from './pagos.js';
 
 const ARCHIVO = '_morvehtv/usuarios.json';
 
@@ -108,6 +109,29 @@ const ponerSesion = (res, d, c) => res.setHeader('set-cookie', cookieSesion(`${c
 const ADMINS_ENTORNO = String(process.env.VISOR_ADMINS ?? '').split(',').map(normalizar).filter(Boolean);
 export const esAdmin = async (c) => Boolean(c && [...((await leer()).admins || []), ...ADMINS_ENTORNO].includes(c.usuario));
 
+// ---------- Plan de cada cuenta ----------
+// «premium» si tiene la suscripción al día (o es administrador); si no, «basico» (con anuncios)
+export async function planDe(c) {
+  if (!c) return { tipo: 'basico' };
+  if (await esAdmin(c)) return { tipo: 'premium', admin: true };
+  if (pagos.esPremium(c.plan)) return { tipo: 'premium', hasta: c.plan.hasta, cancelado: c.plan.cancelado };
+  return { tipo: 'basico' };
+}
+// Cuántas cuentas hay de cada plan (para el gestor)
+export async function resumenPlanes() {
+  const cuentas = (await leer()).cuentas || [];
+  const premium = cuentas.filter((c) => pagos.esPremium(c.plan)).length;
+  return { cuentas: cuentas.length, premium, basico: cuentas.length - premium };
+}
+// Lo apunta el webhook de Stripe: por id de cuenta o, si no lo trae, por su cliente de Stripe
+export const ponerPlan = (quien, datos) => cambiar((d) => {
+  const c = (d.cuentas || []).find((x) => (quien.id && x.id === quien.id) || (quien.cliente && x.plan?.cliente === quien.cliente));
+  if (!c) { console.error(`Pagos: no hay ninguna cuenta para ${quien.id || quien.cliente}`); return null; }
+  c.plan = { ...(c.plan || {}), ...datos, cambiado: Date.now() };
+  console.log(`Pagos: ${c.usuario} → ${c.plan.estado}${c.plan.cancelado ? ' (cancelará al final del periodo)' : ''}`);
+  return c.plan;
+});
+
 // La cuenta de quien hace la petición, o null (la usa también el servidor para dejar pasar)
 export async function sesion(req) {
   const [id, f] = String(cookies(req)[COOKIE] ?? '').split('.');
@@ -193,7 +217,7 @@ export async function atender(ruta, req, res, json, ip) {
     const c = await necesitaCuenta(req);
     const pendientes = posPendientes.get(c.id);
     const posiciones = { ...c.posiciones, ...(pendientes ? Object.fromEntries(pendientes) : {}) };
-    return json(res, 200, { ...publica(c), admin: await esAdmin(c), favoritos: c.favoritos, posiciones });
+    return json(res, 200, { ...publica(c), admin: await esAdmin(c), plan: (await planDe(c)).tipo, favoritos: c.favoritos, posiciones });
   }
   if (req.method !== 'POST') throw error(405, 'Método no permitido');
   const datos = await cuerpo(req);
@@ -259,6 +283,7 @@ export async function atender(ruta, req, res, json, ip) {
       throw error(401, 'La contraseña actual no es correcta');
     }
     if (ruta === '/api/cuenta-borrar') {
+      await pagos.cancelarDe(yo); // que no se le siga cobrando
       await cambiar((d) => { d.cuentas = (d.cuentas || []).filter((x) => x.id !== yo.id); });
       posPendientes.delete(yo.id);
       console.log(`Cuenta borrada: ${yo.usuario}`);

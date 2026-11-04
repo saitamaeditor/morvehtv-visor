@@ -161,6 +161,9 @@ function pintar() {
     if (conMando && actual < 0 && (!document.activeElement || document.activeElement === document.body)) moverFoco('abajo');
     return;
   }
+  // Plan Básico: un anuncio a lo ancho encima de la carpeta
+  const banner = typeof anuncioBanner === 'function' && anuncioBanner('carpeta');
+  if (banner) items.append(banner);
   for (const c of carpetas) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     items.append(t);
@@ -206,6 +209,9 @@ function pintarInicio(carpetas, archivos) {
   const medios = fila('Mis medios', null, 'medios');
   medios.c.append(...portada(carpetas).children);
   items.append(medios.s);
+  // Plan Básico: un anuncio debajo de las categorías
+  const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
+  if (banner) items.append(banner);
 
   // Seguir viendo (imagen apaisada, con la barra de lo visto) y Favoritos, si se pudo leer la lista
   if (typeof yo !== 'undefined' && yo) {
@@ -234,6 +240,7 @@ function pintarInicio(carpetas, archivos) {
   pedido.then((d) => {
     if (catalogoPedido === pedido) catalogoPedido = null; // la próxima vez, datos frescos
     if (!d || estado.prefijo || !sitio.isConnected) return;
+    let filasPuestas = 0;
     for (const { cat, suyas } of categoriasDe(carpetas)) {
       const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
       const titulos = entrada ? entrada.titulos.slice(0, 20) : [];
@@ -251,6 +258,8 @@ function pintarInicio(carpetas, archivos) {
         }
       }
       sitio.append(f.s);
+      // Y otro cada tres filas
+      if (++filasPuestas % 3 === 0) { const b = typeof anuncioBanner === 'function' && anuncioBanner('fila'); if (b) sitio.append(b); }
     }
   });
 
@@ -1133,6 +1142,9 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
         && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec));
       // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
+      // Plan Básico: un anuncio corto antes del vídeo (como mucho uno cada 10 minutos)
+      if (typeof anuncioPrevio === 'function') await anuncioPrevio();
+      if (actual !== i) return;
       const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null, undefined, { reproducir: opciones.reproducir });
       c.append(caja);
       navegacionReproductor(caja, i);
@@ -1445,7 +1457,7 @@ const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguient
 
 const ENFOCABLES_APP = '#pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '.siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
+const ENFOCABLES_VISOR = '.anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {

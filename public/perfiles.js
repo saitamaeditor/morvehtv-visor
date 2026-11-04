@@ -23,8 +23,11 @@ async function empezar() {
   } catch (e) {
     aviso('No se pudo leer «Seguir viendo» ni los favoritos', 4000);
   }
+  // El plan (y con él, si hay anuncios) antes de pintar nada
+  if (yo) await cargarPlan();
   pintarBotonCuenta();
   cargar();
+  vueltaDelPago();
 }
 
 const inicial = (c) => (c.nombre || c.usuario || '?').trim().charAt(0).toUpperCase();
@@ -42,6 +45,7 @@ function pintarBotonCuenta() {
   b.hidden = !yo;
   b.innerHTML = '';
   if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
+  if (yo && planInfo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'PREMIUM'));
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -98,6 +102,10 @@ function abrirCuenta() {
   x.onclick = cerrarCuenta;
   cab.append(el('div', 'inicial grande', inicial(yo)), datos, x);
   caja.append(cab);
+
+  // Plan: Básico o Premium
+  const bp = bloquePlan();
+  if (bp) caja.append(bp);
 
   // Nombre visible
   const bn = bloque('Nombre', 'Es el que se ve arriba. Tu usuario para entrar no cambia.');
@@ -299,4 +307,173 @@ function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
   conMeta(t, carpeta ? 'carpeta' : 'archivo', f.key, { ancha });
   estrella(t, f.key, carpeta ? null : f);
   return t;
+}
+
+// ---------- Planes: Básico (con anuncios) y Premium (sin anuncios) ----------
+// El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner
+// (Google AdSense en la web, anuncios propios del gestor o, si no hay, un aviso de Premium).
+let planInfo = null; // { activo, plan, hasta, cancelado, precio, anuncios }
+const enApp = () => !!window.MorvehApp;
+
+async function cargarPlan() {
+  try { planInfo = await api('/api/pago/info'); } catch (e) { planInfo = null; }
+  document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.plan === 'premium'));
+  pintarBotonCuenta();
+  return planInfo;
+}
+const conAnuncios = () => !!(planInfo && planInfo.plan !== 'premium' && planInfo.anuncios);
+
+// Vuelta de la página de pago de Stripe (?pago=ok / ?pago=cancelado)
+async function vueltaDelPago() {
+  const q = new URLSearchParams(location.search).get('pago');
+  if (!q) return;
+  history.replaceState(null, '', location.pathname + location.hash);
+  if (q !== 'ok') return aviso('Pago cancelado: sigues con el plan Básico', 4000);
+  aviso('¡Gracias! Activando Premium…', 4000);
+  // Stripe avisa al servidor en unos segundos: se mira hasta que llega
+  for (let n = 0; n < 10; n++) {
+    await new Promise((ok) => setTimeout(ok, 2000));
+    await cargarPlan();
+    if (planInfo && planInfo.plan === 'premium') { aviso('¡Ya eres Premium! Sin anuncios en la web y la app', 5000); return cargar(); }
+  }
+}
+
+let adsenseCargado = false;
+function cargarAdsense(cliente) {
+  if (adsenseCargado) return;
+  adsenseCargado = true;
+  const s = document.createElement('script');
+  s.async = true; s.crossOrigin = 'anonymous';
+  s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(cliente);
+  document.head.append(s);
+}
+
+// Un anuncio: AdSense (solo en la web: dentro de la app de Android no está permitido), uno
+// propio al azar o el aviso de Premium. «donde» cambia el tamaño (franja o recuadro).
+function contenidoAnuncio(donde) {
+  const a = planInfo.anuncios;
+  if (a.adsense && a.adsense.slot && !enApp()) {
+    cargarAdsense(a.adsense.cliente);
+    const ins = el('ins', 'adsbygoogle');
+    ins.style.display = 'block';
+    ins.setAttribute('data-ad-client', a.adsense.cliente);
+    ins.setAttribute('data-ad-slot', a.adsense.slot);
+    ins.setAttribute('data-ad-format', donde === 'previo' ? 'rectangle' : 'auto');
+    ins.setAttribute('data-full-width-responsive', 'true');
+    setTimeout(() => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {} }, 0);
+    return ins;
+  }
+  if (a.propios && a.propios.length) {
+    const x = a.propios[Math.floor(Math.random() * a.propios.length)];
+    const c = el(x.enlace ? 'a' : 'div', 'anuncio-propio');
+    if (x.enlace) { c.href = x.enlace; c.target = '_blank'; c.rel = 'sponsored noopener'; }
+    if (x.imagen) { const im = el('img'); im.src = x.imagen; im.alt = x.titulo || ''; im.loading = 'lazy'; c.append(im); }
+    const t = el('div', 'texto');
+    if (x.titulo) t.append(el('b', null, x.titulo));
+    if (x.texto) t.append(el('span', null, x.texto));
+    c.append(t);
+    return c;
+  }
+  if (!planInfo.activo) return null;
+  // Sin anuncios configurados: el hueco anuncia Premium
+  const c = el('div', 'anuncio-propio promo');
+  const t = el('div', 'texto');
+  t.append(el('b', null, '⭐ MorvehTV Premium'), el('span', null, 'Todo sin anuncios en la web y la app' + (planInfo.precio ? ' por ' + planInfo.precio : '') + '.'));
+  c.append(t);
+  // (antes del vídeo ya lleva su propio botón «Sin anuncios» abajo)
+  if (donde !== 'previo') {
+    const b = el('button', 'boton boton-acento', 'Quitar anuncios');
+    b.onclick = (e) => { e.stopPropagation(); abrirCuenta(); };
+    c.append(b);
+  }
+  return c;
+}
+
+function anuncioBanner(donde) {
+  if (!conAnuncios()) return null;
+  const contenido = contenidoAnuncio(donde);
+  if (!contenido) return null;
+  const caja = el('aside', 'anuncio anuncio-' + donde);
+  caja.append(el('small', 'etiqueta-anuncio', 'Anuncio'), contenido);
+  return caja;
+}
+
+// Antes de un vídeo (plan Básico): un anuncio de 5 s que luego se puede saltar. Como mucho uno
+// cada 10 minutos, para no cortar cada capítulo. Devuelve una promesa que se cumple al acabar.
+let ultimoPrevio = 0;
+function anuncioPrevio() {
+  if (!conAnuncios() || Date.now() - ultimoPrevio < 10 * 60000) return Promise.resolve();
+  const contenido = contenidoAnuncio('previo');
+  if (!contenido) return Promise.resolve();
+  ultimoPrevio = Date.now();
+  return new Promise((listo) => {
+    const capa = el('div', 'anuncio-previo');
+    const caja = el('div', 'caja');
+    const arriba = el('div', 'arriba');
+    arriba.append(el('small', 'etiqueta-anuncio', 'Anuncio'));
+    const saltar = el('button', 'boton', 'El vídeo empieza en 5 s');
+    saltar.disabled = true;
+    caja.append(arriba, contenido);
+    const pie = el('div', 'pie');
+    if (planInfo.activo) {
+      const pr = el('button', 'boton', '⭐ Sin anuncios' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
+      pr.onclick = () => { terminar(); cerrar(); abrirCuenta(); };
+      pie.append(pr);
+    }
+    pie.append(saltar);
+    caja.append(pie);
+    capa.append(caja);
+    $('#visor').append(capa);
+    let s = 5;
+    const reloj = setInterval(() => {
+      if (!$('#visor').classList.contains('abierto')) return terminar();
+      if (--s > 0) { saltar.textContent = 'El vídeo empieza en ' + s + ' s'; return; }
+      clearInterval(reloj);
+      saltar.disabled = false; saltar.textContent = 'Ver el vídeo ›'; saltar.classList.add('boton-acento');
+      saltar.focus();
+    }, 1000);
+    function terminar() { clearInterval(reloj); capa.remove(); listo(); }
+    saltar.onclick = terminar;
+  });
+}
+
+// Ir a la página de Stripe (pagar o gestionar). En la app de Android solo se puede salir a otra
+// web con un toque, así que allí se enseña un botón que lleva a ella.
+async function irAPago(ruta, boton, msg) {
+  await accion(boton, msg, async () => {
+    const r = await enviar(ruta);
+    if (!enApp()) { location.href = r.url; return; }
+    const a = el('a', 'boton boton-acento', 'Continuar en la página de pago segura ›');
+    a.href = r.url;
+    boton.replaceWith(a);
+    a.focus();
+  });
+}
+
+function fechaLarga(ms) { return new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); }
+
+function bloquePlan() {
+  if (!planInfo) return null;
+  const premium = planInfo.plan === 'premium';
+  const precio = planInfo.precio ? ' (' + planInfo.precio + ')' : '';
+  const texto = premium
+    ? (yo && yo.admin ? 'Premium (administrador): sin anuncios.'
+      : 'Premium: sin anuncios en la web y la app.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Termina' : 'Se renueva') + ' el ' + fechaLarga(planInfo.hasta) + '.' : ''))
+    : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Se cancela cuando quieras.' : '');
+  const b = bloque('Plan', texto);
+  b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
+  const fila = el('div', 'cuenta-botones');
+  if (!premium && planInfo.activo) {
+    const ir = el('button', 'boton boton-acento', '⭐ Hazte Premium' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
+    ir.onclick = () => irAPago('/api/pago/suscribir', ir, b.msg);
+    fila.append(ir);
+  }
+  if (premium && !(yo && yo.admin) && planInfo.activo) {
+    const g = el('button', 'boton', 'Gestionar suscripción (tarjeta, facturas, cancelar)');
+    g.onclick = () => irAPago('/api/pago/portal', g, b.msg);
+    fila.append(g);
+  }
+  if (fila.children.length) b.s.append(fila);
+  b.s.append(b.msg);
+  return b.s;
 }
