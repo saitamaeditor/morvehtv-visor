@@ -437,24 +437,49 @@ const SALTAR_EN = 5;
 let ultimoPrevio = 0;
 let marcaAnuncio = 'Anuncio';
 
+// El botón «Saltar anuncio»: grande, encima del anuncio (abajo a la derecha), con la cuenta
+// atrás dentro y el foco puesto desde el principio, así funciona igual con el dedo, el ratón, el
+// teclado (Intro o Espacio) y el OK del mando de la tele. Mientras cuenta no hace nada (pero se
+// puede enfocar: un botón «disabled» no recibe el foco del mando); al llegar a 0 se ilumina.
+function botonSaltar() {
+  const b = el('button', 'saltar-anuncio');
+  b.type = 'button';
+  b.setAttribute('aria-live', 'polite');
+  b.setAttribute('aria-disabled', 'true');
+  b.innerHTML = '<span class="saltar-texto"></span><span class="saltar-icono" aria-hidden="true">⏭</span>';
+  b._listo = false;
+  b.pintar = (texto, listo) => {
+    b._listo = !!listo;
+    b.querySelector('.saltar-texto').textContent = texto;
+    b.setAttribute('aria-disabled', listo ? 'false' : 'true');
+    b.classList.toggle('listo', !!listo);
+  };
+  b.addEventListener('click', (e) => { if (!b._listo) { e.preventDefault(); e.stopImmediatePropagation(); b.classList.remove('aviso'); void b.offsetWidth; b.classList.add('aviso'); } }, true);
+  return b;
+}
+
 function capaAnuncio() {
   const capa = el('div', 'anuncio-previo');
+  capa.setAttribute('role', 'dialog');
+  capa.setAttribute('aria-label', marcaAnuncio);
   const caja = el('div', 'caja');
   const arriba = el('div', 'arriba');
   const etiqueta = el('small', 'etiqueta-anuncio', marcaAnuncio);
   arriba.append(etiqueta);
   const escena = el('div', 'escena');
   const pie = el('div', 'pie');
-  const saltar = el('button', 'boton saltar', 'Saltar en ' + SALTAR_EN + ' s');
-  saltar.disabled = true;
+  const saltar = botonSaltar();
+  saltar.pintar('Saltar en ' + SALTAR_EN + ' s', false);
+  escena.append(saltar);
   if (planInfo.activo) {
     const pr = el('button', 'boton', '⭐ Sin anuncios' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
     pr.onclick = () => { capa._fin(); cerrar(); abrirCuenta(); };
     pie.append(pr);
   }
-  pie.append(saltar);
   caja.append(arriba, escena, pie);
   capa.append(caja);
+  // Foco en «Saltar» desde el principio (mando y teclado)
+  setTimeout(() => { if (capa.isConnected) saltar.focus(); }, 50);
   return { capa, escena, saltar, etiqueta, arriba, pie };
 }
 
@@ -462,9 +487,9 @@ function cuentaAtras(c, terminar) {
   let s = SALTAR_EN;
   const reloj = setInterval(() => {
     if (!$('#visor').classList.contains('abierto')) return terminar();
-    if (--s > 0) { c.saltar.textContent = 'Saltar en ' + s + ' s'; return; }
+    if (--s > 0) { c.saltar.pintar('Saltar en ' + s + ' s', false); return; }
     clearInterval(reloj);
-    c.saltar.disabled = false; c.saltar.textContent = 'Saltar anuncio ›'; c.saltar.classList.add('boton-acento');
+    c.saltar.pintar('Saltar anuncio', true);
     c.saltar.focus();
   }, 1000);
   return () => clearInterval(reloj);
@@ -473,23 +498,29 @@ function cuentaAtras(c, terminar) {
 const barajar = (l) => l.map((x) => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
 async function anuncioPrevio() {
   if (!conAnuncios()) return;
-  const a = planInfo.anuncios;
-  const conf = a.previos || { cantidad: 3, esperaMin: 0 };
+  const conf = planInfo.anuncios.previos || { cantidad: 3, esperaMin: 0 };
   if (Date.now() - ultimoPrevio < conf.esperaMin * 60000) return;
   ultimoPrevio = Date.now();
+  await tandaAnuncios(conf.cantidad, 'Anuncio');
+}
+
+// Una tanda de «cantidad» anuncios seguidos; «nombre» es lo que pone la etiqueta («Anuncio»,
+// «Pausa publicitaria»…). Devuelve cuando han acabado (o se cerró el vídeo).
+async function tandaAnuncios(cantidad, nombre) {
+  const a = planInfo.anuncios;
   // La tanda: Google, tus vídeos, tus imágenes y, si aún faltan, el aviso de Premium
   const tanda = [];
   if (a.vast && !enApp()) tanda.push({ tipo: 'vast' });
   barajar((a.propios || []).filter((x) => x.video)).forEach((x) => tanda.push({ tipo: 'video', x }));
   barajar((a.propios || []).filter((x) => !x.video && (x.imagen || x.titulo))).forEach((x) => tanda.push({ tipo: 'imagen', x }));
   if (planInfo.activo) tanda.push({ tipo: 'promo' });
-  const total = Math.min(conf.cantidad, tanda.length);
+  const total = Math.min(cantidad, tanda.length);
   let hechos = 0;
   for (const t of tanda) {
     if (hechos >= total) break;
     // Si se cerró el vídeo (o se fue a hacerse Premium), no siguen los anuncios
     if (!$('#visor').classList.contains('abierto')) break;
-    marcaAnuncio = total > 1 ? `Anuncio ${hechos + 1} de ${total}` : 'Anuncio';
+    marcaAnuncio = total > 1 ? `${nombre} · ${hechos + 1} de ${total}` : nombre;
     if (t.tipo === 'vast') { if (await anuncioVast(a.vast)) hechos++; continue; } // si Google no da anuncio, cuenta el siguiente
     if (t.tipo === 'video') await anuncioVideo(t.x);
     else await anuncioImagen(t.tipo === 'imagen' ? t.x : null);
@@ -538,7 +569,9 @@ function anuncioImagen(x) {
   if (!contenido) return Promise.resolve();
   return new Promise((listo) => {
     const c = capaAnuncio();
-    c.escena.append(contenido);
+    // (en los de imagen el botón va debajo del anuncio, no encima, para no tapar el texto)
+    c.escena.classList.add('sin-video');
+    c.escena.insertBefore(contenido, c.saltar);
     let hecho = false;
     const parar = cuentaAtras(c, () => terminar());
     function terminar() { if (hecho) return; hecho = true; parar(); c.capa.remove(); listo(); }
@@ -568,7 +601,9 @@ function anuncioVast(etiqueta) {
     let hecho = false;
     let mostrado = false;
     const c = capaAnuncio();
-    c.saltar.hidden = true; // los anuncios de Google traen su propio «Saltar»
+    // Los anuncios de Google traen su «Saltar», pero dentro de un marco al que no llega el mando:
+    // se deja también el nuestro, que salta cuando Google lo permite y si no dice cuánto queda
+    c.saltar.pintar('Anuncio de Google', false);
     const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
     const zona = el('div', 'ima');
     c.escena.classList.add('con-ima');
@@ -592,7 +627,17 @@ function anuncioVast(etiqueta) {
       cargador.addEventListener(ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
         gestor = e.getAdsManager(v);
         gestor.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, terminar);
-        gestor.addEventListener(ima.AdEvent.Type.STARTED, () => { mostrado = true; clearTimeout(limite); });
+        gestor.addEventListener(ima.AdEvent.Type.STARTED, () => {
+          mostrado = true; clearTimeout(limite);
+          const reloj = setInterval(() => {
+            if (hecho) return clearInterval(reloj);
+            let saltable = false; let queda = 0;
+            try { saltable = gestor.getAdSkippableState(); queda = Math.ceil(gestor.getRemainingTime()); } catch (e) {}
+            if (saltable) c.saltar.pintar('Saltar anuncio', true);
+            else c.saltar.pintar(queda > 0 ? `El anuncio acaba en ${queda} s` : 'Anuncio', false);
+          }, 500);
+        });
+        c.saltar.onclick = () => { try { gestor.skip(); } catch (e) {} };
         gestor.addEventListener(ima.AdEvent.Type.ALL_ADS_COMPLETED, terminar);
         gestor.addEventListener(ima.AdEvent.Type.SKIPPED, terminar);
         try {
@@ -608,6 +653,61 @@ function anuncioVast(etiqueta) {
       cargador.requestAds(pedido);
     }).catch(terminar);
   });
+}
+
+// ---------- Anuncios durante el vídeo y al pausar (plan Básico) ----------
+// Durante: una pausa publicitaria cada «cadaMin» minutos de vídeo visto (nunca en los primeros
+// 5 minutos ni en los 3 últimos; si empiezas a mitad, cuenta desde donde empiezas). Se para el
+// vídeo, sale la tanda y sigue solo donde estaba.
+// En la pausa: un anuncio pequeño en una esquina, que se cierra con ✕ y se va al seguir.
+function anunciosDelReproductor(caja) {
+  if (!conAnuncios()) return;
+  const a = planInfo.anuncios;
+  const v = caja.querySelector('video');
+  if (!v) return;
+  let enAnuncio = false;
+  const cada = (a.durante && a.durante.cadaMin) || 0;
+  let siguiente = null;
+  if (cada > 0) {
+    caja.alTiempo = async (t, total) => {
+      if (enAnuncio || v.paused || !caja.isConnected) return;
+      if (siguiente === null) siguiente = Math.max(t, 0) + cada * 60;
+      if (t < siguiente) return;
+      siguiente = t + cada * 60;
+      if (t < 300 || (total && total - t < 180)) return; // ni al principio ni casi al final
+      enAnuncio = true;
+      quitarPausa();
+      v.pause();
+      await tandaAnuncios((a.durante && a.durante.cantidad) || 1, 'Pausa publicitaria');
+      enAnuncio = false;
+      if (caja.isConnected && $('#visor').classList.contains('abierto')) {
+        const p = v.play();
+        if (p && p.catch) p.catch(() => {});
+      }
+    };
+  }
+  // Anuncio en la pausa
+  let tarjetaPausa = null;
+  function quitarPausa() { if (tarjetaPausa) { tarjetaPausa.remove(); tarjetaPausa = null; } }
+  if (a.pausa !== false) {
+    caja.alPausar = () => {
+      setTimeout(() => {
+        if (enAnuncio || !v.paused || v.ended || v.seeking || tarjetaPausa || !caja.isConnected || v.currentTime < 2) return;
+        const conImagen = (a.propios || []).filter((x) => !x.video && (x.imagen || x.titulo));
+        const contenido = conImagen.length ? tarjetaAnuncio(azar(conImagen)) : promoPremium(true);
+        if (!contenido) return;
+        tarjetaPausa = el('aside', 'anuncio-pausa');
+        const cab = el('div', 'anuncio-pausa-cab');
+        const x = el('button', 'cerrar-anuncio', '✕');
+        x.setAttribute('aria-label', 'Cerrar el anuncio');
+        x.onclick = (e) => { e.stopPropagation(); quitarPausa(); };
+        cab.append(el('small', 'etiqueta-anuncio', 'Anuncio'), x);
+        tarjetaPausa.append(cab, contenido);
+        caja.append(tarjetaPausa);
+      }, 700);
+    };
+    caja.alSeguir = quitarPausa;
+  }
 }
 
 // ---------- Premium con USDC (red Base) ----------

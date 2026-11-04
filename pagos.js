@@ -259,12 +259,18 @@ const VAST = String(process.env.ANUNCIOS_VAST ?? '').trim();
 // cada cuántos minutos como mínimo (ANUNCIOS_ESPERA_MIN, por defecto 0: antes de cada vídeo)
 const PREVIOS = Math.min(6, Math.max(1, Number(process.env.ANUNCIOS_PREVIOS) || 3));
 const ESPERA_MIN = Math.max(0, Number(process.env.ANUNCIOS_ESPERA_MIN) || 0);
+// Durante el vídeo: una pausa publicitaria cada ANUNCIOS_CADA_MIN minutos (por defecto 20; 0 = ninguna)
+const CADA_MIN = process.env.ANUNCIOS_CADA_MIN === '0' ? 0 : Math.max(5, Number(process.env.ANUNCIOS_CADA_MIN) || 20);
+// Al pausar: un anuncio pequeño en una esquina (ANUNCIOS_PAUSA=0 lo quita)
+const EN_PAUSA = process.env.ANUNCIOS_PAUSA !== '0';
 async function anuncios() {
   const propios = ((await p.leerAjuste('anuncios')) ?? []).filter((a) => a.activo !== false);
   return {
     adsense: /^ca-pub-\d+$/.test(ADSENSE) ? { cliente: ADSENSE, slot: ADSENSE_SLOT || null } : null,
     vast: /^https:\/\//.test(VAST) ? VAST : null,
     previos: { cantidad: PREVIOS, esperaMin: ESPERA_MIN },
+    durante: { cadaMin: CADA_MIN, cantidad: 1 },
+    pausa: EN_PAUSA,
     propios: await Promise.all(propios.map(async ({ id, imagen, enlace, texto, titulo, video }) => ({
       id, imagen, enlace, texto, titulo,
       // El vídeo del anuncio: un archivo subido desde el gestor (en e2) o una dirección https

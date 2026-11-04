@@ -382,6 +382,38 @@
   .anuncio-previo .anuncio-propio .boton { margin: 0 16px 14px; align-self: flex-start; }
   .anuncio-previo .anuncio-propio.promo { padding: 18px 0 0; }
   .anuncio-previo .pie { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+  /* Botón «Saltar anuncio»: grande, encima del anuncio, abajo a la derecha; accesible con dedo,
+     ratón, teclado y mando (foco bien visible) */
+  .anuncio-previo .escena { position: relative; min-height: 120px; }
+  .saltar-anuncio { position: absolute; right: 12px; bottom: 12px; z-index: 5; display: inline-flex; align-items: center; gap: 10px;
+    min-height: 52px; min-width: 180px; padding: 10px 18px; border-radius: 6px; cursor: pointer;
+    background: rgba(0,0,0,.72); color: #fff; border: 2px solid rgba(255,255,255,.55); font: 700 16px system-ui, sans-serif;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5); transition: background .2s, border-color .2s, transform .1s; }
+  .saltar-anuncio .saltar-icono { font-size: 20px; line-height: 1; }
+  .anuncio-previo .escena.sin-video { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .anuncio-previo .escena.sin-video .saltar-anuncio { position: static; align-self: flex-end; }
+  .saltar-anuncio:not(.listo) { cursor: default; opacity: .9; }
+  .saltar-anuncio:not(.listo) .saltar-icono { display: none; }
+  .saltar-anuncio.listo { background: #fff; color: #0b0c10; border-color: #fff; }
+  .saltar-anuncio.listo:hover { background: #e7e9ee; }
+  .saltar-anuncio:focus, .saltar-anuncio:focus-visible { outline: 4px solid var(--acento); outline-offset: 3px; }
+  .saltar-anuncio:active { transform: scale(.97); }
+  .saltar-anuncio.aviso { animation: avisoSaltar .35s ease; }
+  @keyframes avisoSaltar { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+  .tele .saltar-anuncio { min-height: 8vh; min-width: 26vw; font-size: 3vh; right: 2vw; bottom: 3vh; }
+  @media (max-width: 600px) { .saltar-anuncio { right: 8px; bottom: 8px; min-width: 150px; min-height: 48px; font-size: 15px; padding: 8px 14px; } }
+  /* Anuncio pequeño al pausar: abajo a la izquierda, encima de los controles */
+  .anuncio-pausa { position: absolute; left: 16px; bottom: 96px; z-index: 4; width: min(360px, calc(100% - 32px)); padding: 10px; border-radius: 12px;
+    background: rgba(16,18,22,.94); border: 1px solid rgba(255,255,255,.16); box-shadow: 0 10px 34px rgba(0,0,0,.6); animation: entra-siguiente .25s ease-out; }
+  #visor.cine .anuncio-pausa { position: fixed; left: max(20px, env(safe-area-inset-left)); bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .anuncio-pausa-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .anuncio-pausa .anuncio-propio { background: transparent; border: 0; padding: 0; min-height: 0; }
+  .anuncio-pausa .anuncio-propio img { width: 110px; }
+  .cerrar-anuncio { width: 36px; height: 36px; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: #fff; font-size: 16px; cursor: pointer; }
+  .cerrar-anuncio:hover, .cerrar-anuncio:focus { background: rgba(255,255,255,.28); outline: 3px solid var(--acento); outline-offset: 1px; }
+  .tele .anuncio-pausa { width: 34vw; bottom: 16vh; } .tele .cerrar-anuncio { width: 6vh; height: 6vh; font-size: 3vh; }
+  @media (max-width: 600px) { .anuncio-pausa, #visor.cine .anuncio-pausa { left: 10px; right: 10px; width: auto; bottom: calc(128px + env(safe-area-inset-bottom)); } }
+
   /* Anuncio en vídeo antes de reproducir: el vídeo a lo ancho y, encima, la zona de Google (IMA) */
   .anuncio-previo .escena { position: relative; width: 100%; }
   .anuncio-previo .escena video { display: block; width: 100%; max-height: 70vh; background: #000; border-radius: 10px; }

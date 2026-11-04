@@ -1071,6 +1071,7 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   const guardar = () => { if (ahora() > 0) guardarPosicion(key, ahora(), total()); };
   v.ontimeupdate = () => {
     if (caja.alProgreso) caja.alProgreso(ahora(), total());
+    if (caja.alTiempo) caja.alTiempo(ahora(), total());
     if (!arrastrando) { rango.value = ahora(); pintarTiempo(ahora()); }
     if (!v.paused && Date.now() - ultimoGuardado > 5000) { ultimoGuardado = Date.now(); guardar(); }
   };
@@ -1105,8 +1106,8 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     vigia = setTimeout(() => { if (caja.isConnected && !v.paused && v.readyState < 3) retomar(); }, 15000);
   };
   v.onplaying = () => { cargando.hidden = true; clearTimeout(vigia); intentos = 0; };
-  v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; if (bDeCero) { bDeCero.remove(); bDeCero = null; } mantenerPantalla(true); };
-  v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); guardar(); };
+  v.onplay = () => { bPlay.innerHTML = icono('pausa'); bGrande.hidden = true; if (bDeCero) { bDeCero.remove(); bDeCero = null; } mantenerPantalla(true); if (caja.alSeguir) caja.alSeguir(); };
+  v.onpause = () => { quiere = false; bPlay.innerHTML = icono('play'); bGrande.hidden = false; mantenerPantalla(false); guardar(); if (caja.alPausar) caja.alPausar(); };
   v.oncanplay = () => { cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide
   // más desde ese punto
@@ -1251,6 +1252,8 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null, undefined, { reproducir: opciones.reproducir });
       c.append(caja);
       navegacionReproductor(caja, i);
+      // Plan Básico: pausas publicitarias durante el vídeo y anuncio pequeño al pausar
+      if (typeof anunciosDelReproductor === 'function') anunciosDelReproductor(caja);
       enfocarVisor();
       const d = await pedirMeta('archivo', f.key);
       if (actual === i) c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key }));
@@ -1560,7 +1563,7 @@ const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguient
 
 const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '.anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
+const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
@@ -1573,7 +1576,9 @@ const visible = (x) => {
 function moverFoco(dir) {
   const enCuenta = document.documentElement.classList.contains('con-cuenta');
   const enVisor = !enCuenta && actual >= 0;
-  const cands = [...document.querySelectorAll(enCuenta ? '#cuenta button, #cuenta input, #cuenta a' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
+  // Con un anuncio en pantalla, el foco no sale de él (ni va a los controles del vídeo de detrás)
+  const capaAnuncio = enVisor && document.querySelector('.anuncio-previo');
+  const cands = [...(capaAnuncio ? capaAnuncio.querySelectorAll('button, a') : document.querySelectorAll(enCuenta ? '#cuenta button, #cuenta input, #cuenta a' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP))].filter(visible);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
     // En la portada, el foco empieza en «▶ Reproducir» del destacado (si lo hay)
@@ -1669,6 +1674,13 @@ document.addEventListener('keydown', (e) => {
   if (k === 'ok' && a && a.matches('.item, .cat')) { e.preventDefault(); a.click(); return; }
 
   if (actual >= 0) {
+    // Durante un anuncio: las flechas mueven entre sus botones, OK pulsa el que tiene el foco
+    // («Saltar anuncio») y las teclas del vídeo (play, avanzar…) no hacen nada debajo
+    if (document.querySelector('.anuncio-previo')) {
+      if (['arriba', 'abajo', 'izq', 'der'].includes(k)) { e.preventDefault(); moverFoco(k); }
+      else if (k !== 'ok') e.preventDefault();
+      return;
+    }
     const repro = document.querySelector('#vcontenido .repro');
     const video = document.querySelector('#vcontenido video');
     // «Libre» = el foco no está en un botón: ← → mueven el vídeo y OK pausa
