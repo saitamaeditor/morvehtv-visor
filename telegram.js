@@ -55,7 +55,7 @@ export async function iniciar(opciones) {
     const yo = await llamar('getMe');
     datos = { temas: {}, ...(await leer('telegram')) };
     if (process.env.TELEGRAM_CHAT && String(process.env.TELEGRAM_CHAT) !== String(datos.chat)) {
-      datos = { ...datos, chat: String(process.env.TELEGRAM_CHAT).trim(), chatNombre: null, temas: {} };
+      datos = { ...datos, chat: String(process.env.TELEGRAM_CHAT).trim(), chatNombre: null, temas: {}, charla: null };
     }
     activo = true;
     estado = datos.chat ? 'ok' : 'falta el grupo';
@@ -72,7 +72,7 @@ async function buscarGrupo() {
   const grupos = updates.map((u) => u.message?.chat ?? u.my_chat_member?.chat).filter((c) => c && c.is_forum);
   const g = grupos.at(-1);
   if (!g) return false;
-  datos = { ...datos, chat: String(g.id), chatNombre: g.title ?? null, temas: {} };
+  datos = { ...datos, chat: String(g.id), chatNombre: g.title ?? null, temas: {}, charla: null };
   await guardarDatos();
   console.log(`Telegram: grupo encontrado, «${g.title}»`);
   return true;
@@ -100,8 +100,43 @@ async function crearTema(carpeta) {
   console.log(`Telegram: tema creado, «${t.name}»`);
   // Un primer mensaje para que el tema no quede vacío
   await llamar('sendMessage', { chat_id: datos.chat, message_thread_id: t.message_thread_id, parse_mode: 'HTML',
-    text: `${emoji} <b>${html(nombre)}</b>\nAquí aparecerá todo lo nuevo que se suba a esta sección de MorvehTV.` }).catch(() => {});
+    text: `${emoji} <b>${html(nombre)}</b>\nAquí aparecerá todo lo nuevo que se suba a esta sección de MorvehTV.${datos.charla ? '\n💬 Para hablar, el tema «Chat».' : ''}` }).catch(() => {});
+  await cerrarTema(t.message_thread_id);
   return datos.temas[carpeta];
+}
+
+// Los temas de avisos quedan cerrados: en ellos solo escriben el bot y los administradores, así
+// no se pierden los avisos entre mensajes. (Si al bot le falta el permiso, se quedan abiertos.)
+async function cerrarTema(id) {
+  try { await llamar('closeForumTopic', { chat_id: datos.chat, message_thread_id: id }); } catch (e) {
+    if (!/not_modified|TOPIC_NOT_MODIFIED/i.test(e.message)) console.error(`Telegram: no se pudo cerrar un tema (${e.message})`);
+  }
+}
+
+// ---------- Tema «💬 Chat», abierto para que hable todo el grupo ----------
+let charlaReintento = 0;
+async function charlaAlDia() {
+  if (datos.charla?.listo) return;
+  if (!datos.charla?.id) {
+    const t = await llamar('createForumTopic', { chat_id: datos.chat, name: '💬 Chat', icon_color: 16766590 });
+    datos.charla = { id: t.message_thread_id };
+    await guardarDatos();
+    console.log('Telegram: tema «💬 Chat» creado');
+    const m = await llamar('sendMessage', { chat_id: datos.chat, message_thread_id: t.message_thread_id, parse_mode: 'HTML',
+      text: '💬 <b>Chat de MorvehTV</b>\nEste tema es para hablar: pide películas o series, comenta lo nuevo o avisa si algo no va.\nLos demás temas son solo para los avisos de contenido nuevo.' }).catch(() => null);
+    if (m) await llamar('pinChatMessage', { chat_id: datos.chat, message_id: m.message_id, disable_notification: true }).catch(() => {});
+  }
+  // Que los miembros puedan escribir (si el grupo lo tenía quitado) y los temas de avisos, cerrados
+  try {
+    const g = await llamar('getChat', { chat_id: datos.chat });
+    if (g.permissions && !g.permissions.can_send_messages) {
+      await llamar('setChatPermissions', { chat_id: datos.chat, permissions: { ...g.permissions, can_send_messages: true }, use_independent_chat_permissions: true });
+      console.log('Telegram: los miembros ya pueden escribir en el grupo');
+    }
+  } catch (e) { console.error(`Telegram: no se pudieron cambiar los permisos del grupo (${e.message})`); }
+  for (const t of Object.values(datos.temas)) { await cerrarTema(t.id); await espera(500); }
+  datos.charla.listo = true;
+  await guardarDatos();
 }
 
 // Un tema por cada carpeta de primer nivel que aún no lo tenga
@@ -193,6 +228,10 @@ export async function repaso(foto) {
     if (!datos.chat && !(await buscarGrupo())) return;
     const carpetas = [...new Set([...foto.keys()].filter((k) => k.includes('/')).map((k) => `${k.split('/')[0]}/`))];
     await temasAlDia(carpetas);
+    // (si falla, no frena los avisos: se reintenta dentro de 10 minutos)
+    if (Date.now() > charlaReintento) {
+      try { await charlaAlDia(); } catch (e) { charlaReintento = Date.now() + 600000; console.error(`Telegram: no se pudo crear el tema «Chat» (${e.message})`); }
+    }
     const videos = [...foto].filter(([k]) => esVideo(k) && k.includes('/'))
       .map(([key, v]) => { const [t, ms] = v.split(':'); return { key, tamano: Number(t), fecha: Number(ms) }; });
     const masNueva = Math.max(0, ...videos.map((v) => v.fecha));
