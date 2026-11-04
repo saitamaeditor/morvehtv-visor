@@ -211,6 +211,85 @@ async function enviar(tema, { texto, foto, boton }) {
   return llamar('sendMessage', { ...base, text: texto, link_preview_options: { is_disabled: true } });
 }
 
+// ---------- Bienvenida a quien entra en el grupo (en el tema General) ----------
+// El bot escucha a Telegram (getUpdates): las entradas llegan como mensaje de servicio y como
+// cambio de miembro; las dos cosas pasan con la misma persona, así que se saluda una sola vez.
+let escuchando = false;
+const saludados = new Map(); // id de usuario → cuándo
+const ENTRADA_VIEJA = 6 * 3600; // si el servidor estuvo dormido, no se saluda con horas de retraso
+
+async function escuchar() {
+  escuchando = true;
+  let offset;
+  while (activo) {
+    try {
+      const r = await fetch(`${API}/bot${TOKEN}/getUpdates`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ offset, timeout: 25, allowed_updates: ['message', 'chat_member'] }),
+        signal: AbortSignal.timeout(40000),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!d.ok) throw new Error(d.description ?? `error ${r.status}`);
+      for (const u of d.result) {
+        offset = u.update_id + 1;
+        await entrada(u).catch((e) => console.error(`Telegram: bienvenida (${e.message})`));
+      }
+    } catch (e) {
+      // 409: hay otro servidor escuchando al mismo bot; se vuelve a probar más tarde
+      console.error(`Telegram: escuchando (${e.message})`);
+      await espera(/conflict/i.test(e.message) ? 60000 : 10000);
+    }
+  }
+  escuchando = false;
+}
+
+async function entrada(u) {
+  let gente = []; let fecha = 0;
+  const m = u.message;
+  if (m?.new_chat_members && String(m.chat.id) === String(datos.chat)) { gente = m.new_chat_members; fecha = m.date; }
+  const c = u.chat_member;
+  if (c && String(c.chat.id) === String(datos.chat)) {
+    const dentro = (s) => ['member', 'administrator', 'creator'].includes(s.status) || (s.status === 'restricted' && s.is_member);
+    if (!dentro(c.old_chat_member) && dentro(c.new_chat_member)) { gente = [c.new_chat_member.user]; fecha = c.date; }
+  }
+  const ahora = Date.now();
+  for (const [id, cuando] of saludados) if (ahora - cuando > 600000) saludados.delete(id);
+  gente = gente.filter((p) => !p.is_bot && !saludados.has(p.id));
+  if (!gente.length || Date.now() / 1000 - fecha > ENTRADA_VIEJA) return;
+  gente.forEach((p) => saludados.set(p.id, ahora));
+  await bienvenida(gente);
+}
+
+function enlaceTema(id) {
+  // Grupo privado: -100123… → t.me/c/123…/tema
+  const interno = String(datos.chat).replace(/^-100/, '');
+  return `https://t.me/c/${interno}/${id}`;
+}
+
+async function bienvenida(gente) {
+  const nombres = gente.map((p) => `<a href="tg://user?id=${p.id}">${html([p.first_name, p.last_name].filter(Boolean).join(' ') || p.username || 'nuevo miembro')}</a>`);
+  const quien = nombres.length === 1 ? nombres[0] : `${nombres.slice(0, -1).join(', ')} y ${nombres.at(-1)}`;
+  const secciones = Object.values(datos.temas).map((t) => t.nombre).slice(0, 8);
+  const texto = [
+    `👋 <b>¡Bienvenid${gente.length === 1 ? 'o/a' : 'os/as'} a MorvehTV, ${quien}!</b>`,
+    '',
+    'Nos alegra tenerte aquí. Esto es lo que encontrarás en el grupo:',
+    '',
+    secciones.length ? `🔔 <b>Avisos de contenido nuevo</b>, cada sección en su tema:\n${secciones.map((s) => `   ${html(s)}`).join('\n')}` : '🔔 <b>Avisos de contenido nuevo</b>, cada sección en su tema.',
+    datos.charla?.id ? '💬 <b>Chat</b>: el sitio para hablar, pedir películas o series y avisar si algo no funciona.' : null,
+    '',
+    '📌 <b>Normas</b>: respeto ante todo, nada de spam ni enlaces ajenos, y las peticiones en el Chat.',
+    '',
+    'Para ver el contenido, entra en MorvehTV con tu cuenta. ¡Disfruta! 🍿',
+  ].filter((l) => l != null).join('\n');
+  const botones = [[{ text: '▶ Abrir MorvehTV', url: WEB }]];
+  if (datos.charla?.id && /^-100\d+$/.test(String(datos.chat))) botones[0].push({ text: '💬 Ir al Chat', url: enlaceTema(datos.charla.id) });
+  // Sin tema: va al General
+  await llamar('sendMessage', { chat_id: datos.chat, parse_mode: 'HTML', text: texto,
+    link_preview_options: { is_disabled: true }, reply_markup: { inline_keyboard: botones } });
+  console.log(`Telegram: bienvenida a ${gente.length} persona${gente.length === 1 ? '' : 's'}`);
+}
+
 // Lo que el panel de gestión solo ha movido o renombrado no es contenido nuevo (al copiarlo en
 // e2 cambia de fecha): esas claves no se avisan
 const ignorados = new Map(); // key → hasta cuándo
@@ -232,6 +311,7 @@ export async function repaso(foto) {
     if (Date.now() > charlaReintento) {
       try { await charlaAlDia(); } catch (e) { charlaReintento = Date.now() + 600000; console.error(`Telegram: no se pudo crear el tema «Chat» (${e.message})`); }
     }
+    if (!escuchando) escuchar();
     const videos = [...foto].filter(([k]) => esVideo(k) && k.includes('/'))
       .map(([key, v]) => { const [t, ms] = v.split(':'); return { key, tamano: Number(t), fecha: Number(ms) }; });
     const masNueva = Math.max(0, ...videos.map((v) => v.fecha));
