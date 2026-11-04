@@ -296,6 +296,52 @@
   .gran-play .icono { width: 42px; height: 42px; }
   .tele .icono { width: 26px; height: 26px; }
   .tele .gran-play .icono { width: 54px; height: 54px; }
+  /* ---------- Pasar de capítulo ---------- */
+  /* Tarjeta «Siguiente capítulo»: abajo a la derecha, encima de los controles; sigue a la vista
+     aunque los controles se escondan */
+  .siguiente { position: absolute; right: 16px; bottom: 96px; z-index: 4; display: flex; align-items: center; gap: 14px;
+    max-width: min(460px, calc(100% - 32px)); padding: 12px 12px 12px 16px; border-radius: 12px;
+    background: rgba(16,18,22,.92); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 10px 40px rgba(0,0,0,.6);
+    animation: entra-siguiente .25s ease-out; }
+  #visor.cine .siguiente { position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .siguiente .info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+  .siguiente small { color: #7aa7ff; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .siguiente b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .siguiente .acciones { display: flex; gap: 8px; flex: none; }
+  .siguiente .boton { display: inline-flex; align-items: center; gap: 6px; }
+  .boton.primario { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 700; }
+  .boton.primario:hover, .boton.primario:focus { background: #7aa7ff; }
+  @keyframes entra-siguiente { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .tele #visor .siguiente { max-width: 42vw; padding: 2vh 1.5vw; gap: 1.5vw; bottom: 18vh; right: 4vw; }
+  .tele #visor .siguiente small { font-size: 15px; }
+  .tele #visor .siguiente b { font-size: 22px; }
+  /* Señal del doble toque (10 s atrás / adelante) */
+  .salto { position: absolute; top: 50%; transform: translateY(-50%); z-index: 3; display: flex; align-items: center; gap: 6px;
+    padding: 14px 18px; border-radius: 999px; background: rgba(0,0,0,.55); color: #fff; font-weight: 700; pointer-events: none;
+    animation: salto .65s ease-out forwards; }
+  #visor.cine .salto { position: fixed; }
+  .salto.izq { left: 12%; } .salto.der { right: 12%; }
+  .salto .icono { width: 28px; height: 28px; }
+  @keyframes salto { 0% { opacity: 0; transform: translateY(-50%) scale(.8); } 25% { opacity: 1; transform: translateY(-50%) scale(1); } 100% { opacity: 0; } }
+  .flecha[hidden] { display: none; }
+  /* Móvil en vertical: la tarjeta a lo ancho, encima de los controles (que ocupan dos filas) */
+  @media (max-width: 600px) {
+    .siguiente { left: 10px; right: 10px; max-width: none; bottom: 128px; padding: 10px 10px 10px 12px; gap: 10px; }
+    #visor.cine .siguiente { left: max(10px, env(safe-area-inset-left)); right: max(10px, env(safe-area-inset-right)); bottom: calc(128px + env(safe-area-inset-bottom)); }
+    .siguiente .boton span { display: none; }
+    .siguiente b { font-size: 14px; }
+  }
+  /* Móvil en horizontal (poca altura): más pegada a los controles */
+  @media (max-height: 500px) and (orientation: landscape) {
+    #visor.cine .siguiente { bottom: calc(84px + env(safe-area-inset-bottom)); max-width: 380px; }
+    .siguiente { padding: 8px 8px 8px 12px; }
+  }
+  /* Pantallas muy estrechas: los botones del reproductor, más juntos para que quepan en una fila */
+  @media (max-width: 420px) {
+    .controles { gap: 4px; }
+    .controles .boton { padding: 8px 9px; min-width: 40px; }
+    .controles .boton span { display: none; }
+  }
   /* Botón para salir (solo en la app de Android) */
   #salir-app { flex: none; margin-left: auto; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px; }
   /* Seguir viendo: barra de lo visto en la tarjeta y botón para empezar de cero */

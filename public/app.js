@@ -794,6 +794,8 @@ const ICONOS = {
   atras: '<path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>',
   adelante: '<g transform="matrix(-1 0 0 1 24 0)"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></g>',
   pantalla: '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>',
+  anterior: '<path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>',
+  siguiente: '<path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>',
 };
 const icono = (n) => `<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONOS[n]}</svg>`;
 function boton(clase, html, titulo) {
@@ -837,7 +839,7 @@ function barraVisto(t) {
 }
 
 // «renovar»: cómo conseguir otra vez la dirección si se corta (un enlace de e2 nuevo, por si caducó)
-function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', { key }).then((r) => r.url)) {
+function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', { key }).then((r) => r.url), opciones = {}) {
   const directo = !!urlDirecto;
   const caja = el('div', 'repro');
   // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
@@ -862,6 +864,10 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     selAudio = el('select', 'audio');
     selAudio.title = 'Idioma del audio';
     m.audios.forEach((a, n) => selAudio.append(new Option(`🗣 ${(a.titulo || a.idioma || `Pista ${n + 1}`).toUpperCase()}`, n)));
+    // El idioma elegido en un capítulo se mantiene en el siguiente
+    const pref = leerIdioma();
+    const n = pref ? m.audios.findIndex((a) => (a.idioma || a.titulo || '').toLowerCase() === pref) : -1;
+    if (n >= 0) selAudio.value = String(n);
     barra.append(selAudio);
   }
   // Todos los botones a la izquierda y, detrás, la barra de progreso con el tiempo
@@ -952,6 +958,7 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   let ultimoGuardado = 0;
   const guardar = () => { if (ahora() > 0) guardarPosicion(key, ahora(), total()); };
   v.ontimeupdate = () => {
+    if (caja.alProgreso) caja.alProgreso(ahora(), total());
     if (!arrastrando) { rango.value = ahora(); pintarTiempo(ahora()); }
     if (!v.paused && Date.now() - ultimoGuardado > 5000) { ultimoGuardado = Date.now(); guardar(); }
   };
@@ -991,7 +998,10 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   v.oncanplay = () => { cargando.hidden = true; };
   // La lista se va alargando mientras se prepara: si se alcanza el final provisional, se pide
   // más desde ese punto
-  v.onended = () => { if (!directo && ahora() < total() - 10) ir(ahora(), true); };
+  v.onended = () => {
+    if (!directo && ahora() < total() - 10) return ir(ahora(), true);
+    if (caja.alAcabar) caja.alAcabar();
+  };
   const alternar = () => {
     if (v.paused) { quiere = true; v.play().catch(() => {}); } else { quiere = false; v.pause(); }
   };
@@ -999,7 +1009,32 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   bPlay.onclick = alternar;
   // En pantallas táctiles tocar la imagen solo enseña u oculta los controles (no pausa, como en
   // las apps de vídeo); con ratón, un clic sobre el vídeo sí pausa
+  // Doble toque en el lado izquierdo o derecho: 10 s atrás o adelante (como en las apps de vídeo)
+  let toque = { t: 0, lado: 0 };
+  let saltoTactil = 0;
+  v.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'touch') return;
+    const r = v.getBoundingClientRect();
+    const x = (e.clientX - r.left) / r.width;
+    const lado = x < 0.38 ? -1 : x > 0.62 ? 1 : 0;
+    const ms = Date.now();
+    if (lado && toque.lado === lado && ms - toque.t < 350) {
+      saltoTactil = ms; toque = { t: 0, lado: 0 };
+      ir(ahora() + lado * 10);
+      senalSalto(lado);
+      despertar();
+      return;
+    }
+    toque = { t: ms, lado };
+  });
+  function senalSalto(lado) {
+    const s = el('div', `salto ${lado < 0 ? 'izq' : 'der'}`);
+    s.innerHTML = lado < 0 ? `${icono('atras')}<span>10 s</span>` : `<span>10 s</span>${icono('adelante')}`;
+    caja.append(s);
+    setTimeout(() => s.remove(), 650);
+  }
   v.onclick = () => {
+    if (Date.now() - saltoTactil < 500) return;
     if (!matchMedia('(pointer: coarse)').matches) return alternar();
     const visor = $('#visor');
     if (visor.classList.contains('reposo') || v.paused) return despertar();
@@ -1009,21 +1044,35 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   bAdelante.onclick = () => ir(ahora() + 10);
   rango.oninput = () => { arrastrando = true; pintarTiempo(Number(rango.value)); };
   rango.onchange = () => { arrastrando = false; ir(Number(rango.value)); };
-  if (selAudio) selAudio.onchange = () => { const t = ahora(); parar(sesion); sesion = null; ir(t); };
+  if (selAudio) selAudio.onchange = () => {
+    const a = m.audios[Number(selAudio.value)];
+    guardarIdioma(a && (a.idioma || a.titulo));
+    const t = ahora(); parar(sesion); sesion = null; ir(t);
+  };
   bSonido.onclick = () => { v.muted = !v.muted; bSonido.textContent = v.muted ? '🔇' : '🔊'; };
   bPantalla.onclick = () => ($('#visor').classList.contains('cine') ? salirCine() : entrarCine());
   caja.irA = ir;
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
+  caja.controles = barra;
+  caja.despues = bAdelante; // tras él van ⏮ ⏭ (los pone abrir())
+  // Al pasar de capítulo se sigue viendo sin tener que pulsar ▶
+  const solo = !!opciones.reproducir;
+  if (solo) quiere = true;
   caja.parar = () => { if (v.currentTime > 0) guardar(); turno++; clearTimeout(vigia); mantenerPantalla(false); if (hls) hls.destroy(); hls = null; parar(sesion); sesion = null; };
   // Un stream HLS de otro sitio (.m3u8) va por hls.js; el resto, directo al <video>
   if (directo && /\.m3u8(\?|#|$)/i.test(urlDirecto)) cargarHls().then(() => caja.isConnected && fuente(urlDirecto, inicio, false));
   else if (directo) {
     v.preload = 'auto'; v.src = urlDirecto;
     if (inicio) v.addEventListener('loadedmetadata', () => { v.currentTime = inicio; }, { once: true });
-  } else ir(inicio, false);
+    if (solo) v.play().catch(() => { quiere = false; });
+  } else ir(inicio, solo);
   return caja;
 }
+
+// Idioma de audio elegido (se recuerda en este aparato)
+function leerIdioma() { try { return localStorage.getItem('morvehtv-idioma') || ''; } catch (e) { return ''; } }
+function guardarIdioma(i) { try { if (i) localStorage.setItem('morvehtv-idioma', String(i).toLowerCase()); } catch (e) {} }
 
 // Que la pantalla del móvil o la tablet no se apague mientras se ve algo (solo funciona en
 // navegadores que lo permiten; en el resto el propio vídeo suele evitarlo)
@@ -1067,7 +1116,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   pedirMeta('archivo', f.key).then((d) => { if (actual === i && d && d.encontrado) $('#vtitulo').textContent = tituloDe(d).replace(/^T(\d+)·E/, `${d.titulo} · T$1·E`); });
   $('#vmeta').textContent = `${bytes(f.tamano)} · ${fecha(f.fecha)}`;
   pintarFavVisor(f);
-  $('#ant').hidden = i === 0; $('#sig').hidden = i === lista.length - 1;
+  actualizarFlechas(i);
   const c = $('#vcontenido'); c.innerHTML = '';
   if (clase === 'enlace') return abrirEnlace(f, i, c);
 
@@ -1084,7 +1133,9 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
         && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec));
       // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
-      c.append(reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null));
+      const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null, undefined, { reproducir: opciones.reproducir });
+      c.append(caja);
+      navegacionReproductor(caja, i);
       enfocarVisor();
       const d = await pedirMeta('archivo', f.key);
       if (actual === i) c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key }));
@@ -1109,6 +1160,186 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
     c.innerHTML = `<div class="vacio error">${e.message}</div>`;
   }
 }
+
+// ---------- Pasar de un capítulo o película a otro ----------
+// «Vecino»: el de al lado en la lista que se está viendo, saltando lo que no es vídeo (subtítulos,
+// imágenes). Si es el último (o el primero) de una carpeta «Temporada N», sigue en la temporada
+// siguiente (o anterior) de la misma serie.
+const esVideoClave = (k) => { const c = tipo(k)[1]; return c === 'video' || c === 'video-raro'; };
+const RE_TEMPORADA = /^(?:temporada|season|temp|t|s)\s*0*(\d{1,2})$/i;
+const numTemporada = (carpeta) => { const m = nombre(carpeta).trim().match(RE_TEMPORADA); return m ? Number(m[1]) : (/^especiales?$/i.test(nombre(carpeta).trim()) ? 0 : null); };
+const esEpisodio = (k) => capitulo(k) !== null || numTemporada(padre(k)) !== null;
+
+async function listarTodo(prefijo) {
+  const r = { carpetas: [], archivos: [] };
+  let token = '';
+  for (let n = 0; n < 10; n++) {
+    const d = await api('/api/listar', { prefijo, token });
+    r.carpetas.push(...d.carpetas); r.archivos.push(...d.archivos);
+    if (!d.siguiente) break;
+    token = d.siguiente;
+  }
+  return r;
+}
+
+const vecinosHechos = new Map(); // `${key}|${dir}` → promesa de { lista, i } o null
+function vecino(dir, i = actual, lista = listaVisor) {
+  const f = lista[i];
+  if (!f) return Promise.resolve(null);
+  const id = `${f.key}|${dir}`;
+  if (vecinosHechos.has(id)) return vecinosHechos.get(id);
+  const p = (async () => {
+    const soloVideos = esVideoClave(f.key);
+    for (let j = i + dir; j >= 0 && j < lista.length; j += dir) {
+      if (!soloVideos || esVideoClave(lista[j].key)) return { lista, i: j };
+    }
+    // Fin de la temporada: la de al lado de la misma serie
+    if (!soloVideos) return null;
+    const carpeta = padre(f.key);
+    const n = numTemporada(carpeta);
+    if (n === null) return null;
+    const serie = padre(carpeta);
+    const temporadas = (await listarTodo(serie)).carpetas
+      .map((c) => ({ c, n: numTemporada(c) })).filter((x) => x.n !== null)
+      // Los especiales (temporada 0) no se meten entre medias: solo se llega a ellos a propósito
+      .filter((x) => x.n > 0 || n === 0)
+      .sort((a, b) => a.n - b.n);
+    const k = temporadas.findIndex((x) => x.c === carpeta);
+    const otra = k >= 0 ? temporadas[k + dir] : null;
+    if (!otra) return null;
+    const videos = (await listarTodo(otra.c)).archivos.filter((x) => esVideoClave(x.key)).sort((a, b) => porCapitulo(a.key, b.key));
+    if (!videos.length) return null;
+    return { lista: videos, i: dir > 0 ? 0 : videos.length - 1 };
+  })().catch(() => null);
+  vecinosHechos.set(id, p);
+  if (vecinosHechos.size > 200) vecinosHechos.delete(vecinosHechos.keys().next().value);
+  return p;
+}
+
+// Nombre para enseñar del de al lado: «T1·E3 · Nombre» si TMDB lo conoce, si no el del archivo
+async function etiquetaDe(f) {
+  const d = await pedirMeta('archivo', f.key).catch(() => null);
+  return d && d.encontrado ? tituloDe(d) : nombre(f.key).replace(/\.[^.]+$/, '');
+}
+
+let navegando = false;
+async function irVecino(dir, opciones = {}) {
+  if (navegando || actual < 0) return;
+  navegando = true;
+  try {
+    const v = await vecino(dir);
+    if (v) await abrir(v.i, v.lista, opciones);
+    else aviso(dir > 0 ? 'Es el último' : 'Es el primero');
+  } finally { navegando = false; }
+}
+
+// Flechas ‹ › de los lados (fuera del vídeo a pantalla completa) con el nombre de lo que viene
+function actualizarFlechas(i) {
+  const lista = listaVisor;
+  [['#ant', -1, 'Anterior'], ['#sig', 1, 'Siguiente']].forEach(([sel, dir, texto]) => {
+    const b = $(sel);
+    b.hidden = true;
+    vecino(dir, i, lista).then(async (v) => {
+      if (actual !== i || listaVisor !== lista || !v) return;
+      b.hidden = false;
+      const t = `${texto}: ${await etiquetaDe(v.lista[v.i])}`;
+      b.title = t; b.setAttribute('aria-label', t);
+    });
+  });
+}
+
+// En el reproductor: botones ⏮ ⏭ junto a los de 10 s y, al final de cada capítulo, la tarjeta
+// «Siguiente capítulo» (en los últimos 30 s se ofrece; al acabar, cuenta 10 s y sigue sola).
+// En películas la tarjeta también sale al acabar, pero no arranca sola.
+function navegacionReproductor(caja, i) {
+  const lista = listaVisor;
+  const f = lista[i];
+  const serie = esEpisodio(f.key);
+  const bAnt = boton('boton', icono('anterior'), 'Anterior');
+  const bSig = boton('boton', icono('siguiente'), serie ? 'Siguiente capítulo' : 'Siguiente');
+  bAnt.hidden = true; bSig.hidden = true;
+  bAnt.onclick = () => irVecino(-1, { reproducir: true });
+  bSig.onclick = () => irVecino(1, { reproducir: true });
+  caja.despues.after(bAnt, bSig);
+  const sigue = () => caja.isConnected && actual === i && listaVisor === lista;
+  [[bAnt, -1, 'Anterior'], [bSig, 1, serie ? 'Siguiente capítulo' : 'Siguiente']].forEach(([b, dir, texto]) => {
+    vecino(dir, i, lista).then(async (v) => {
+      if (!sigue() || !v) return;
+      b.hidden = false;
+      const t = `${texto}: ${await etiquetaDe(v.lista[v.i])}`;
+      b.title = t; b.setAttribute('aria-label', t);
+    });
+  });
+
+  let tarjeta = null;
+  let descartada = false;
+  let cuenta = null;
+  async function mostrar(alAcabar) {
+    if (descartada || !sigue()) return;
+    const v = await vecino(1, i, lista);
+    if (!v || !sigue()) return;
+    const otro = v.lista[v.i];
+    // Se adelanta el análisis del siguiente: así arranca antes
+    api('/api/medio', { key: otro.key }).catch(() => {});
+    if (!tarjeta) {
+      tarjeta = el('div', 'siguiente');
+      const info = el('div', 'info');
+      tarjeta._que = el('small', null, serie ? 'Siguiente capítulo' : 'Siguiente');
+      tarjeta._titulo = el('b', null, nombre(otro.key));
+      info.append(tarjeta._que, tarjeta._titulo);
+      etiquetaDe(otro).then((t) => { if (tarjeta) tarjeta._titulo.textContent = t; });
+      const ver = boton('boton primario', `${icono('play')}<span>Ver ahora</span>`, 'Ver ahora');
+      ver.onclick = () => { quitar(); irVecino(1, { reproducir: true }); };
+      const no = boton('boton', '✕', 'Ahora no');
+      no.onclick = () => { descartada = true; quitar(); };
+      const bs = el('div', 'acciones'); bs.append(ver, no);
+      tarjeta.append(info, bs);
+      tarjeta._ver = ver;
+      caja.append(tarjeta);
+    }
+    if (alAcabar && serie && !cuenta) {
+      let s = 10;
+      const pintar = () => { tarjeta._que.textContent = `Siguiente capítulo en ${s} s`; };
+      pintar();
+      cuenta = setInterval(() => {
+        if (!sigue() || !tarjeta) return quitar();
+        if (--s <= 0) { quitar(); irVecino(1, { reproducir: true }); } else pintar();
+      }, 1000);
+    }
+    // Con el mando, al acabar el foco va a «Ver ahora»: OK lo abre
+    if (alAcabar) tarjeta._ver.focus();
+    despertar();
+  }
+  function quitar() {
+    clearInterval(cuenta); cuenta = null;
+    if (tarjeta) { tarjeta.remove(); tarjeta = null; }
+  }
+  caja.alProgreso = (t, total) => {
+    if (total > 90 && total - t <= 30 && t > 0) mostrar(false);
+    // Si se vuelve atrás, la tarjeta se va (y puede volver a salir)
+    else if (tarjeta && !cuenta && total - t > 35) { quitar(); descartada = false; }
+  };
+  caja.alAcabar = () => mostrar(true);
+}
+
+// En el móvil, fuera del vídeo a pantalla completa (ficha, imágenes…), deslizar el dedo a los
+// lados pasa al anterior o al siguiente
+(() => {
+  let x0 = null, y0 = 0, t0 = 0;
+  const zona = () => $('#vcontenido');
+  document.addEventListener('touchstart', (e) => {
+    const visor = $('#visor');
+    if (!visor.classList.contains('abierto') || visor.classList.contains('cine') || e.touches.length !== 1) { x0 = null; return; }
+    if (!zona().contains(e.target) || e.target.closest('input, select, textarea, .controles, .resultados, iframe')) { x0 = null; return; }
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; t0 = Date.now();
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (x0 === null) return;
+    const dx = e.changedTouches[0].clientX - x0, dy = e.changedTouches[0].clientY - y0;
+    x0 = null;
+    if (Date.now() - t0 < 600 && Math.abs(dx) > 70 && Math.abs(dy) < Math.abs(dx) * 0.5) irVecino(dx < 0 ? 1 : -1);
+  }, { passive: true });
+})();
 
 // ---------- Enlaces a vídeos de otros sitios (.url / .strm) ----------
 // Aviso de fallo con «Reintentar» (y, para una página que el servidor no pudo comprobar,
@@ -1194,15 +1425,18 @@ const TECLAS = {
   ArrowUp: 'arriba', Up: 'arriba', ArrowDown: 'abajo', Down: 'abajo', ArrowLeft: 'izq', Left: 'izq', ArrowRight: 'der', Right: 'der',
   Enter: 'ok', Escape: 'atras', Esc: 'atras', Backspace: 'atras', GoBack: 'atras', BrowserBack: 'atras',
   MediaPlayPause: 'play', MediaPlay: 'play', MediaPause: 'play', MediaRewind: 'retroceder', MediaFastForward: 'avanzar',
-  MediaTrackNext: 'siguiente', MediaTrackPrevious: 'anterior',
+  MediaTrackNext: 'siguiente', MediaTrackPrevious: 'anterior', ChannelUp: 'siguiente', ChannelDown: 'anterior',
 };
 // Códigos de los mandos de Samsung y LG que no traen nombre de tecla
-const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok' };
-const tecla = (e) => TECLAS[e.key] || CODIGOS[e.keyCode] || null;
+// (427/428: canal + y − de Samsung, que en el reproductor pasan de capítulo)
+const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 'play', 412: 'retroceder', 417: 'avanzar', 38: 'arriba', 40: 'abajo', 37: 'izq', 39: 'der', 13: 'ok', 427: 'siguiente', 428: 'anterior', 176: 'siguiente', 177: 'anterior' };
+// Mayús+N / Mayús+P en el teclado: siguiente / anterior (como en YouTube)
+const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
+  || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
 const ENFOCABLES_APP = '#pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '.repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
+const ENFOCABLES_VISOR = '.siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
@@ -1319,12 +1553,12 @@ document.addEventListener('keydown', (e) => {
     if (k === 'play' || (k === 'ok' && libre) || (e.key === ' ' && libre)) { e.preventDefault(); return alternar(); }
     if (k === 'retroceder') return saltar(-30);
     if (k === 'avanzar') return saltar(30);
-    if (k === 'siguiente') return abrir(actual + 1);
-    if (k === 'anterior') return abrir(actual - 1);
+    if (k === 'siguiente') { e.preventDefault(); return irVecino(1, { reproducir: !!video }); }
+    if (k === 'anterior') { e.preventDefault(); return irVecino(-1, { reproducir: !!video }); }
     if (libre && (k === 'izq' || k === 'der')) {
       e.preventDefault();
       if (video) saltar(k === 'izq' ? -10 : 10);
-      else abrir(actual + (k === 'izq' ? -1 : 1));
+      else irVecino(k === 'izq' ? -1 : 1);
       return;
     }
     if (a && a.type === 'range' && (k === 'izq' || k === 'der')) return; // la barra de progreso usa ← →
@@ -1336,8 +1570,8 @@ document.addEventListener('keydown', (e) => {
 $('#mas').onclick = () => cargar(true);
 $('#vcerrar').onclick = cerrar;
 $('#salircine').onclick = salirCine;
-$('#ant').onclick = () => abrir(actual - 1);
-$('#sig').onclick = () => abrir(actual + 1);
+$('#ant').onclick = () => irVecino(-1);
+$('#sig').onclick = () => irVecino(1);
 
 // ---------- Actualización automática ----------
 // El servidor repasa el bucket cada 5 s y avisa al momento de lo que se sube, cambia o se borra:
