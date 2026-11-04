@@ -22,8 +22,12 @@ const WEBHOOK = String(process.env.PAYPAL_WEBHOOK_ID ?? '').trim();
 const MODO = String(process.env.PAYPAL_MODO ?? 'live').trim().toLowerCase();
 const API = (process.env.PAYPAL_API ?? (MODO === 'sandbox' ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com')).replace(/\/$/, '');
 export const activo = Boolean(ID && SECRETO && PLAN);
-export const estado = !ID || !SECRETO ? 'sin PAYPAL_CLIENT_ID / PAYPAL_SECRET' : !PLAN ? 'sin PAYPAL_PLAN_ID'
-  : !WEBHOOK ? `falta PAYPAL_WEBHOOK_ID (${MODO})` : `ok (${MODO})`;
+// Qué falta, con el nombre exacto de cada variable (sin enseñar nunca sus valores). También avisa
+// de nombres parecidos mal escritos (minúsculas, espacios…), que Render guarda tal cual.
+const faltan = [['PAYPAL_CLIENT_ID', ID], ['PAYPAL_SECRET', SECRETO], ['PAYPAL_PLAN_ID', PLAN], ['PAYPAL_WEBHOOK_ID', WEBHOOK]].filter(([, v]) => !v).map(([n]) => n);
+const parecidas = Object.keys(process.env).filter((k) => /paypal/i.test(k) && !/^PAYPAL_(CLIENT_ID|SECRET|PLAN_ID|WEBHOOK_ID|MODO|API)$/.test(k));
+export const estado = (faltan.length ? `faltan ${faltan.join(', ')}` : `ok (${MODO})`)
+  + (parecidas.length ? ` · nombres mal escritos: ${parecidas.map((k) => JSON.stringify(k)).join(', ')}` : '');
 
 let p; // perfiles.js
 let firmar = async () => null; // enlaces firmados de e2 (vídeos de anuncios)
