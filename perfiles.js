@@ -122,6 +122,42 @@ export async function planDe(c) {
 export const cuentaPorUsuario = async (u) => ((await leer()).cuentas || []).find((x) => x.usuario === normalizar(u)) ?? null;
 // Colaboradores del gestor: cuentas que pueden subir contenido en las secciones que les dé un
 // administrador (se guardan en «colaboradores» del archivo: [{ usuario, secciones, creado, por }])
+// Un administrador crea desde el gestor la cuenta de un colaborador (usuario, nombre y contraseña)
+// y le da sus secciones, todo de una vez. La contraseña se guarda cifrada, como cualquier otra.
+export async function crearColaborador({ usuario, nombre, clave, secciones, por }) {
+  usuario = normalizar(usuario);
+  if (!usuarioValido(usuario)) throw error(400, 'El usuario debe tener de 3 a 20 caracteres: letras, números, punto, guion o guion bajo');
+  clave = String(clave ?? '');
+  claveNueva(clave);
+  const sal = randomBytes(16).toString('hex');
+  const hash = await hashClave(clave, sal);
+  return cambiar((d) => {
+    d.cuentas = d.cuentas || [];
+    if (d.cuentas.length >= MAX_CUENTAS) throw error(403, 'No se admiten más cuentas por ahora');
+    if (d.cuentas.some((x) => x.usuario === usuario)) throw error(409, 'Ese usuario ya existe: si ya tiene cuenta, dale permiso con «Añadir o cambiar secciones»');
+    const c = { id: randomBytes(8).toString('hex'), usuario, nombre: String(nombre ?? '').trim().slice(0, 30) || usuario, sal, clave: hash, gen: 0,
+      creado: new Date().toISOString(), favoritos: [], posiciones: {}, creadaPor: por };
+    d.cuentas.push(c);
+    d.colaboradores = (d.colaboradores || []).filter((x) => x.usuario !== usuario);
+    d.colaboradores.push({ usuario, secciones, creado: new Date().toISOString(), por });
+    return publica(c);
+  });
+}
+// Nueva contraseña para un colaborador (si la olvida). Cierra sus sesiones abiertas.
+export async function claveDeColaborador(usuario, clave) {
+  usuario = normalizar(usuario);
+  clave = String(clave ?? '');
+  claveNueva(clave);
+  const sal = randomBytes(16).toString('hex');
+  const hash = await hashClave(clave, sal);
+  return cambiar((d) => {
+    if (!(d.colaboradores || []).some((x) => x.usuario === usuario)) throw error(403, 'Solo se puede cambiar la contraseña de los colaboradores');
+    const c = (d.cuentas || []).find((x) => x.usuario === usuario);
+    if (!c) throw error(404, 'Esa cuenta ya no existe');
+    c.sal = sal; c.clave = hash; c.gen = (c.gen || 0) + 1;
+    comprobadas.delete(usuario);
+  });
+}
 export const colaboradorDe = async (c) => (c ? ((await leer()).colaboradores || []).find((x) => x.usuario === c.usuario) ?? null : null);
 // Una cuenta por su id (o null), leída del archivo
 export const cuentaPorId = async (id) => ((await leer()).cuentas || []).find((x) => x.id === id) ?? null;

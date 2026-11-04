@@ -283,6 +283,21 @@ export async function atender(ruta, req, res, json, ip) {
     await registrar(c, ip, `da permiso de colaborador a ${quien.usuario}`, elegidas);
     return json(res, 200, { ok: true });
   }
+  // Crear la cuenta de un colaborador (usuario, nombre y contraseña) con sus secciones
+  if (ruta === '/api/panel/colaboradores/crear') {
+    const elegidas = [...new Set((Array.isArray(datos.secciones) ? datos.secciones : []).map((x) => carpetaValida(x)).filter((x) => x.split('/').length === 2))];
+    if (!elegidas.length) throw error(400, 'Elige al menos una sección');
+    const nueva = await p.crearColaborador({ usuario: datos.usuario, nombre: datos.nombre, clave: datos.clave, secciones: elegidas, por: c.usuario });
+    console.log(`Panel: ${c.usuario} crea la cuenta de colaborador ${nueva.usuario}`);
+    await registrar(c, ip, `crea la cuenta de colaborador ${nueva.usuario}`, elegidas);
+    return json(res, 200, { ok: true, usuario: nueva.usuario });
+  }
+  // Nueva contraseña para un colaborador
+  if (ruta === '/api/panel/colaboradores/clave') {
+    await p.claveDeColaborador(datos.usuario, datos.clave);
+    await registrar(c, ip, `cambia la contraseña del colaborador ${String(datos.usuario ?? '').toLowerCase()}`);
+    return json(res, 200, { ok: true });
+  }
   if (ruta === '/api/panel/colaboradores/quitar') {
     const usuario = String(datos.usuario ?? '').trim().toLowerCase();
     const lista = (await p.leerAjuste('colaboradores')) ?? [];
