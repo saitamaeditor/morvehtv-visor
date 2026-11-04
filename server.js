@@ -36,6 +36,30 @@ const { E2_ENDPOINT, E2_REGION = 'us-east-1', E2_BUCKET, E2_ACCESS_KEY_ID, E2_SE
 // Render da el puerto en PORT; en casa se usa el 4010
 const PUERTO = Number(process.env.PORT || process.env.VISOR_PUERTO || 4010);
 
+// Modo mudanza (VISOR_MUDADO_A=https://morvehtv.com): este servidor ya no es MorvehTV. No toca e2
+// ni Telegram (así nunca hay dos servidores escribiendo las cuentas a la vez) y manda a todos a la
+// dirección nueva: los navegadores, con una redirección; la app de Android vieja, con una página
+// propia (si la redirigiera, la abriría en el navegador y no llegaría a buscar su actualización)
+const MUDADO_A = String(process.env.VISOR_MUDADO_A ?? '').trim().replace(/\/$/, '');
+if (/^https:\/\/[a-z0-9.-]+$/i.test(MUDADO_A)) {
+  const pagina = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MorvehTV se ha mudado</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b0b10;color:#eee;font:17px/1.5 system-ui,sans-serif;text-align:center;padding:24px;box-sizing:border-box}
+h1{font-size:24px;margin:0 0 8px}a{display:inline-block;margin-top:18px;padding:12px 22px;border-radius:10px;background:#e50914;color:#fff;text-decoration:none;font-weight:600}</style></head>
+<body><main><h1>MorvehTV se ha mudado</h1><p>Ahora estamos en <b>${MUDADO_A.replace(/^https:\/\//, '')}</b>.<br>Acepta la actualización de la app que aparece ahora para seguir viéndolo todo.</p>
+<a href="${MUDADO_A}/">Ir a ${MUDADO_A.replace(/^https:\/\//, '')}</a></main></body></html>`;
+  http.createServer((req, res) => {
+    const ruta = (req.url ?? '/').startsWith('/') ? req.url : '/';
+    if (ruta === '/api/salud') { res.writeHead(200, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ ok: true, mudado: MUDADO_A })); }
+    if (/MorvehTVApp/.test(req.headers['user-agent'] ?? '')) {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(pagina);
+    }
+    res.writeHead(301, { location: MUDADO_A + ruta, 'cache-control': 'max-age=3600' });
+    res.end();
+  }).listen(PUERTO, '0.0.0.0', () => console.log(`MorvehTV se ha mudado a ${MUDADO_A}: este servidor solo redirige`));
+  await new Promise(() => {}); // aquí se queda: el resto de este archivo no se ejecuta
+}
+
 if (!(E2_ENDPOINT && E2_BUCKET && E2_ACCESS_KEY_ID && E2_SECRET_ACCESS_KEY)) {
   console.error('Faltan las variables E2_* — copia .env.example como .env y rellénalo.');
   process.exit(1);

@@ -1,0 +1,32 @@
+# MorvehTV en una VPS: el mismo Dockerfile que usaba Render.
+# Lo arranca deploy/instalar.sh y lo actualiza deploy/actualizar.sh (no hace falta tocarlo).
+services:
+  visor:
+    build: ..
+    image: morvehtv-visor
+    container_name: morvehtv-visor
+    restart: unless-stopped
+    # Las claves (E2_*, TELEGRAM_*, TMDB_KEY, CRIPTO_*, ANUNCIOS_*, LEGAL_*…) están en la VPS,
+    # fuera del repositorio, en /etc/morvehtv/visor.env (solo las puede leer root)
+    env_file: /etc/morvehtv/visor.env
+    environment:
+      PORT: "10000"
+      VISOR_NUBE: "1"
+      NODE_ENV: production
+    # Solo accesible desde la propia máquina: el que da la cara a internet es Caddy (HTTPS)
+    ports:
+      - "127.0.0.1:10000:10000"
+    volumes:
+      - /var/lib/morvehtv/data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:10000/api/salud').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    # Registros pequeños y que se borran solos
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "3"
