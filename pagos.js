@@ -67,7 +67,8 @@ const PROHIBIDAS = new Set([
   '0x0000000000000000000000000000000000000000', '0x000000000000000000000000000000000000dead',
 ]);
 const valida = /^0x[0-9a-f]{40}$/.test(DIRECCION);
-let problema = !DIRECCION ? 'falta CRIPTO_DIRECCION'
+// Sin CRIPTO_DIRECCION no hay pagos: la web no enseña nada de Premium (solo plan gratuito con anuncios)
+let problema = !DIRECCION ? 'desactivados (sin CRIPTO_DIRECCION)'
   : !valida ? 'CRIPTO_DIRECCION no es una dirección válida (0x y 40 caracteres)'
     : PROHIBIDAS.has(DIRECCION) ? 'CRIPTO_DIRECCION es la dirección de un CONTRATO DE MONEDA, no de tu cartera: los pagos se perderían. Pon la dirección pública de tu cartera en Base'
       : !OPCIONES.length ? 'CRIPTO_PRECIOS no es válido (formato 4:1,10:3,40:12)' : null;

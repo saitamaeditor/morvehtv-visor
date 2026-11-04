@@ -713,6 +713,9 @@ async function legal(html, req) {
   valores.WEB = `<a href="${escHtml(web)}">${escHtml(web.replace(/^https?:\/\//, ''))}</a>`;
   valores.PRECIO = escHtml((await pagos.precioTexto().catch(() => null)) || 'el indicado antes de pagar');
   valores.ANIO = String(new Date().getFullYear());
+  // Lo de Premium y los pagos solo sale si los pagos están activados (y al revés)
+  const [fuera, queda] = pagos.activo ? ['SINPAGOS', 'PAGOS'] : ['PAGOS', 'SINPAGOS'];
+  html = html.replace(new RegExp(`<!--${fuera}-->[\\s\\S]*?<!--/${fuera}-->`, 'g'), '').replace(new RegExp(`<!--/?${queda}-->`, 'g'), '');
   // (en el pie, sin enlaces ni avisos: solo el nombre)
   return html.replace(/© \{\{ANIO\}\} \{\{TITULAR\}\}/, `© ${valores.ANIO} ${escHtml(String(process.env.LEGAL_TITULAR ?? '').trim())}`)
     .replace(/\{\{([A-Z]+)\}\}/g, (m, k) => valores[k] ?? m);

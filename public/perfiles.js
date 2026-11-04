@@ -826,8 +826,11 @@ function bloquePlan() {
   if (!planInfo) return null;
   clearInterval(vigiaPago);
   const premium = planInfo.plan === 'premium';
+  // Pagos apagados: no se habla de planes (salvo a quien aún tiene Premium pagado)
+  if (!planInfo.activo && (!premium || planInfo.admin)) return null;
   let texto;
   if (premium && planInfo.admin) texto = 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.';
+  else if (premium && !planInfo.activo) texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app.`;
   else if (premium) {
     const dias = Math.ceil((planInfo.hasta - Date.now()) / 864e5);
     texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. Es un pago de 12 meses que no se renueva solo: `
