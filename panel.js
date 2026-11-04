@@ -238,27 +238,67 @@ export async function atender(ruta, req, res, json, ip) {
     let c = null;
     try { c = await p.credenciales(datos.usuario, datos.clave, ip); } catch (e) { if (e.status === 429) throw e; }
     if (!c) throw error(401, 'Usuario o contraseña incorrectos');
-    if (!(await p.esAdmin(c))) throw error(403, 'Esta cuenta no es administradora');
+    if (!(await p.esAdmin(c)) && !(await p.colaboradorDe(c))) throw error(403, 'Esta cuenta no es administradora ni colaboradora');
     await registrar(c, ip, 'entra en el gestor');
-    return json(res, 200, { token: await p.tokenPanel(c), usuario: c.usuario, nombre: c.nombre });
+    const esAdm = await p.esAdmin(c);
+    return json(res, 200, { token: await p.tokenPanel(c), usuario: c.usuario, nombre: c.nombre, rol: esAdm ? 'admin' : 'colaborador', secciones: esAdm ? null : (await p.colaboradorDe(c)).secciones });
   }
 
   const c = await p.cuentaDeToken(String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, ''));
   if (!c) throw error(401, 'La sesión ha caducado: vuelve a entrar');
-  if (!(await p.esAdmin(c))) throw error(403, 'Esta cuenta no es administradora');
+  // Dos papeles: administrador (todo) y colaborador (subir y crear carpetas, solo en sus secciones;
+  // nunca borrar, mover, ni la papelera, el registro, los anuncios, los pagos o los colaboradores).
+  // Se comprueba en cada petición: si un administrador lo quita, deja de poder al momento.
+  const admin = await p.esAdmin(c);
+  const colab = admin ? null : await p.colaboradorDe(c);
+  if (!admin && !colab) throw error(403, 'Esta cuenta ya no tiene acceso al gestor');
+  const secciones = admin ? null : (colab.secciones || []);
+  const puede = (clave) => !secciones || secciones.some((s) => String(clave).startsWith(s));
+  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|trabajo)/;
+  if (!admin && (SOLO_ADMIN.test(ruta) || datos.anuncio)) throw error(403, 'Eso solo lo pueden hacer los administradores');
+  const fuera = () => error(403, 'No tienes permiso en esa sección');
 
-  if (ruta === '/api/panel/yo') return json(res, 200, { usuario: c.usuario, nombre: c.nombre });
+  if (ruta === '/api/panel/yo') return json(res, 200, { usuario: c.usuario, nombre: c.nombre, rol: admin ? 'admin' : 'colaborador', secciones });
+
+  // ---------- Colaboradores (solo administradores) ----------
+  if (ruta === '/api/panel/colaboradores' && req.method === 'GET') {
+    const lista = (await p.leerAjuste('colaboradores')) ?? [];
+    const conCuenta = await Promise.all(lista.map(async (x) => ({ ...x, existe: Boolean(await p.cuentaPorUsuario(x.usuario)) })));
+    const todas = [...new Set([...(await foto()).keys()].filter((k) => k.includes('/')).map((k) => `${k.split('/')[0]}/`))].sort();
+    return json(res, 200, { colaboradores: conCuenta, secciones: todas });
+  }
+  if (ruta === '/api/panel/colaboradores') {
+    const quien = await p.cuentaPorUsuario(String(datos.usuario ?? ''));
+    if (!quien) throw error(404, 'No hay ninguna cuenta de MorvehTV con ese usuario: que se registre primero');
+    if (await p.esAdmin(quien)) throw error(409, 'Esa cuenta ya es administradora');
+    const elegidas = [...new Set((Array.isArray(datos.secciones) ? datos.secciones : []).map((x) => carpetaValida(x)).filter((x) => x.split('/').length === 2))];
+    if (!elegidas.length) throw error(400, 'Elige al menos una sección');
+    const lista = ((await p.leerAjuste('colaboradores')) ?? []).filter((x) => x.usuario !== quien.usuario);
+    lista.push({ usuario: quien.usuario, secciones: elegidas, creado: new Date().toISOString(), por: c.usuario });
+    await p.guardarAjuste('colaboradores', lista);
+    await registrar(c, ip, `da permiso de colaborador a ${quien.usuario}`, elegidas);
+    return json(res, 200, { ok: true });
+  }
+  if (ruta === '/api/panel/colaboradores/quitar') {
+    const usuario = String(datos.usuario ?? '').trim().toLowerCase();
+    const lista = (await p.leerAjuste('colaboradores')) ?? [];
+    if (!lista.some((x) => x.usuario === usuario)) throw error(404, 'No es colaborador');
+    await p.guardarAjuste('colaboradores', lista.filter((x) => x.usuario !== usuario));
+    await registrar(c, ip, `quita el permiso de colaborador a ${usuario}`);
+    return json(res, 200, { ok: true });
+  }
 
   // Contenido de una carpeta (sus subcarpetas y sus archivos)
   if (ruta === '/api/panel/listar') {
     const prefijo = carpetaValida(url.searchParams.get('prefijo') ?? '', { raiz: true });
+    if (prefijo && !puede(prefijo)) throw fuera();
     const carpetas = new Set(); const archivos = [];
     let token;
     do {
       const r = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefijo, Delimiter: '/', ContinuationToken: token }));
-      for (const x of r.CommonPrefixes ?? []) if (!interna(x.Prefix)) carpetas.add(x.Prefix);
+      for (const x of r.CommonPrefixes ?? []) if (!interna(x.Prefix) && (prefijo || puede(x.Prefix))) carpetas.add(x.Prefix);
       for (const o of r.Contents ?? []) {
-        if (o.Key === prefijo || interna(o.Key)) continue;
+        if (o.Key === prefijo || interna(o.Key) || (!prefijo && !admin)) continue;
         archivos.push({ key: o.Key, nombre: o.Key.slice(prefijo.length), tamano: o.Size, fecha: o.LastModified });
       }
       token = r.NextContinuationToken;
@@ -283,13 +323,14 @@ export async function atender(ruta, req, res, json, ip) {
       const x = secciones.get(s);
       x.archivos++; x.tamano += tam; x.ultima = Math.max(x.ultima, ms);
     }
-    const lista = [...secciones.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    const lista = [...secciones.values()].filter((x) => puede(x.prefijo)).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
     return json(res, 200, { secciones: lista, archivos: lista.reduce((t, x) => t + x.archivos, 0), tamano: lista.reduce((t, x) => t + x.tamano, 0) });
   }
 
   // Enlace para ver o descargar un archivo (1 hora)
   if (ruta === '/api/panel/enlace') {
     const key = claveValida(url.searchParams.get('key'));
+    if (!puede(key)) throw fuera();
     const descargar = url.searchParams.get('descargar') === '1';
     const nombre = key.split('/').pop();
     return json(res, 200, { url: await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key,
@@ -362,6 +403,7 @@ export async function atender(ruta, req, res, json, ip) {
   // que adivinarlo por el nombre)
   if (ruta === '/api/panel/vincular') {
     const clave = claveValida(datos.clave);
+    if (!puede(clave)) throw fuera();
     return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo));
   }
 
@@ -369,6 +411,8 @@ export async function atender(ruta, req, res, json, ip) {
   if (ruta === '/api/panel/carpeta') {
     const lista = (Array.isArray(datos.carpetas) ? datos.carpetas : [datos.carpeta]).map((x) => carpetaValida(x));
     if (!lista.length || lista.length > 100) throw error(400, 'Carpetas no válidas');
+    // Un colaborador crea carpetas dentro de sus secciones, no secciones nuevas
+    if (lista.some((x) => !puede(x) || (!admin && x.split('/').length === 2))) throw fuera();
     for (const x of lista) await s3.send(new PutObjectCommand({ Bucket: bucket, Key: x, Body: '' }));
     console.log(`Panel: ${c.usuario} crea ${lista.join(', ')}`);
     await registrar(c, ip, 'crea carpetas', lista);
@@ -487,10 +531,12 @@ export async function atender(ruta, req, res, json, ip) {
     const nombre = nombreValido(datos.nombre);
     if (!SUBIBLES.test(nombre)) throw error(400, 'Solo vídeos, subtítulos (.srt, .vtt, .ass) o imágenes');
     const key = carpetaValida(datos.carpeta) + nombre;
+    if (!puede(key)) throw fuera();
     const tamano = Number(datos.tamano);
     if (!(tamano > 0) || tamano > TAM_PARTE * 10000) throw error(400, 'Tamaño no válido');
     if (await existe(key)) {
       if (!datos.reemplazar) return json(res, 409, { error: 'Ya existe un archivo con ese nombre en esta carpeta', existe: true });
+      if (!admin) throw error(403, 'Ya existe un archivo con ese nombre: solo un administrador puede reemplazarlo');
       // El que se reemplaza va a la papelera (por si la subida nueva sale mal)
       const h = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
       await esperarTrabajo(await aPapelera([{ Key: key, Size: h.ContentLength }], c, ip, 'reemplazado al subir', [key]));
@@ -502,6 +548,7 @@ export async function atender(ruta, req, res, json, ip) {
   }
   if (ruta.startsWith('/api/panel/subir/')) {
     const key = claveSubida(datos.key);
+    if (!puede(key)) throw fuera();
     const uploadId = String(datos.uploadId ?? '');
     if (!uploadId) throw error(400, 'Falta la subida');
     if (ruta === '/api/panel/subir/partes') {

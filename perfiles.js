@@ -120,6 +120,9 @@ export async function planDe(c) {
   return { tipo: 'basico' };
 }
 export const cuentaPorUsuario = async (u) => ((await leer()).cuentas || []).find((x) => x.usuario === normalizar(u)) ?? null;
+// Colaboradores del gestor: cuentas que pueden subir contenido en las secciones que les dé un
+// administrador (se guardan en «colaboradores» del archivo: [{ usuario, secciones, creado, por }])
+export const colaboradorDe = async (c) => (c ? ((await leer()).colaboradores || []).find((x) => x.usuario === c.usuario) ?? null : null);
 // Una cuenta por su id (o null), leída del archivo
 export const cuentaPorId = async (id) => ((await leer()).cuentas || []).find((x) => x.id === id) ?? null;
 
