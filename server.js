@@ -59,7 +59,7 @@ const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(ke
 // Avisos de lo nuevo en Telegram, con un tema por sección (ver telegram.js)
 await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
 // Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso
-pagos.iniciar(perfiles);
+pagos.iniciar({ perfiles, firmar: (k, o) => firmar(k, o) });
 xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales, esAdmin: perfiles.esAdmin,
   permitido: async (c) => !pagos.activo || (await perfiles.planDe(c)).tipo === 'premium' });
 // API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
@@ -577,7 +577,18 @@ async function catalogoEntero() {
   };
 }
 
-function eventos(req, res) {
+// Conexiones abiertas de cada cuenta: al pagar (o cancelar) se les avisa para que la web y la
+// app quiten o pongan los anuncios en el momento, en todos sus aparatos
+const oyentesCuenta = new Map(); // id de cuenta → Set de conexiones
+perfiles.alCambiarPlan((id, plan) => {
+  for (const res of oyentesCuenta.get(id) ?? []) res.write(`event: plan\ndata: ${JSON.stringify(plan)}\n\n`);
+});
+function eventos(req, res, cuenta) {
+  if (cuenta) {
+    if (!oyentesCuenta.has(cuenta.id)) oyentesCuenta.set(cuenta.id, new Set());
+    oyentesCuenta.get(cuenta.id).add(res);
+    res.on('close', () => { const s = oyentesCuenta.get(cuenta.id); if (s) { s.delete(res); if (!s.size) oyentesCuenta.delete(cuenta.id); } });
+  }
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
   res.write('retry: 3000\n\n');
   // Versión del servidor: si cambia (se publicó algo nuevo), la app se recarga sola
@@ -679,7 +690,7 @@ http
       if (url.pathname !== '/api/salud') { defensa.limitar(ip, url.pathname); ultimaVisita = Date.now(); }
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado });
-      // Avisos de Stripe (pagos, renovaciones, cancelaciones): sin sesión, con su firma
+      // Avisos de PayPal (cobros, renovaciones, cancelaciones): sin sesión, con su firma
       if (url.pathname === '/api/pago/webhook' && req.method === 'POST') return await pagos.webhook(req, res, json);
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
@@ -694,7 +705,7 @@ http
         return res.end();
       }
 
-      if (url.pathname === '/api/eventos') return eventos(req, res);
+      if (url.pathname === '/api/eventos') return eventos(req, res, cuenta);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       if (pagos.RUTAS.includes(url.pathname)) return await pagos.atender(url.pathname, req, res, json, cuenta);
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);

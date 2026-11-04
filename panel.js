@@ -67,6 +67,10 @@ function claveValida(k) {
   return key;
 }
 
+// Vídeos de anuncios: van a una carpeta interna (no salen en el catálogo ni en Telegram)
+const ANUNCIO_VIDEO = /^_morvehtv\/anuncios\/[\w-]{8,60}\.(mp4|m4v|webm|mov)$/;
+const claveSubida = (k) => (ANUNCIO_VIDEO.test(String(k ?? '')) ? String(k) : claveValida(k));
+
 async function cuerpo(req) {
   let t = '';
   for await (const trozo of req) {
@@ -318,8 +322,10 @@ export async function atender(ruta, req, res, json, ip) {
       texto: String(a.texto ?? '').trim().slice(0, 160),
       imagen: a.imagen ? https(a.imagen) : null,
       enlace: a.enlace ? https(a.enlace) : null,
+      // Vídeo para antes de reproducir: uno subido desde aquí (en e2) o una dirección https
+      video: !a.video ? null : ANUNCIO_VIDEO.test(String(a.video)) ? String(a.video) : https(a.video),
       activo: a.activo !== false,
-    })).filter((a) => a.titulo || a.imagen);
+    })).filter((a) => a.titulo || a.imagen || a.video);
     await p.guardarAjuste('anuncios', lista);
     await registrar(c, ip, `guarda los anuncios (${lista.length})`);
     return json(res, 200, { anuncios: lista });
@@ -450,6 +456,16 @@ export async function atender(ruta, req, res, json, ip) {
   }
 
   // ---------- Subidas ----------
+  if (ruta === '/api/panel/subir/iniciar' && datos.anuncio) {
+    const ext = String(datos.nombre ?? '').match(/\.(mp4|m4v|webm|mov)$/i)?.[1]?.toLowerCase();
+    if (!ext) throw error(400, 'El vídeo del anuncio tiene que ser .mp4, .webm o .mov (los que abre cualquier aparato)');
+    const tamano = Number(datos.tamano);
+    if (!(tamano > 0) || tamano > 2 * 1024 ** 3) throw error(400, 'El vídeo del anuncio puede ocupar como mucho 2 GB');
+    const key = `_morvehtv/anuncios/${randomUUID()}.${ext}`;
+    const { UploadId } = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: TIPOS[ext] ?? 'video/mp4' }));
+    console.log(`Panel: ${c.usuario} sube un vídeo de anuncio (${(tamano / 2 ** 20).toFixed(1)} MB)`);
+    return json(res, 200, { key, uploadId: UploadId, tamParte: TAM_PARTE, partes: Math.ceil(tamano / TAM_PARTE) });
+  }
   if (ruta === '/api/panel/subir/iniciar') {
     const nombre = nombreValido(datos.nombre);
     if (!SUBIBLES.test(nombre)) throw error(400, 'Solo vídeos, subtítulos (.srt, .vtt, .ass) o imágenes');
@@ -468,7 +484,7 @@ export async function atender(ruta, req, res, json, ip) {
     return json(res, 200, { key, uploadId: UploadId, tamParte: TAM_PARTE, partes: Math.ceil(tamano / TAM_PARTE) });
   }
   if (ruta.startsWith('/api/panel/subir/')) {
-    const key = claveValida(datos.key);
+    const key = claveSubida(datos.key);
     const uploadId = String(datos.uploadId ?? '');
     if (!uploadId) throw error(400, 'Falta la subida');
     if (ruta === '/api/panel/subir/partes') {

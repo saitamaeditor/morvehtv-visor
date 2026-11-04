@@ -45,7 +45,7 @@ function pintarBotonCuenta() {
   b.hidden = !yo;
   b.innerHTML = '';
   if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
-  if (yo && planInfo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'PREMIUM'));
+  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'PREMIUM'));
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -310,8 +310,9 @@ function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
 }
 
 // ---------- Planes: Básico (con anuncios) y Premium (sin anuncios) ----------
-// El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner
-// (Google AdSense en la web, anuncios propios del gestor o, si no hay, un aviso de Premium).
+// El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner.
+// Se paga con PayPal; al volver, Premium se activa al momento y el servidor avisa a todas las
+// pestañas y aparatos abiertos de la cuenta (evento «plan») para quitar los anuncios ya.
 let planInfo = null; // { activo, plan, hasta, cancelado, precio, anuncios }
 const enApp = () => !!window.MorvehApp;
 
@@ -323,18 +324,36 @@ async function cargarPlan() {
 }
 const conAnuncios = () => !!(planInfo && planInfo.plan !== 'premium' && planInfo.anuncios);
 
-// Vuelta de la página de pago de Stripe (?pago=ok / ?pago=cancelado)
+// El plan ha cambiado (pago, cancelación, aviso de otro aparato): se repinta sin anuncios (o con)
+async function planCambiado(avisar) {
+  const antes = planInfo && planInfo.plan;
+  await cargarPlan();
+  const ahora = planInfo && planInfo.plan;
+  if (antes === ahora && !avisar) return;
+  document.querySelectorAll('.anuncio, .anuncio-previo').forEach((x) => { if (ahora === 'premium') x.remove(); });
+  if (ahora === 'premium' && antes !== 'premium') aviso('⭐ ¡Ya eres Premium! Sin anuncios en la web y la app', 5000);
+  if (document.documentElement.classList.contains('con-cuenta')) abrirCuenta();
+  if (actual < 0) cargar();
+}
+// Al volver a la app (estaba en segundo plano mientras se pagaba) se mira el plan otra vez
+document.addEventListener('visibilitychange', () => { if (!document.hidden && yo) planCambiado(false); });
+
+// Vuelta de PayPal: ?pago=ok&subscription_id=I-… (o ?pago=cancelado)
 async function vueltaDelPago() {
-  const q = new URLSearchParams(location.search).get('pago');
-  if (!q) return;
+  const q = new URLSearchParams(location.search);
+  const pago = q.get('pago');
+  if (!pago) return;
   history.replaceState(null, '', location.pathname + location.hash);
-  if (q !== 'ok') return aviso('Pago cancelado: sigues con el plan Básico', 4000);
-  aviso('¡Gracias! Activando Premium…', 4000);
-  // Stripe avisa al servidor en unos segundos: se mira hasta que llega
-  for (let n = 0; n < 10; n++) {
-    await new Promise((ok) => setTimeout(ok, 2000));
-    await cargarPlan();
-    if (planInfo && planInfo.plan === 'premium') { aviso('¡Ya eres Premium! Sin anuncios en la web y la app', 5000); return cargar(); }
+  if (pago !== 'ok') return aviso('Pago cancelado: sigues con el plan Básico', 4000);
+  const id = q.get('subscription_id');
+  aviso('Comprobando el pago con PayPal…', 6000);
+  for (let n = 0; n < 6; n++) {
+    try {
+      if (id) await enviar('/api/pago/confirmar', { suscripcion: id });
+      await planCambiado(true);
+      if (planInfo && planInfo.plan === 'premium') return;
+    } catch (e) { if (n === 5) aviso(e.message, 5000); }
+    await new Promise((ok) => setTimeout(ok, 2500));
   }
 }
 
@@ -348,9 +367,11 @@ function cargarAdsense(cliente) {
   document.head.append(s);
 }
 
-// Un anuncio: AdSense (solo en la web: dentro de la app de Android no está permitido), uno
-// propio al azar o el aviso de Premium. «donde» cambia el tamaño (franja o recuadro).
-function contenidoAnuncio(donde) {
+const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
+
+// Banner: AdSense (solo en la web: dentro de la app de Android no está permitido), uno propio
+// con imagen al azar o, si no hay ninguno, el aviso de Premium
+function contenidoBanner() {
   const a = planInfo.anuncios;
   if (a.adsense && a.adsense.slot && !enApp()) {
     cargarAdsense(a.adsense.cliente);
@@ -358,30 +379,32 @@ function contenidoAnuncio(donde) {
     ins.style.display = 'block';
     ins.setAttribute('data-ad-client', a.adsense.cliente);
     ins.setAttribute('data-ad-slot', a.adsense.slot);
-    ins.setAttribute('data-ad-format', donde === 'previo' ? 'rectangle' : 'auto');
+    ins.setAttribute('data-ad-format', 'auto');
     ins.setAttribute('data-full-width-responsive', 'true');
     setTimeout(() => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {} }, 0);
     return ins;
   }
-  if (a.propios && a.propios.length) {
-    const x = a.propios[Math.floor(Math.random() * a.propios.length)];
-    const c = el(x.enlace ? 'a' : 'div', 'anuncio-propio');
-    if (x.enlace) { c.href = x.enlace; c.target = '_blank'; c.rel = 'sponsored noopener'; }
-    if (x.imagen) { const im = el('img'); im.src = x.imagen; im.alt = x.titulo || ''; im.loading = 'lazy'; c.append(im); }
-    const t = el('div', 'texto');
-    if (x.titulo) t.append(el('b', null, x.titulo));
-    if (x.texto) t.append(el('span', null, x.texto));
-    c.append(t);
-    return c;
-  }
+  const conImagen = (a.propios || []).filter((x) => x.imagen || x.titulo);
+  if (conImagen.length) return tarjetaAnuncio(azar(conImagen));
+  return promoPremium(true);
+}
+function tarjetaAnuncio(x) {
+  const c = el(x.enlace ? 'a' : 'div', 'anuncio-propio');
+  if (x.enlace) { c.href = x.enlace; c.target = '_blank'; c.rel = 'sponsored noopener'; }
+  if (x.imagen) { const im = el('img'); im.src = x.imagen; im.alt = x.titulo || ''; im.loading = 'lazy'; c.append(im); }
+  const t = el('div', 'texto');
+  if (x.titulo) t.append(el('b', null, x.titulo));
+  if (x.texto) t.append(el('span', null, x.texto));
+  c.append(t);
+  return c;
+}
+function promoPremium(conBoton) {
   if (!planInfo.activo) return null;
-  // Sin anuncios configurados: el hueco anuncia Premium
   const c = el('div', 'anuncio-propio promo');
   const t = el('div', 'texto');
   t.append(el('b', null, '⭐ MorvehTV Premium'), el('span', null, 'Todo sin anuncios en la web y la app' + (planInfo.precio ? ' por ' + planInfo.precio : '') + '.'));
   c.append(t);
-  // (antes del vídeo ya lleva su propio botón «Sin anuncios» abajo)
-  if (donde !== 'previo') {
+  if (conBoton) {
     const b = el('button', 'boton boton-acento', 'Quitar anuncios');
     b.onclick = (e) => { e.stopPropagation(); abrirCuenta(); };
     c.append(b);
@@ -391,59 +414,186 @@ function contenidoAnuncio(donde) {
 
 function anuncioBanner(donde) {
   if (!conAnuncios()) return null;
-  const contenido = contenidoAnuncio(donde);
+  const contenido = contenidoBanner();
   if (!contenido) return null;
   const caja = el('aside', 'anuncio anuncio-' + donde);
   caja.append(el('small', 'etiqueta-anuncio', 'Anuncio'), contenido);
   return caja;
 }
 
-// Antes de un vídeo (plan Básico): un anuncio de 5 s que luego se puede saltar. Como mucho uno
-// cada 10 minutos, para no cortar cada capítulo. Devuelve una promesa que se cumple al acabar.
+// ---------- Anuncio antes de reproducir (plan Básico) ----------
+// Un anuncio en vídeo antes de cada vídeo: de Google (VAST, solo en la web) o uno de los tuyos
+// subidos desde el gestor. Se puede saltar a los 5 s y, si acaba antes, el vídeo empieza solo.
+// Si no hay anuncios en vídeo, uno con imagen durante 5 s. Como mucho uno cada 5 minutos, para
+// no cortar cada capítulo seguido. Devuelve una promesa que se cumple cuando hay que seguir.
+const ESPERA_ENTRE_ANUNCIOS = 5 * 60000;
+const SALTAR_EN = 5;
 let ultimoPrevio = 0;
+
+function capaAnuncio() {
+  const capa = el('div', 'anuncio-previo');
+  const caja = el('div', 'caja');
+  const arriba = el('div', 'arriba');
+  const etiqueta = el('small', 'etiqueta-anuncio', 'Anuncio');
+  arriba.append(etiqueta);
+  const escena = el('div', 'escena');
+  const pie = el('div', 'pie');
+  const saltar = el('button', 'boton saltar', 'Saltar en ' + SALTAR_EN + ' s');
+  saltar.disabled = true;
+  if (planInfo.activo) {
+    const pr = el('button', 'boton', '⭐ Sin anuncios' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
+    pr.onclick = () => { capa._fin(); cerrar(); abrirCuenta(); };
+    pie.append(pr);
+  }
+  pie.append(saltar);
+  caja.append(arriba, escena, pie);
+  capa.append(caja);
+  return { capa, escena, saltar, etiqueta, arriba, pie };
+}
+
+function cuentaAtras(c, terminar) {
+  let s = SALTAR_EN;
+  const reloj = setInterval(() => {
+    if (!$('#visor').classList.contains('abierto')) return terminar();
+    if (--s > 0) { c.saltar.textContent = 'Saltar en ' + s + ' s'; return; }
+    clearInterval(reloj);
+    c.saltar.disabled = false; c.saltar.textContent = 'Saltar anuncio ›'; c.saltar.classList.add('boton-acento');
+    c.saltar.focus();
+  }, 1000);
+  return () => clearInterval(reloj);
+}
+
 function anuncioPrevio() {
-  if (!conAnuncios() || Date.now() - ultimoPrevio < 10 * 60000) return Promise.resolve();
-  const contenido = contenidoAnuncio('previo');
-  if (!contenido) return Promise.resolve();
+  if (!conAnuncios() || Date.now() - ultimoPrevio < ESPERA_ENTRE_ANUNCIOS) return Promise.resolve();
+  const a = planInfo.anuncios;
+  const videos = (a.propios || []).filter((x) => x.video);
   ultimoPrevio = Date.now();
+  if (a.vast && !enApp()) return anuncioVast(a.vast).then((hecho) => (hecho ? null : videos.length ? anuncioVideo(azar(videos)) : anuncioImagen()));
+  if (videos.length) return anuncioVideo(azar(videos));
+  return anuncioImagen();
+}
+
+// Uno de tus vídeos de anuncio
+function anuncioVideo(x) {
   return new Promise((listo) => {
-    const capa = el('div', 'anuncio-previo');
-    const caja = el('div', 'caja');
-    const arriba = el('div', 'arriba');
-    arriba.append(el('small', 'etiqueta-anuncio', 'Anuncio'));
-    const saltar = el('button', 'boton', 'El vídeo empieza en 5 s');
-    saltar.disabled = true;
-    caja.append(arriba, contenido);
-    const pie = el('div', 'pie');
-    if (planInfo.activo) {
-      const pr = el('button', 'boton', '⭐ Sin anuncios' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
-      pr.onclick = () => { terminar(); cerrar(); abrirCuenta(); };
-      pie.append(pr);
+    const c = capaAnuncio();
+    const v = el('video');
+    v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto'; v.src = x.video;
+    c.escena.append(v);
+    const resto = el('span', 'resto');
+    c.arriba.append(resto);
+    if (x.enlace) {
+      const mas = el('a', 'boton', 'Más información ↗');
+      mas.href = x.enlace; mas.target = '_blank'; mas.rel = 'sponsored noopener';
+      c.pie.insertBefore(mas, c.pie.firstChild);
     }
-    pie.append(saltar);
-    caja.append(pie);
-    capa.append(caja);
-    $('#visor').append(capa);
-    let s = 5;
-    const reloj = setInterval(() => {
-      if (!$('#visor').classList.contains('abierto')) return terminar();
-      if (--s > 0) { saltar.textContent = 'El vídeo empieza en ' + s + ' s'; return; }
-      clearInterval(reloj);
-      saltar.disabled = false; saltar.textContent = 'Ver el vídeo ›'; saltar.classList.add('boton-acento');
-      saltar.focus();
-    }, 1000);
-    function terminar() { clearInterval(reloj); capa.remove(); listo(); }
-    saltar.onclick = terminar;
+    // Sin sonido no arranca en algunos móviles: entonces se pone en silencio con un botón para activarlo
+    const sonido = el('button', 'boton sonido-anuncio', '🔇 Activar sonido');
+    sonido.hidden = true;
+    sonido.onclick = () => { v.muted = false; sonido.hidden = true; };
+    c.arriba.append(sonido);
+    v.ontimeupdate = () => { if (v.duration) resto.textContent = ' · ' + Math.max(0, Math.ceil(v.duration - v.currentTime)) + ' s'; };
+    let hecho = false;
+    const parar = cuentaAtras(c, () => terminar());
+    function terminar() { if (hecho) return; hecho = true; parar(); v.pause(); v.removeAttribute('src'); c.capa.remove(); listo(); }
+    c.capa._fin = terminar;
+    c.saltar.onclick = terminar;
+    v.onended = terminar;
+    v.onerror = terminar; // si el anuncio no carga, no se queda nadie esperando
+    $('#visor').append(c.capa);
+    v.play().catch(() => { v.muted = true; sonido.hidden = false; v.play().catch(terminar); });
+    // Por si el vídeo se queda colgado
+    setTimeout(() => { if (!hecho && v.currentTime === 0) terminar(); }, 15000);
   });
 }
 
-// Ir a la página de Stripe (pagar o gestionar). En la app de Android solo se puede salir a otra
-// web con un toque, así que allí se enseña un botón que lleva a ella.
+// Sin vídeos: uno con imagen (o el aviso de Premium) durante 5 s
+function anuncioImagen() {
+  const a = planInfo.anuncios;
+  const conImagen = (a.propios || []).filter((x) => x.imagen || x.titulo);
+  const contenido = conImagen.length ? tarjetaAnuncio(azar(conImagen)) : promoPremium(false);
+  if (!contenido) return Promise.resolve();
+  return new Promise((listo) => {
+    const c = capaAnuncio();
+    c.escena.append(contenido);
+    let hecho = false;
+    const parar = cuentaAtras(c, () => terminar());
+    function terminar() { if (hecho) return; hecho = true; parar(); c.capa.remove(); listo(); }
+    c.capa._fin = terminar;
+    c.saltar.onclick = terminar;
+    $('#visor').append(c.capa);
+  });
+}
+
+// Anuncio de Google en vídeo (VAST, con el SDK IMA de Google). Devuelve true si se mostró
+// (o se intentó y terminó); false si no se pudo (sin anuncio disponible, bloqueador…)
+let imaCargado = null;
+function cargarIma() {
+  if (!imaCargado) {
+    imaCargado = new Promise((ok, mal) => {
+      const s = document.createElement('script');
+      s.src = 'https://imasdk.googleapis.com/js/sdkloader/ima3.js';
+      s.onload = () => (window.google && google.ima ? ok() : mal(new Error('IMA')));
+      s.onerror = () => { imaCargado = null; mal(new Error('IMA bloqueado')); };
+      document.head.append(s);
+    });
+  }
+  return imaCargado;
+}
+function anuncioVast(etiqueta) {
+  return new Promise((listo) => {
+    let hecho = false;
+    let mostrado = false;
+    const c = capaAnuncio();
+    c.saltar.hidden = true; // los anuncios de Google traen su propio «Saltar»
+    const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
+    const zona = el('div', 'ima');
+    c.escena.classList.add('con-ima');
+    c.escena.append(v, zona);
+    let gestor = null;
+    function terminar() {
+      if (hecho) return; hecho = true;
+      try { if (gestor) gestor.destroy(); } catch (e) {}
+      c.capa.remove(); listo(mostrado);
+    }
+    c.capa._fin = terminar;
+    $('#visor').append(c.capa);
+    const limite = setTimeout(() => { if (!mostrado) terminar(); }, 8000);
+    cargarIma().then(() => {
+      const ima = google.ima;
+      try { ima.settings.setLocale('es'); } catch (e) {}
+      const contenedor = new ima.AdDisplayContainer(zona, v);
+      contenedor.initialize();
+      const cargador = new ima.AdsLoader(contenedor);
+      cargador.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, terminar);
+      cargador.addEventListener(ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
+        gestor = e.getAdsManager(v);
+        gestor.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, terminar);
+        gestor.addEventListener(ima.AdEvent.Type.STARTED, () => { mostrado = true; clearTimeout(limite); });
+        gestor.addEventListener(ima.AdEvent.Type.ALL_ADS_COMPLETED, terminar);
+        gestor.addEventListener(ima.AdEvent.Type.SKIPPED, terminar);
+        try {
+          const r = zona.getBoundingClientRect();
+          gestor.init(Math.max(320, r.width), Math.max(180, r.height), ima.ViewMode.NORMAL);
+          gestor.start();
+        } catch (err) { terminar(); }
+      });
+      const pedido = new ima.AdsRequest();
+      pedido.adTagUrl = etiqueta;
+      const r = zona.getBoundingClientRect();
+      pedido.linearAdSlotWidth = Math.max(320, r.width); pedido.linearAdSlotHeight = Math.max(180, r.height);
+      cargador.requestAds(pedido);
+    }).catch(terminar);
+  });
+}
+
+// Ir a la página de PayPal. En la app de Android solo se puede salir a otra web con un toque,
+// así que allí se enseña un botón que lleva a ella.
 async function irAPago(ruta, boton, msg) {
   await accion(boton, msg, async () => {
     const r = await enviar(ruta);
     if (!enApp()) { location.href = r.url; return; }
-    const a = el('a', 'boton boton-acento', 'Continuar en la página de pago segura ›');
+    const a = el('a', 'boton boton-acento', 'Continuar en PayPal (pago seguro) ›');
     a.href = r.url;
     boton.replaceWith(a);
     a.focus();
@@ -457,9 +607,9 @@ function bloquePlan() {
   const premium = planInfo.plan === 'premium';
   const precio = planInfo.precio ? ' (' + planInfo.precio + ')' : '';
   const texto = premium
-    ? (yo && yo.admin ? 'Premium (administrador): sin anuncios.'
-      : 'Premium: sin anuncios en la web y la app.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Termina' : 'Se renueva') + ' el ' + fechaLarga(planInfo.hasta) + '.' : ''))
-    : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Se cancela cuando quieras.' : '');
+    ? (planInfo.admin ? 'Premium (administrador): sin anuncios.'
+      : 'Premium: sin anuncios en la web y la app. Pagas con PayPal.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Cancelada: sigues sin anuncios hasta el' : 'Se renueva el') + ' ' + fechaLarga(planInfo.hasta) + '.' : ''))
+    : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Pagas con PayPal (o tarjeta) y cancelas cuando quieras.' : '');
   const b = bloque('Plan', texto);
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
   const fila = el('div', 'cuenta-botones');
@@ -468,10 +618,14 @@ function bloquePlan() {
     ir.onclick = () => irAPago('/api/pago/suscribir', ir, b.msg);
     fila.append(ir);
   }
-  if (premium && !(yo && yo.admin) && planInfo.activo) {
-    const g = el('button', 'boton', 'Gestionar suscripción (tarjeta, facturas, cancelar)');
-    g.onclick = () => irAPago('/api/pago/portal', g, b.msg);
-    fila.append(g);
+  if (premium && !planInfo.admin && planInfo.activo && !planInfo.cancelado) {
+    const cancelar = el('button', 'boton boton-peligro', 'Cancelar suscripción');
+    cancelar.onclick = () => accion(cancelar, b.msg, async () => {
+      if (!confirm('¿Cancelar Premium? No se te cobrará más y seguirás sin anuncios hasta el final del mes pagado.')) return;
+      await enviar('/api/pago/cancelar');
+      await planCambiado(true);
+    });
+    fila.append(cancelar);
   }
   if (fila.children.length) b.s.append(fila);
   b.s.append(b.msg);

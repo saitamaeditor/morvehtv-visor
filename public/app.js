@@ -1701,6 +1701,8 @@ function conectar() {
     if (huellaContenido && h !== huellaContenido) refrescar({ nuevos: [], cambiados: [], borrados: [], todo: true }).catch(() => {});
     huellaContenido = h;
   });
+  // Pago hecho o cancelado (aquí o en otro aparato): quitar o poner los anuncios ya
+  eventos.addEventListener('plan', () => { if (typeof planCambiado === 'function') planCambiado(true); });
   eventos.addEventListener('version', (e) => {
     const v = JSON.parse(e.data);
     if (versionServidor && v !== versionServidor) {

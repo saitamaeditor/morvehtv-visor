@@ -123,14 +123,22 @@ export async function resumenPlanes() {
   const premium = cuentas.filter((c) => pagos.esPremium(c.plan)).length;
   return { cuentas: cuentas.length, premium, basico: cuentas.length - premium };
 }
-// Lo apunta el webhook de Stripe: por id de cuenta o, si no lo trae, por su cliente de Stripe
-export const ponerPlan = (quien, datos) => cambiar((d) => {
-  const c = (d.cuentas || []).find((x) => (quien.id && x.id === quien.id) || (quien.cliente && x.plan?.cliente === quien.cliente));
-  if (!c) { console.error(`Pagos: no hay ninguna cuenta para ${quien.id || quien.cliente}`); return null; }
-  c.plan = { ...(c.plan || {}), ...datos, cambiado: Date.now() };
-  console.log(`Pagos: ${c.usuario} → ${c.plan.estado}${c.plan.cancelado ? ' (cancelará al final del periodo)' : ''}`);
-  return c.plan;
-});
+// Lo apuntan el pago (al volver de PayPal) y el webhook: por id de cuenta o por su suscripción.
+// Avisa al momento a la web y la app abiertas de esa cuenta (alCambiarPlan, ver server.js).
+let avisoPlan = () => {};
+export const alCambiarPlan = (fn) => { avisoPlan = fn; };
+export async function ponerPlan(quien, datos) {
+  const r = await cambiar((d) => {
+    const c = (d.cuentas || []).find((x) => (quien.id && x.id === quien.id) || (quien.suscripcion && x.plan?.suscripcion === quien.suscripcion));
+    if (!c) { console.error(`Pagos: no hay ninguna cuenta para ${quien.id || quien.suscripcion}`); return null; }
+    c.plan = { ...(c.plan || {}), ...datos, cambiado: Date.now() };
+    console.log(`Pagos: ${c.usuario} → ${c.plan.estado}${c.plan.cancelado ? ' (cancelada: sigue hasta fin de mes)' : ''}`);
+    return { id: c.id, plan: c.plan };
+  });
+  if (!r) return null;
+  try { avisoPlan(r.id, pagos.esPremium(r.plan) ? 'premium' : 'basico'); } catch (e) { /* sin aviso en directo */ }
+  return r.plan;
+}
 
 // La cuenta de quien hace la petición, o null (la usa también el servidor para dejar pasar)
 export async function sesion(req) {
