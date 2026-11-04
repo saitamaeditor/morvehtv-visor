@@ -1168,7 +1168,13 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
 const esVideoClave = (k) => { const c = tipo(k)[1]; return c === 'video' || c === 'video-raro'; };
 const RE_TEMPORADA = /^(?:temporada|season|temp|t|s)\s*0*(\d{1,2})$/i;
 const numTemporada = (carpeta) => { const m = nombre(carpeta).trim().match(RE_TEMPORADA); return m ? Number(m[1]) : (/^especiales?$/i.test(nombre(carpeta).trim()) ? 0 : null); };
-const esEpisodio = (k) => capitulo(k) !== null || numTemporada(padre(k)) !== null;
+// Es un episodio si lo dice el nombre (S01E02, 1x02…), si está en una carpeta «Temporada N» o si
+// está dentro de la carpeta de una serie (cualquier subcarpeta de una sección que no sea de películas)
+const esEpisodio = (k) => {
+  if (capitulo(k) !== null || numTemporada(padre(k)) !== null) return true;
+  const partes = k.split('/');
+  return partes.length >= 3 && !/pel[ií]cula|cine|movie|film/i.test(partes[0]);
+};
 
 async function listarTodo(prefijo) {
   const r = { carpetas: [], archivos: [] };
@@ -1249,20 +1255,21 @@ function actualizarFlechas(i) {
 }
 
 // En el reproductor: botones ⏮ ⏭ junto a los de 10 s y, al final de cada capítulo, la tarjeta
-// «Siguiente capítulo» (en los últimos 30 s se ofrece; al acabar, cuenta 10 s y sigue sola).
+// «Siguiente episodio» (en los últimos 30 s se ofrece; al acabar, cuenta 10 s y sigue sola).
 // En películas no hay tarjeta (solo los botones ⏮ ⏭).
 function navegacionReproductor(caja, i) {
   const lista = listaVisor;
   const f = lista[i];
   const serie = esEpisodio(f.key);
   const bAnt = boton('boton', icono('anterior'), 'Anterior');
-  const bSig = boton('boton', icono('siguiente'), serie ? 'Siguiente capítulo' : 'Siguiente');
+  // En series, con su texto a la vista: «⏭ Siguiente episodio»
+  const bSig = boton(serie ? 'boton con-texto' : 'boton', serie ? `${icono('siguiente')}<span>Siguiente episodio</span>` : icono('siguiente'), serie ? 'Siguiente episodio' : 'Siguiente');
   bAnt.hidden = true; bSig.hidden = true;
   bAnt.onclick = () => irVecino(-1, { reproducir: true });
   bSig.onclick = () => irVecino(1, { reproducir: true });
   caja.despues.after(bAnt, bSig);
   const sigue = () => caja.isConnected && actual === i && listaVisor === lista;
-  [[bAnt, -1, 'Anterior'], [bSig, 1, serie ? 'Siguiente capítulo' : 'Siguiente']].forEach(([b, dir, texto]) => {
+  [[bAnt, -1, 'Anterior'], [bSig, 1, serie ? 'Siguiente episodio' : 'Siguiente']].forEach(([b, dir, texto]) => {
     vecino(dir, i, lista).then(async (v) => {
       if (!sigue() || !v) return;
       b.hidden = false;
@@ -1284,7 +1291,7 @@ function navegacionReproductor(caja, i) {
     if (!tarjeta) {
       tarjeta = el('div', 'siguiente');
       const info = el('div', 'info');
-      tarjeta._que = el('small', null, serie ? 'Siguiente capítulo' : 'Siguiente');
+      tarjeta._que = el('small', null, serie ? 'Siguiente episodio' : 'Siguiente');
       tarjeta._titulo = el('b', null, nombre(otro.key));
       info.append(tarjeta._que, tarjeta._titulo);
       etiquetaDe(otro).then((t) => { if (tarjeta) tarjeta._titulo.textContent = t; });
@@ -1299,7 +1306,7 @@ function navegacionReproductor(caja, i) {
     }
     if (alAcabar && serie && !cuenta) {
       let s = 10;
-      const pintar = () => { tarjeta._que.textContent = `Siguiente capítulo en ${s} s`; };
+      const pintar = () => { tarjeta._que.textContent = `Siguiente episodio en ${s} s`; };
       pintar();
       cuenta = setInterval(() => {
         if (!sigue() || !tarjeta) return quitar();
@@ -1314,7 +1321,7 @@ function navegacionReproductor(caja, i) {
     clearInterval(cuenta); cuenta = null;
     if (tarjeta) { tarjeta.remove(); tarjeta = null; }
   }
-  // La tarjeta «Siguiente capítulo» es solo para series: en películas no sale
+  // La tarjeta «Siguiente episodio» es solo para series: en películas no sale
   if (!serie) return;
   caja.alProgreso = (t, total) => {
     if (total > 90 && total - t <= 30 && t > 0) mostrar(false);

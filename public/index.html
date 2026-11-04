@@ -324,6 +324,10 @@
   .salto .icono { width: 28px; height: 28px; }
   @keyframes salto { 0% { opacity: 0; transform: translateY(-50%) scale(.8); } 25% { opacity: 1; transform: translateY(-50%) scale(1); } 100% { opacity: 0; } }
   .flecha[hidden] { display: none; }
+  /* «⏭ Siguiente episodio» en series: con su texto (en pantallas muy estrechas, solo el icono) */
+  .controles .boton.con-texto { font-weight: 700; white-space: nowrap; }
+  .controles .boton.con-texto span { font-size: 14px; }
+  .tele .controles .boton.con-texto span { font-size: 20px; }
   /* Móvil en vertical: la tarjeta a lo ancho, encima de los controles (que ocupan dos filas) */
   @media (max-width: 600px) {
     .siguiente { left: 10px; right: 10px; max-width: none; bottom: 128px; padding: 10px 10px 10px 12px; gap: 10px; }
