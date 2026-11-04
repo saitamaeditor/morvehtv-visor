@@ -14,7 +14,11 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
 import * as meta from './metadatos.js';
 
-const TAM_PARTE = 32 * 1024 * 1024; // subidas: 32 MB por trozo, hasta ~320 GB
+const TAM_PARTE = 64 * 1024 * 1024; // el trozo más grande: 64 MB (hasta 640 GB por archivo)
+// Trozo a la medida de cada archivo: unos 24 trozos (así se envían varios a la vez desde el
+// principio), nunca menos de 8 MB ni más de 64 MB, y siempre menos de los 10 000 que admite e2
+const MB = 1024 * 1024;
+const tamParteDe = (tamano) => Math.max(8 * MB, Math.min(TAM_PARTE, Math.ceil(tamano / 24 / MB) * MB, Infinity), Math.ceil(tamano / 9999));
 const TAM_COPIA = 1024 ** 3; // copias de más de 5 GB: por trozos de 1 GB
 const SUBIBLES = /\.(mp4|m4v|mkv|webm|mov|avi|ts|wmv|flv|srt|vtt|ass|jpg|jpeg|png|webp)$/i;
 const TIPOS = { mp4: 'video/mp4', m4v: 'video/mp4', mkv: 'video/x-matroska', webm: 'video/webm', mov: 'video/quicktime',
@@ -525,7 +529,8 @@ export async function atender(ruta, req, res, json, ip) {
     const key = `_morvehtv/anuncios/${randomUUID()}.${ext}`;
     const { UploadId } = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: TIPOS[ext] ?? 'video/mp4' }));
     console.log(`Panel: ${c.usuario} sube un vídeo de anuncio (${(tamano / 2 ** 20).toFixed(1)} MB)`);
-    return json(res, 200, { key, uploadId: UploadId, tamParte: TAM_PARTE, partes: Math.ceil(tamano / TAM_PARTE) });
+    const tp = tamParteDe(tamano);
+    return json(res, 200, { key, uploadId: UploadId, tamParte: tp, partes: Math.ceil(tamano / tp) });
   }
   if (ruta === '/api/panel/subir/iniciar') {
     const nombre = nombreValido(datos.nombre);
@@ -543,8 +548,9 @@ export async function atender(ruta, req, res, json, ip) {
     }
     const ext = key.match(/\.(\w+)$/)[1].toLowerCase();
     const { UploadId } = await s3.send(new CreateMultipartUploadCommand({ Bucket: bucket, Key: key, ContentType: TIPOS[ext] ?? 'application/octet-stream' }));
-    console.log(`Panel: ${c.usuario} sube ${key} (${(tamano / 2 ** 30).toFixed(2)} GB)`);
-    return json(res, 200, { key, uploadId: UploadId, tamParte: TAM_PARTE, partes: Math.ceil(tamano / TAM_PARTE) });
+    const tp = tamParteDe(tamano);
+    console.log(`Panel: ${c.usuario} sube ${key} (${(tamano / 2 ** 30).toFixed(2)} GB en trozos de ${tp / MB} MB)`);
+    return json(res, 200, { key, uploadId: UploadId, tamParte: tp, partes: Math.ceil(tamano / tp) });
   }
   if (ruta.startsWith('/api/panel/subir/')) {
     const key = claveSubida(datos.key);
@@ -553,7 +559,7 @@ export async function atender(ruta, req, res, json, ip) {
     if (!uploadId) throw error(400, 'Falta la subida');
     if (ruta === '/api/panel/subir/partes') {
       const numeros = (Array.isArray(datos.numeros) ? datos.numeros : []).map(Number);
-      if (!numeros.length || numeros.length > 100 || numeros.some((n) => !Number.isInteger(n) || n < 1 || n > 10000)) throw error(400, 'Partes no válidas');
+      if (!numeros.length || numeros.length > 200 || numeros.some((n) => !Number.isInteger(n) || n < 1 || n > 10000)) throw error(400, 'Partes no válidas');
       const urls = {};
       for (const n of numeros) urls[n] = await getSignedUrl(s3, new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: n }), { expiresIn: 6 * 3600 });
       return json(res, 200, { urls });
