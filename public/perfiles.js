@@ -607,7 +607,7 @@ function bloquePlan() {
   const premium = planInfo.plan === 'premium';
   const precio = planInfo.precio ? ' (' + planInfo.precio + ')' : '';
   const texto = premium
-    ? (planInfo.admin ? 'Premium (administrador): sin anuncios.'
+    ? (planInfo.admin ? 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.'
       : 'Premium: sin anuncios en la web y la app. Pagas con PayPal.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Cancelada: sigues sin anuncios hasta el' : 'Se renueva el') + ' ' + fechaLarga(planInfo.hasta) + '.' : ''))
     : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Pagas con PayPal (o tarjeta) y cancelas cuando quieras.' : '');
   const b = bloque('Plan', texto);

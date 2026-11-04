@@ -111,6 +111,8 @@ export const esAdmin = async (c) => Boolean(c && [...((await leer()).admins || [
 
 // ---------- Plan de cada cuenta ----------
 // «premium» si tiene la suscripción al día (o es administrador); si no, «basico» (con anuncios)
+// Premium de por vida: SOLO los administradores. Los demás, solo mientras su suscripción de PayPal
+// esté pagada (no hay otra forma de tener Premium gratis).
 export async function planDe(c) {
   if (!c) return { tipo: 'basico' };
   if (await esAdmin(c)) return { tipo: 'premium', admin: true };
@@ -119,9 +121,12 @@ export async function planDe(c) {
 }
 // Cuántas cuentas hay de cada plan (para el gestor)
 export async function resumenPlanes() {
-  const cuentas = (await leer()).cuentas || [];
-  const premium = cuentas.filter((c) => pagos.esPremium(c.plan)).length;
-  return { cuentas: cuentas.length, premium, basico: cuentas.length - premium };
+  const d = await leer();
+  const cuentas = d.cuentas || [];
+  const admins = new Set([...(d.admins || []), ...ADMINS_ENTORNO]);
+  const deAdmin = cuentas.filter((c) => admins.has(c.usuario)).length;
+  const premium = cuentas.filter((c) => !admins.has(c.usuario) && pagos.esPremium(c.plan)).length;
+  return { cuentas: cuentas.length, admins: deAdmin, premium, basico: cuentas.length - premium - deAdmin };
 }
 // Lo apuntan el pago (al volver de PayPal) y el webhook: por id de cuenta o por su suscripción.
 // Avisa al momento a la web y la app abiertas de esa cuenta (alCambiarPlan, ver server.js).
