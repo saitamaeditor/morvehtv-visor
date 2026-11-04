@@ -111,7 +111,7 @@ export const esAdmin = async (c) => Boolean(c && [...((await leer()).admins || [
 
 // ---------- Plan de cada cuenta ----------
 // «premium» si tiene la suscripción al día (o es administrador); si no, «basico» (con anuncios)
-// Premium de por vida: SOLO los administradores. Los demás, solo mientras su suscripción de PayPal
+// Premium de por vida: SOLO los administradores. Los demás, solo mientras su suscripción de Stripe
 // esté pagada (no hay otra forma de tener Premium gratis).
 export async function planDe(c) {
   if (!c) return { tipo: 'basico' };
@@ -136,7 +136,7 @@ export async function resumenPlanes() {
   const premium = cuentas.filter((c) => !admins.has(c.usuario) && pagos.esPremium(c.plan)).length;
   return { cuentas: cuentas.length, admins: deAdmin, premium, basico: cuentas.length - premium - deAdmin };
 }
-// Lo apuntan el pago (al volver de PayPal) y el webhook: por id de cuenta o por su suscripción.
+// Lo apuntan el pago (al volver de Stripe) y el webhook: por id de cuenta o por su suscripción.
 // Avisa al momento a la web y la app abiertas de esa cuenta (alCambiarPlan, ver server.js).
 let avisoPlan = () => {};
 export const alCambiarPlan = (fn) => { avisoPlan = fn; };

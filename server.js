@@ -712,7 +712,7 @@ http
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado,
         legal: faltanLegal().length ? `faltan ${faltanLegal().join(', ')}` : 'ok' });
-      // Avisos de PayPal (cobros, renovaciones, cancelaciones): sin sesión, con su firma
+      // Avisos de Stripe (cobros, renovaciones, cancelaciones): sin sesión, con su firma
       if (url.pathname === '/api/pago/webhook' && req.method === 'POST') return await pagos.webhook(req, res, json);
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));

@@ -316,7 +316,7 @@ function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
 
 // ---------- Planes: Básico (con anuncios) y Premium (sin anuncios) ----------
 // El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner.
-// Se paga con PayPal; al volver, Premium se activa al momento y el servidor avisa a todas las
+// Se paga con Stripe (tarjeta, Apple Pay, Google Pay); al volver, Premium se activa al momento y el servidor avisa a todas las
 // pestañas y aparatos abiertos de la cuenta (evento «plan») para quitar los anuncios ya.
 let planInfo = null; // { activo, plan, hasta, cancelado, precio, anuncios }
 const enApp = () => !!window.MorvehApp;
@@ -343,18 +343,18 @@ async function planCambiado(avisar) {
 // Al volver a la app (estaba en segundo plano mientras se pagaba) se mira el plan otra vez
 document.addEventListener('visibilitychange', () => { if (!document.hidden && yo) planCambiado(false); });
 
-// Vuelta de PayPal: ?pago=ok&subscription_id=I-… (o ?pago=cancelado)
+// Vuelta de Stripe: ?pago=ok&session_id=cs_… (o ?pago=cancelado)
 async function vueltaDelPago() {
   const q = new URLSearchParams(location.search);
   const pago = q.get('pago');
   if (!pago) return;
   history.replaceState(null, '', location.pathname + location.hash);
   if (pago !== 'ok') return aviso('Pago cancelado: sigues con el plan Básico', 4000);
-  const id = q.get('subscription_id');
-  aviso('Comprobando el pago con PayPal…', 6000);
+  const id = q.get('session_id');
+  aviso('Comprobando el pago…', 6000);
   for (let n = 0; n < 6; n++) {
     try {
-      if (id) await enviar('/api/pago/confirmar', { suscripcion: id });
+      if (id) await enviar('/api/pago/confirmar', { sesion: id });
       await planCambiado(true);
       if (planInfo && planInfo.plan === 'premium') return;
     } catch (e) { if (n === 5) aviso(e.message, 5000); }
@@ -592,13 +592,13 @@ function anuncioVast(etiqueta) {
   });
 }
 
-// Ir a la página de PayPal. En la app de Android solo se puede salir a otra web con un toque,
+// Ir a la página de pago de Stripe. En la app de Android solo se puede salir a otra web con un toque,
 // así que allí se enseña un botón que lleva a ella.
 async function irAPago(ruta, boton, msg, datos) {
   await accion(boton, msg, async () => {
     const r = await enviar(ruta, datos);
     if (!enApp()) { location.href = r.url; return; }
-    const a = el('a', 'boton boton-acento', 'Continuar en PayPal (pago seguro) ›');
+    const a = el('a', 'boton boton-acento', 'Continuar al pago seguro ›');
     a.href = r.url;
     boton.replaceWith(a);
     a.focus();
@@ -613,8 +613,8 @@ function bloquePlan() {
   const precio = planInfo.precio ? ' (' + planInfo.precio + ')' : '';
   const texto = premium
     ? (planInfo.admin ? 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.'
-      : 'Premium: sin anuncios en la web y la app. Pagas con PayPal.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Cancelada: sigues sin anuncios hasta el' : 'Se renueva el') + ' ' + fechaLarga(planInfo.hasta) + '.' : ''))
-    : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Pagas con PayPal (o tarjeta) y cancelas cuando quieras.' : '');
+      : 'Premium: sin anuncios en la web y la app.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Cancelada: sigues sin anuncios hasta el' : 'Se renueva el') + ' ' + fechaLarga(planInfo.hasta) + '.' : ''))
+    : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Pagas con tarjeta, Apple Pay o Google Pay y cancelas cuando quieras.' : '');
   const b = bloque('Plan', texto);
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
   const fila = el('div', 'cuenta-botones');
@@ -641,6 +641,12 @@ function bloquePlan() {
       await planCambiado(true);
     });
     fila.append(cancelar);
+  }
+  // Cambiar la tarjeta o ver las facturas: el portal de clientes de Stripe
+  if (premium && !planInfo.admin && planInfo.activo && planInfo.portal) {
+    const g = el('button', 'boton', 'Tarjeta y facturas');
+    g.onclick = () => irAPago('/api/pago/portal', g, b.msg);
+    fila.append(g);
   }
   if (fila.children.length) b.s.append(fila);
   b.s.append(b.msg);
