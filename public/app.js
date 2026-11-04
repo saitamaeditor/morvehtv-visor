@@ -1250,7 +1250,7 @@ function actualizarFlechas(i) {
 
 // En el reproductor: botones ⏮ ⏭ junto a los de 10 s y, al final de cada capítulo, la tarjeta
 // «Siguiente capítulo» (en los últimos 30 s se ofrece; al acabar, cuenta 10 s y sigue sola).
-// En películas la tarjeta también sale al acabar, pero no arranca sola.
+// En películas no hay tarjeta (solo los botones ⏮ ⏭).
 function navegacionReproductor(caja, i) {
   const lista = listaVisor;
   const f = lista[i];
@@ -1314,6 +1314,8 @@ function navegacionReproductor(caja, i) {
     clearInterval(cuenta); cuenta = null;
     if (tarjeta) { tarjeta.remove(); tarjeta = null; }
   }
+  // La tarjeta «Siguiente capítulo» es solo para series: en películas no sale
+  if (!serie) return;
   caja.alProgreso = (t, total) => {
     if (total > 90 && total - t <= 30 && t > 0) mostrar(false);
     // Si se vuelve atrás, la tarjeta se va (y puede volver a salir)
