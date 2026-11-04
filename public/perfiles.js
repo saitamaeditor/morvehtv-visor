@@ -158,7 +158,7 @@ function abrirCuenta() {
   const borrar = el('button', 'boton boton-peligro', 'Borrar mi cuenta');
   borrar.onclick = () => accion(borrar, bb.msg, async () => {
     if (!cb.i.value) throw new Error('Escribe tu contraseña');
-    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.')) return;
+    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.' + (planInfo && planInfo.conectado ? '\n\nOjo: tu membresía de Patreon no se cancela sola; cancélala en Patreon si no quieres que se te siga cobrando.' : ''))) return;
     await enviar('/api/cuenta-borrar', { actual: cb.i.value });
     location.replace('/entrar.html#registro');
   });
@@ -316,7 +316,7 @@ function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
 
 // ---------- Planes: Básico (con anuncios) y Premium (sin anuncios) ----------
 // El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner.
-// Se paga con Stripe (tarjeta, Apple Pay, Google Pay); al volver, Premium se activa al momento y el servidor avisa a todas las
+// Se paga en Patreon; al conectar la cuenta, Premium se activa al momento y el servidor avisa a todas las
 // pestañas y aparatos abiertos de la cuenta (evento «plan») para quitar los anuncios ya.
 let planInfo = null; // { activo, plan, hasta, cancelado, precio, anuncios }
 const enApp = () => !!window.MorvehApp;
@@ -343,23 +343,20 @@ async function planCambiado(avisar) {
 // Al volver a la app (estaba en segundo plano mientras se pagaba) se mira el plan otra vez
 document.addEventListener('visibilitychange', () => { if (!document.hidden && yo) planCambiado(false); });
 
-// Vuelta de Stripe: ?pago=ok&session_id=cs_… (o ?pago=cancelado)
+// Vuelta de Patreon tras conectar la cuenta: ?pago=ok | sin-suscripcion | otra-cuenta | cancelado | error
 async function vueltaDelPago() {
-  const q = new URLSearchParams(location.search);
-  const pago = q.get('pago');
-  if (!pago) return;
+  const q = new URLSearchParams(location.search).get('pago');
+  if (!q) return;
   history.replaceState(null, '', location.pathname + location.hash);
-  if (pago !== 'ok') return aviso('Pago cancelado: sigues con el plan Básico', 4000);
-  const id = q.get('session_id');
-  aviso('Comprobando el pago…', 6000);
-  for (let n = 0; n < 6; n++) {
-    try {
-      if (id) await enviar('/api/pago/confirmar', { sesion: id });
-      await planCambiado(true);
-      if (planInfo && planInfo.plan === 'premium') return;
-    } catch (e) { if (n === 5) aviso(e.message, 5000); }
-    await new Promise((ok) => setTimeout(ok, 2500));
-  }
+  if (q === 'ok') return planCambiado(true);
+  const textos = {
+    'sin-suscripcion': 'Tu Patreon está conectado, pero no tiene activo el nivel Premium de MorvehTV. Únete en Patreon y vuelve a pulsar «Conectar».',
+    'otra-cuenta': 'Esa cuenta de Patreon ya está conectada a otra cuenta de MorvehTV.',
+    cancelado: 'No se ha conectado Patreon: sigues con el plan Básico.',
+  };
+  aviso(textos[q] || 'No se pudo conectar con Patreon. Prueba otra vez en un momento.', 7000);
+  await planCambiado(false);
+  if (q === 'sin-suscripcion') abrirCuenta();
 }
 
 let adsenseCargado = false;
@@ -592,13 +589,13 @@ function anuncioVast(etiqueta) {
   });
 }
 
-// Ir a la página de pago de Stripe. En la app de Android solo se puede salir a otra web con un toque,
-// así que allí se enseña un botón que lleva a ella.
+// Ir a Patreon (para conectar la cuenta). En la app de Android solo se puede salir a otra web con
+// un toque, así que allí se enseña un botón que lleva a ella.
 async function irAPago(ruta, boton, msg, datos) {
   await accion(boton, msg, async () => {
     const r = await enviar(ruta, datos);
     if (!enApp()) { location.href = r.url; return; }
-    const a = el('a', 'boton boton-acento', 'Continuar al pago seguro ›');
+    const a = el('a', 'boton boton-acento', 'Continuar en Patreon ›');
     a.href = r.url;
     boton.replaceWith(a);
     a.focus();
@@ -611,42 +608,52 @@ function bloquePlan() {
   if (!planInfo) return null;
   const premium = planInfo.plan === 'premium';
   const precio = planInfo.precio ? ' (' + planInfo.precio + ')' : '';
-  const texto = premium
-    ? (planInfo.admin ? 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.'
-      : 'Premium: sin anuncios en la web y la app.' + (planInfo.hasta ? ' ' + (planInfo.cancelado ? 'Cancelada: sigues sin anuncios hasta el' : 'Se renueva el') + ' ' + fechaLarga(planInfo.hasta) + '.' : ''))
-    : 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Pagas con tarjeta, Apple Pay o Google Pay y cancelas cuando quieras.' : '');
+  let texto;
+  if (premium && planInfo.admin) texto = 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.';
+  else if (premium) texto = 'Premium con Patreon: sin anuncios en la web y la app.' + (planInfo.hasta ? ' Próximo cobro en Patreon el ' + fechaLarga(planInfo.hasta) + '.' : '');
+  else texto = 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium' + precio + ' lo ves todo sin anuncios, en la web y la app. Se paga en Patreon (tarjeta, PayPal, Apple Pay…) y se cancela allí cuando quieras.' : '');
   const b = bloque('Plan', texto);
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
   const fila = el('div', 'cuenta-botones');
+
   if (!premium && planInfo.activo) {
+    if (planInfo.conectado && planInfo.estadoPatreon !== 'active_patron') {
+      b.s.append(el('p', 'cuenta-texto', 'Tu Patreon está conectado, pero ahora no tiene activo el nivel Premium de MorvehTV.'));
+    }
     // Consentimiento expreso (contenido digital que empieza ya: sin derecho de desistimiento)
     const acepto = el('label', 'acepto-premium');
     const casilla = el('input'); casilla.type = 'checkbox';
     const txt = el('span');
-    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> (renovación mensual automática, cancelable cuando quiera) y pido que Premium empiece <b>ya</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
+    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> (cuota mensual en Patreon, cancelable cuando quiera) y pido que Premium empiece <b>ya</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
     acepto.append(casilla, txt);
-    const ir = el('button', 'boton boton-acento', '⭐ Hazte Premium' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
-    ir.onclick = () => {
+    const pasos = el('ol', 'pasos-patreon');
+    const p1 = el('li');
+    const unirse = el('a', 'boton', '1 · Únete en Patreon' + (planInfo.precio ? ' · ' + planInfo.precio : '') + ' ↗');
+    unirse.href = planInfo.pagina; unirse.target = '_blank'; unirse.rel = 'noopener';
+    p1.append(unirse, el('small', null, 'Elige el nivel Premium de MorvehTV. Si ya eres miembro, salta al paso 2.'));
+    const p2 = el('li');
+    const conectar = el('button', 'boton boton-acento', '2 · Conectar mi Patreon');
+    conectar.onclick = () => {
       if (!casilla.checked) { b.msg.className = 'cuenta-msg mal'; b.msg.textContent = 'Marca la casilla de las condiciones para continuar'; casilla.focus(); return; }
-      irAPago('/api/pago/suscribir', ir, b.msg, { acepta: true });
+      irAPago('/api/pago/patreon/conectar', conectar, b.msg, { acepta: true });
     };
-    b.s.append(acepto);
-    fila.append(ir);
+    p2.append(conectar, el('small', null, 'Entra con tu cuenta de Patreon y autoriza a MorvehTV: el Premium se activa al momento.'));
+    pasos.append(p1, p2);
+    b.s.append(acepto, pasos);
   }
-  if (premium && !planInfo.admin && planInfo.activo && !planInfo.cancelado) {
-    const cancelar = el('button', 'boton boton-peligro', 'Cancelar suscripción');
-    cancelar.onclick = () => accion(cancelar, b.msg, async () => {
-      if (!confirm('¿Cancelar Premium? No se te cobrará más y seguirás sin anuncios hasta el final del mes pagado.')) return;
-      await enviar('/api/pago/cancelar');
+  if (premium && !planInfo.admin && planInfo.conectado) {
+    const gestionar = el('a', 'boton', 'Gestionar o cancelar en Patreon ↗');
+    gestionar.href = 'https://www.patreon.com/settings/memberships'; gestionar.target = '_blank'; gestionar.rel = 'noopener';
+    fila.append(gestionar);
+  }
+  if (planInfo.conectado && !planInfo.admin) {
+    const quitar = el('button', 'boton', 'Desconectar Patreon');
+    quitar.onclick = () => accion(quitar, b.msg, async () => {
+      if (!confirm('¿Desconectar tu Patreon de esta cuenta? Perderás Premium aquí (tu membresía en Patreon no se cancela: eso se hace en Patreon).')) return;
+      await enviar('/api/pago/patreon/desconectar');
       await planCambiado(true);
     });
-    fila.append(cancelar);
-  }
-  // Cambiar la tarjeta o ver las facturas: el portal de clientes de Stripe
-  if (premium && !planInfo.admin && planInfo.activo && planInfo.portal) {
-    const g = el('button', 'boton', 'Tarjeta y facturas');
-    g.onclick = () => irAPago('/api/pago/portal', g, b.msg);
-    fila.append(g);
+    fila.append(quitar);
   }
   if (fila.children.length) b.s.append(fila);
   b.s.append(b.msg);

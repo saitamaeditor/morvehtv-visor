@@ -1,33 +1,37 @@
-// Planes de MorvehTV: «Básico» (gratis, con anuncios) y «Premium» (de pago cada mes, sin
-// anuncios). El cobro lo hace Stripe (tarjeta, Apple Pay, Google Pay…): la web nunca ve ni
-// guarda datos de pago. Se activa con variables de entorno (nunca en el código: el repositorio
-// es público):
-//  · STRIPE_SECRET_KEY: la clave secreta (sk_live_… para cobrar de verdad; sk_test_… para probar)
-//  · STRIPE_PRICE_ID: el precio mensual de Premium (price_…)
-//  · STRIPE_WEBHOOK_SECRET: el secreto del webhook (whsec_…) que apunta a /api/pago/webhook
-// Sin ellas no se cobra nada: todos ven el plan Básico y el botón de Premium no sale.
-// Al volver de pagar, el servidor pregunta a Stripe en ese momento (no espera al webhook), así
-// que Premium se activa al instante; el webhook mantiene al día renovaciones y cancelaciones.
+// Planes de MorvehTV: «Básico» (gratis, con anuncios) y «Premium» (sin anuncios). Premium se paga
+// en Patreon (patreon.com/morvehtv): el cliente se une al nivel de MorvehTV y conecta su cuenta
+// de Patreon desde «Mi cuenta»; Patreon cobra (tarjeta, PayPal, Apple Pay…) y gestiona el IVA.
+// La web nunca ve ni guarda datos de pago. Se activa con variables de entorno (nunca en el
+// código: el repositorio es público):
+//  · PATREON_CLIENT_ID y PATREON_CLIENT_SECRET: los del cliente de API (patreon.com/portal),
+//    con la dirección de vuelta https://…/api/pago/patreon/vuelta
+//  · PATREON_WEBHOOK_SECRET: el secreto del webhook que apunta a /api/pago/webhook
+//  · PATREON_URL (opcional): la página para unirse; por defecto https://www.patreon.com/morvehtv
+//  · PATREON_TIER_ID (opcional): si hay varios niveles, solo ese da Premium
+//  · PATREON_PRECIO (opcional): el texto del precio para enseñar, p. ej. «3,99 €/mes»
+// Al conectar, el servidor pregunta a Patreon en ese momento si es miembro activo (Premium al
+// instante); el webhook mantiene al día cobros, impagos y bajas.
 //
 // Anuncios del plan Básico: vídeos propios (subidos desde el gestor) o, en la web, anuncios de
-// vídeo de Google (ANUNCIOS_VAST: la dirección VAST de Google Ad Manager / AdSense para vídeo)
-// antes de reproducir; además banners: AdSense (ANUNCIOS_ADSENSE + ANUNCIOS_ADSENSE_SLOT) o
-// los propios del gestor.
+// vídeo de Google (ANUNCIOS_VAST) antes de reproducir; además banners: AdSense
+// (ANUNCIOS_ADSENSE + ANUNCIOS_ADSENSE_SLOT) o los propios del gestor.
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-const CLAVE = String(process.env.STRIPE_SECRET_KEY ?? '').trim();
-const PRECIO = String(process.env.STRIPE_PRICE_ID ?? '').trim();
-const SECRETO_WEBHOOK = String(process.env.STRIPE_WEBHOOK_SECRET ?? '').trim();
-const API = (process.env.STRIPE_API ?? 'https://api.stripe.com').replace(/\/$/, ''); // para pruebas
-const MODO = /^sk_live_|^rk_live_/.test(CLAVE) ? 'live' : 'prueba';
-export const activo = Boolean(CLAVE && PRECIO);
+const ID = String(process.env.PATREON_CLIENT_ID ?? '').trim();
+const SECRETO = String(process.env.PATREON_CLIENT_SECRET ?? '').trim();
+const SECRETO_WEBHOOK = String(process.env.PATREON_WEBHOOK_SECRET ?? '').trim();
+const PAGINA = String(process.env.PATREON_URL ?? 'https://www.patreon.com/morvehtv').trim().replace(/[?#].*$/, '');
+const VANIDAD = (PAGINA.match(/patreon\.com\/(?:c\/|cw\/)?([\w.-]+)/i)?.[1] ?? '').toLowerCase();
+const NIVEL = String(process.env.PATREON_TIER_ID ?? '').trim();
+const PRECIO = String(process.env.PATREON_PRECIO ?? '').trim() || null;
+const WEB = (process.env.PATREON_WEB ?? 'https://www.patreon.com').replace(/\/$/, ''); // para pruebas
+const API = (process.env.PATREON_API ?? 'https://www.patreon.com').replace(/\/$/, ''); // para pruebas
+export const activo = Boolean(ID && SECRETO);
 // Qué falta, con el nombre exacto de cada variable (sin enseñar nunca sus valores). También avisa
 // de nombres parecidos mal escritos (minúsculas, espacios…), que Render guarda tal cual.
-const faltan = [['STRIPE_SECRET_KEY', CLAVE], ['STRIPE_PRICE_ID', PRECIO], ['STRIPE_WEBHOOK_SECRET', SECRETO_WEBHOOK]].filter(([, v]) => !v).map(([n]) => n);
-const parecidas = Object.keys(process.env).filter((k) => /stripe/i.test(k) && !/^STRIPE_(SECRET_KEY|PRICE_ID|WEBHOOK_SECRET|API)$/.test(k));
-const claveRara = CLAVE && !/^(sk|rk)_(live|test)_/.test(CLAVE) ? ' · STRIPE_SECRET_KEY no parece una clave secreta (sk_live_…)' : '';
-const precioRaro = PRECIO && !/^price_/.test(PRECIO) ? ' · STRIPE_PRICE_ID tiene que empezar por price_' : '';
-export const estado = (faltan.length ? `faltan ${faltan.join(', ')}` : `ok (${MODO})`) + claveRara + precioRaro
+const faltan = [['PATREON_CLIENT_ID', ID], ['PATREON_CLIENT_SECRET', SECRETO], ['PATREON_WEBHOOK_SECRET', SECRETO_WEBHOOK]].filter(([, v]) => !v).map(([n]) => n);
+const parecidas = Object.keys(process.env).filter((k) => /patreon/i.test(k) && !/^PATREON_(CLIENT_ID|CLIENT_SECRET|WEBHOOK_SECRET|URL|TIER_ID|PRECIO|API|WEB)$/.test(k));
+export const estado = (faltan.length ? `faltan ${faltan.join(', ')}` : `ok (patreon.com/${VANIDAD})`)
   + (parecidas.length ? ` · nombres mal escritos: ${parecidas.map((k) => JSON.stringify(k)).join(', ')}` : '');
 
 let p; // perfiles.js
@@ -35,71 +39,62 @@ let firmar = async () => null; // enlaces firmados de e2 (vídeos de anuncios)
 export function iniciar(opciones) { ({ perfiles: p } = opciones); firmar = opciones.firmar ?? firmar; }
 
 const error = (status, message) => Object.assign(new Error(message), { status });
+export const precioTexto = async () => PRECIO;
 
-// ---------- API de Stripe (formulario con claves anidadas: a[b][0]=c) ----------
-function formulario(datos, prefijo = '', partes = []) {
-  for (const [k, v] of Object.entries(datos)) {
-    if (v == null) continue;
-    const clave = prefijo ? `${prefijo}[${k}]` : k;
-    if (typeof v === 'object') formulario(v, clave, partes);
-    else partes.push(`${encodeURIComponent(clave)}=${encodeURIComponent(v)}`);
-  }
-  return partes.join('&');
-}
-async function stripe(metodo, ruta, datos) {
-  const r = await fetch(`${API}/v1${ruta}`, {
-    method: metodo, signal: AbortSignal.timeout(20000),
-    headers: { authorization: `Bearer ${CLAVE}`, 'content-type': 'application/x-www-form-urlencoded' },
-    body: datos ? formulario(datos) : undefined,
-  });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw error(502, `Stripe: ${d.error?.message ?? r.status}`);
-  return d;
-}
-
-// Precio para enseñar («3,99 €/mes»), leído de Stripe una vez por hora
-let precio = { texto: null, hasta: 0 };
-async function textoPrecio() {
-  if (!activo) return null;
-  if (precio.hasta > Date.now()) return precio.texto;
-  try {
-    const d = await stripe('GET', `/prices/${encodeURIComponent(PRECIO)}`);
-    const moneda = new Intl.NumberFormat('es-ES', { style: 'currency', currency: (d.currency || 'eur').toUpperCase() }).format((d.unit_amount ?? 0) / 100);
-    const u = d.recurring?.interval;
-    const cada = u === 'year' ? 'año' : u === 'week' ? 'semana' : u === 'day' ? 'día' : 'mes';
-    precio = { texto: `${moneda}/${cada}`, hasta: Date.now() + 3600000 };
-  } catch (e) {
-    console.error(`Pagos: no se pudo leer el precio (${e.message})`);
-    precio.hasta = Date.now() + 300000;
-  }
-  return precio.texto;
-}
-export const precioTexto = () => textoPrecio();
-
-// Dirección pública de MorvehTV (para volver desde Stripe)
+// Dirección pública de MorvehTV (para volver desde Patreon)
 function base(req) {
   if (process.env.VISOR_URL) return process.env.VISOR_URL.replace(/\/$/, '');
   const proto = String(req.headers['x-forwarded-proto'] ?? '').split(',')[0] || (req.socket.encrypted ? 'https' : 'http');
   return `${proto}://${req.headers.host}`;
 }
+const vuelta = (req) => `${base(req)}/api/pago/patreon/vuelta`;
 
-// Lo que se guarda en la cuenta a partir de una suscripción de Stripe
-function datosSuscripcion(s) {
-  const fin = s.current_period_end ?? s.items?.data?.[0]?.current_period_end ?? null;
-  return { proveedor: 'stripe', suscripcion: s.id, cliente: s.customer, estado: s.status, cancelado: Boolean(s.cancel_at_period_end) || s.status === 'canceled',
-    ...(fin ? { hasta: fin * 1000 } : {}) };
+// ¿Premium? Miembro activo del nivel, dentro del periodo pagado (con 3 días de margen)
+export function esPremium(plan) {
+  if (!plan || plan.proveedor !== 'patreon') return false;
+  return plan.estado === 'active_patron' && (!plan.hasta || plan.hasta > Date.now() - 3 * 864e5);
 }
 
-// ¿Premium? Suscripción al día (o en su primer cobro reintentándose) dentro del periodo pagado.
-// (Las de PayPal de antes del cambio siguen valiendo hasta que acabe su mes.)
-export function esPremium(plan) {
-  if (!plan) return false;
-  if (plan.proveedor === 'stripe') {
-    if (['active', 'trialing', 'past_due'].includes(plan.estado)) return !plan.hasta || plan.hasta > Date.now() - 3 * 864e5;
-    return false;
-  }
-  if (plan.proveedor === 'paypal') return ['ACTIVE', 'CANCELLED'].includes(plan.estado) && Boolean(plan.hasta && plan.hasta > Date.now());
-  return false;
+// ---------- Conectar la cuenta de Patreon (OAuth) ----------
+// «state» firmado con el secreto: dice qué cuenta de MorvehTV pidió conectar (y caduca en 30 min),
+// así la vuelta funciona aunque Patreon se abra en otro navegador
+const firma = (t) => createHmac('sha256', SECRETO).update(`patreon:${t}`).digest('base64url');
+function estadoDe(cuenta) {
+  const t = Buffer.from(JSON.stringify({ c: cuenta.id, t: Date.now() })).toString('base64url');
+  return `${t}.${firma(t)}`;
+}
+function leerEstado(s) {
+  const [t, f] = String(s ?? '').split('.');
+  if (!t || !f) return null;
+  const esperada = firma(t);
+  if (f.length !== esperada.length || !timingSafeEqual(Buffer.from(f), Buffer.from(esperada))) return null;
+  const d = JSON.parse(Buffer.from(t, 'base64url').toString());
+  return Date.now() - d.t < 30 * 60000 ? d.c : null;
+}
+
+// Lo que dice Patreon de esa persona: su membresía en MorvehTV
+async function membresia(token) {
+  const q = 'include=memberships.campaign,memberships.currently_entitled_tiers'
+    + '&fields%5Bmember%5D=patron_status,next_charge_date,last_charge_status,last_charge_date'
+    + '&fields%5Bcampaign%5D=vanity,url&fields%5Buser%5D=full_name';
+  const r = await fetch(`${API}/api/oauth2/v2/identity?${q}`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20000) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw error(502, `Patreon: ${d.errors?.[0]?.detail ?? r.status}`);
+  const incluidos = d.included ?? [];
+  const campanas = incluidos.filter((x) => x.type === 'campaign');
+  const nuestra = campanas.find((c) => String(c.attributes?.vanity ?? '').toLowerCase() === VANIDAD
+    || String(c.attributes?.url ?? '').toLowerCase().replace(/[?#].*$/, '').endsWith(`/${VANIDAD}`));
+  const miembro = nuestra && incluidos.find((x) => x.type === 'member' && x.relationships?.campaign?.data?.id === nuestra.id);
+  return { usuario: d.data?.id, miembro, campana: nuestra?.id };
+}
+
+function datosMiembro(usuario, m) {
+  const niveles = (m?.relationships?.currently_entitled_tiers?.data ?? []).map((x) => x.id);
+  const nivelOk = !NIVEL || niveles.includes(NIVEL);
+  const estadoP = m?.attributes?.patron_status ?? 'former_patron';
+  const siguiente = m?.attributes?.next_charge_date ? Date.parse(m.attributes.next_charge_date) : null;
+  return { proveedor: 'patreon', suscripcion: `patreon:${usuario}`, miembro: m?.id ?? null,
+    estado: estadoP === 'active_patron' && !nivelOk ? 'sin_nivel' : estadoP, cancelado: false, ...(siguiente ? { hasta: siguiente } : {}) };
 }
 
 // ---------- Anuncios ----------
@@ -120,14 +115,15 @@ async function anuncios() {
 }
 
 // ---------- Rutas (con sesión) ----------
-export const RUTAS = ['/api/pago/info', '/api/pago/suscribir', '/api/pago/confirmar', '/api/pago/cancelar', '/api/pago/portal'];
+export const RUTAS = ['/api/pago/info', '/api/pago/patreon/conectar', '/api/pago/patreon/desconectar'];
 export async function atender(ruta, req, res, json, cuenta) {
   if (ruta === '/api/pago/info') {
     const plan = await p.planDe(cuenta);
+    const pl = cuenta.plan?.proveedor === 'patreon' ? cuenta.plan : null;
     return json(res, 200, {
-      activo, proveedor: 'stripe', plan: plan.tipo, hasta: plan.hasta ?? null, cancelado: plan.cancelado ?? false, admin: !!plan.admin,
-      portal: Boolean(cuenta.plan?.proveedor === 'stripe' && cuenta.plan?.cliente),
-      precio: await textoPrecio(),
+      activo, proveedor: 'patreon', pagina: PAGINA, plan: plan.tipo, hasta: plan.hasta ?? null, admin: !!plan.admin,
+      conectado: Boolean(pl), estadoPatreon: pl?.estado ?? null,
+      precio: PRECIO,
       // Premium no ve anuncios: ni se le manda la configuración
       anuncios: plan.tipo === 'premium' ? null : await anuncios(),
     });
@@ -138,98 +134,85 @@ export async function atender(ruta, req, res, json, cuenta) {
   const datos = cuerpo ? JSON.parse(cuerpo) : {};
   if (!activo) throw error(503, 'Los pagos no están activados todavía');
 
-  // Hacerse Premium: la página de pago de Stripe (tarjeta, Apple Pay, Google Pay…)
-  if (ruta === '/api/pago/suscribir') {
-    if ((await p.planDe(cuenta)).tipo === 'premium') throw error(409, 'Ya tienes Premium');
+  // Conectar: la página de Patreon donde la persona autoriza a MorvehTV a ver su membresía
+  if (ruta === '/api/pago/patreon/conectar') {
+    if ((await p.planDe(cuenta)).tipo === 'premium' && cuenta.plan?.proveedor === 'patreon') throw error(409, 'Ya tienes Premium con Patreon');
     if (datos.acepta !== true) throw error(400, 'Tienes que aceptar las condiciones y el inicio inmediato del servicio');
     await p.anotarAceptacion(cuenta.id, 'premium');
-    const b = base(req);
-    const s = await stripe('POST', '/checkout/sessions', {
-      mode: 'subscription',
-      line_items: [{ price: PRECIO, quantity: 1 }],
-      client_reference_id: cuenta.id,
-      ...(cuenta.plan?.proveedor === 'stripe' && cuenta.plan?.cliente ? { customer: cuenta.plan.cliente } : {}),
-      subscription_data: { metadata: { cuenta: cuenta.id, usuario: cuenta.usuario } },
-      metadata: { cuenta: cuenta.id },
-      locale: 'es',
-      allow_promotion_codes: 'true',
-      // {CHECKOUT_SESSION_ID} lo rellena Stripe: al volver se confirma el pago con él
-      success_url: `${b}/?pago=ok&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${b}/?pago=cancelado`,
-    });
-    console.log(`Pagos: ${cuenta.usuario} abre el pago de Premium`);
-    return json(res, 200, { url: s.url });
+    const u = new URL(`${WEB}/oauth2/authorize`);
+    u.searchParams.set('response_type', 'code');
+    u.searchParams.set('client_id', ID);
+    u.searchParams.set('redirect_uri', vuelta(req));
+    u.searchParams.set('scope', 'identity identity.memberships');
+    u.searchParams.set('state', estadoDe(cuenta));
+    return json(res, 200, { url: u.href });
   }
 
-  // Vuelta de Stripe (?pago=ok&session_id=cs_…): se comprueba con Stripe ahora mismo
-  if (ruta === '/api/pago/confirmar') {
-    const id = String(datos.sesion ?? '');
-    if (!/^cs_[A-Za-z0-9_]{8,200}$/.test(id)) throw error(400, 'Pago no válido');
-    const s = await stripe('GET', `/checkout/sessions/${encodeURIComponent(id)}?expand[]=subscription`);
-    if (s.client_reference_id !== cuenta.id) throw error(403, 'Ese pago no es de esta cuenta');
-    if (s.status !== 'complete' || !s.subscription) throw error(409, 'El pago todavía no se ha completado');
-    const sub = typeof s.subscription === 'string' ? await stripe('GET', `/subscriptions/${encodeURIComponent(s.subscription)}`) : s.subscription;
-    const plan = await p.ponerPlan({ id: cuenta.id }, datosSuscripcion(sub));
-    return json(res, 200, { plan: esPremium(plan) ? 'premium' : 'basico' });
-  }
-
-  // Cancelar: deja de cobrarse; Premium sigue hasta el final del mes ya pagado
-  if (ruta === '/api/pago/cancelar') {
-    const pl = cuenta.plan;
-    if (pl?.proveedor !== 'stripe' || !pl.suscripcion || !esPremium(pl) || pl.cancelado) throw error(404, 'No tienes ninguna suscripción activa');
-    const s = await stripe('POST', `/subscriptions/${encodeURIComponent(pl.suscripcion)}`, { cancel_at_period_end: 'true' });
-    const plan = await p.ponerPlan({ id: cuenta.id }, datosSuscripcion(s));
-    console.log(`Pagos: ${cuenta.usuario} cancela Premium`);
-    return json(res, 200, { plan: esPremium(plan) ? 'premium' : 'basico', hasta: plan.hasta ?? null });
-  }
-
-  // Gestionar el pago (cambiar la tarjeta, ver facturas): el portal de clientes de Stripe
-  if (ruta === '/api/pago/portal') {
-    if (cuenta.plan?.proveedor !== 'stripe' || !cuenta.plan?.cliente) throw error(404, 'No tienes ninguna suscripción');
-    const s = await stripe('POST', '/billing_portal/sessions', { customer: cuenta.plan.cliente, return_url: `${base(req)}/`, locale: 'es' });
-    return json(res, 200, { url: s.url });
+  // Desconectar Patreon de esta cuenta (la membresía en Patreon se gestiona allí)
+  if (ruta === '/api/pago/patreon/desconectar') {
+    if (cuenta.plan?.proveedor !== 'patreon') throw error(404, 'No tienes Patreon conectado');
+    await p.ponerPlan({ id: cuenta.id }, { proveedor: null, suscripcion: null, miembro: null, estado: null, hasta: null });
+    return json(res, 200, { plan: (await p.planDe({ ...cuenta, plan: null })).tipo });
   }
   throw error(404, 'No existe');
 }
 
-// Al borrar una cuenta se cancela su suscripción al momento (para no seguir cobrando)
-export async function cancelarDe(cuenta) {
-  if (!activo || cuenta?.plan?.proveedor !== 'stripe' || !cuenta.plan.suscripcion || !esPremium(cuenta.plan)) return;
-  try { await stripe('DELETE', `/subscriptions/${encodeURIComponent(cuenta.plan.suscripcion)}`); } catch (e) {
-    console.error(`Pagos: no se pudo cancelar la suscripción de ${cuenta.usuario} (${e.message})`);
+// Vuelta de Patreon (sin sesión: la cuenta va en el «state» firmado). Termina en la portada con
+// ?pago=ok (Premium), ?pago=sin-suscripcion (no es miembro activo) o ?pago=error.
+export async function alVolver(req, res, url) {
+  const ir = (q) => { res.writeHead(302, { location: `/?pago=${q}`, 'cache-control': 'no-store' }); res.end(); };
+  if (!activo) return ir('error');
+  const cuentaId = leerEstado(url.searchParams.get('state'));
+  const code = url.searchParams.get('code');
+  if (!cuentaId || !code) return ir(url.searchParams.get('error') ? 'cancelado' : 'error');
+  try {
+    const r = await fetch(`${API}/api/oauth2/token`, {
+      method: 'POST', signal: AbortSignal.timeout(20000),
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ code, grant_type: 'authorization_code', client_id: ID, client_secret: SECRETO, redirect_uri: vuelta(req) }).toString(),
+    });
+    const t = await r.json().catch(() => ({}));
+    if (!r.ok || !t.access_token) throw error(502, `Patreon: ${t.error_description ?? t.error ?? r.status}`);
+    const m = await membresia(t.access_token);
+    if (!m.usuario) throw error(502, 'Patreon no ha dicho quién eres');
+    // Una cuenta de Patreon solo vale para una cuenta de MorvehTV
+    const plan = await p.ponerPlan({ id: cuentaId }, datosMiembro(m.usuario, m.miembro), { unicaSuscripcion: true });
+    console.log(`Pagos: cuenta ${cuentaId} conecta Patreon (${m.miembro?.attributes?.patron_status ?? 'sin membresía'})`);
+    return ir(esPremium(plan) ? 'ok' : 'sin-suscripcion');
+  } catch (e) {
+    console.error(`Pagos: vuelta de Patreon: ${e.message}`);
+    return ir(e.status === 409 ? 'otra-cuenta' : 'error');
   }
 }
 
-// ---------- Webhook: Stripe avisa de cada cobro, renovación o cancelación ----------
+// Al borrar una cuenta no se puede cancelar desde aquí: la membresía es de Patreon (se avisa)
+export async function cancelarDe() {}
+
+// ---------- Webhook: Patreon avisa de cada alta, cobro, impago o baja ----------
 function firmaValida(cuerpo, cabecera) {
-  if (!SECRETO_WEBHOOK) return false;
-  const partes = String(cabecera ?? '').split(',').map((x) => x.trim());
-  const t = Number((partes.find((x) => x.startsWith('t=')) ?? '').slice(2));
-  if (!t || Math.abs(Date.now() / 1000 - t) > 600) return false;
-  const esperada = createHmac('sha256', SECRETO_WEBHOOK).update(`${t}.${cuerpo}`).digest('hex');
-  return partes.filter((x) => x.startsWith('v1=')).map((x) => x.slice(3))
-    .some((v) => v.length === esperada.length && timingSafeEqual(Buffer.from(v), Buffer.from(esperada)));
+  if (!SECRETO_WEBHOOK || !cabecera) return false;
+  const esperada = createHmac('md5', SECRETO_WEBHOOK).update(cuerpo).digest('hex');
+  const v = String(cabecera).trim().toLowerCase();
+  return v.length === esperada.length && timingSafeEqual(Buffer.from(v), Buffer.from(esperada));
 }
 
 export async function webhook(req, res, json) {
   let cuerpo = '';
   for await (const trozo of req) { cuerpo += trozo; if (cuerpo.length > 1e6) throw error(413, 'Demasiado grande'); }
-  if (!activo || !firmaValida(cuerpo, req.headers['stripe-signature'])) return json(res, 400, { error: 'Firma no válida' });
+  if (!activo || !firmaValida(cuerpo, req.headers['x-patreon-signature'])) return json(res, 400, { error: 'Firma no válida' });
+  const evento = String(req.headers['x-patreon-event'] ?? '');
   const ev = JSON.parse(cuerpo);
-  const o = ev.data?.object ?? {};
+  const m = ev.data ?? {};
+  const usuario = m.relationships?.user?.data?.id;
   try {
-    let id = null; let cuenta = null;
-    if (ev.type === 'checkout.session.completed' && o.mode === 'subscription') { id = o.subscription; cuenta = o.client_reference_id; }
-    else if (ev.type?.startsWith('customer.subscription.')) id = o.id;
-    else if (ev.type === 'invoice.paid' || ev.type === 'invoice.payment_failed') id = o.subscription ?? o.parent?.subscription_details?.subscription;
-    if (id) {
-      // Siempre el estado actual según Stripe (los avisos pueden llegar desordenados)
-      const s = await stripe('GET', `/subscriptions/${encodeURIComponent(id)}`);
-      await p.ponerPlan({ id: cuenta || s.metadata?.cuenta, suscripcion: s.id }, datosSuscripcion(s));
+    if (usuario && /^members:/.test(evento)) {
+      const datos = /:delete$/.test(evento) ? { ...datosMiembro(usuario, m), estado: 'former_patron' } : datosMiembro(usuario, m);
+      // Solo se actualiza si esa cuenta de Patreon está conectada a alguna cuenta de MorvehTV
+      await p.ponerPlan({ suscripcion: `patreon:${usuario}` }, datos, { soloSiExiste: true });
     }
   } catch (e) {
-    console.error(`Pagos: webhook ${ev.type}: ${e.message}`);
-    return json(res, 500, { error: 'No se pudo guardar' }); // Stripe lo reintenta
+    console.error(`Pagos: webhook ${evento}: ${e.message}`);
+    return json(res, 500, { error: 'No se pudo guardar' }); // Patreon lo reintenta
   }
   return json(res, 200, { ok: true });
 }

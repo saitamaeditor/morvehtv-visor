@@ -165,6 +165,14 @@ public class MainActivity extends Activity {
         return u.getHost() != null && u.getHost().equalsIgnoreCase(casa.getHost());
     }
 
+    // Patreon (Premium) y los inicios de sesión que ofrece: al conectar la cuenta hay varias
+    // redirecciones automáticas entre sus páginas que tienen que poder seguir dentro de la app
+    private static boolean esDePago(Uri u) {
+        String h = u.getHost() == null ? "" : u.getHost().toLowerCase();
+        return h.equals("patreon.com") || h.endsWith(".patreon.com")
+            || h.equals("accounts.google.com") || h.equals("appleid.apple.com");
+    }
+
     // Quita la pantalla de «Conectando…». Se hace en cuanto la página empieza a verse (o la
     // intro avisa de que arranca), no al terminar de cargar todo: si no, la intro empezaba
     // tapada y se veía a medias
@@ -214,7 +222,7 @@ public class MainActivity extends Activity {
             if (!"http".equals(esquema) && !"https".equals(esquema)) return true; // intent:, market:…
             // MorvehTV y lo que abras tú con un toque (tráiler, TMDB) se quedan dentro de la app;
             // una redirección automática a otro sitio, no
-            return !(esNuestra(u) || pedido.hasGesture());
+            return !(esNuestra(u) || esDePago(u) || pedido.hasGesture());
         }
     }
 

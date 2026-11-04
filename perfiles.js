@@ -111,7 +111,7 @@ export const esAdmin = async (c) => Boolean(c && [...((await leer()).admins || [
 
 // ---------- Plan de cada cuenta ----------
 // «premium» si tiene la suscripción al día (o es administrador); si no, «basico» (con anuncios)
-// Premium de por vida: SOLO los administradores. Los demás, solo mientras su suscripción de Stripe
+// Premium de por vida: SOLO los administradores. Los demás, solo mientras sean miembros de pago en Patreon
 // esté pagada (no hay otra forma de tener Premium gratis).
 export async function planDe(c) {
   if (!c) return { tipo: 'basico' };
@@ -136,14 +136,19 @@ export async function resumenPlanes() {
   const premium = cuentas.filter((c) => !admins.has(c.usuario) && pagos.esPremium(c.plan)).length;
   return { cuentas: cuentas.length, admins: deAdmin, premium, basico: cuentas.length - premium - deAdmin };
 }
-// Lo apuntan el pago (al volver de Stripe) y el webhook: por id de cuenta o por su suscripción.
+// Lo apuntan la conexión con Patreon y su webhook: por id de cuenta o por su suscripción.
 // Avisa al momento a la web y la app abiertas de esa cuenta (alCambiarPlan, ver server.js).
 let avisoPlan = () => {};
 export const alCambiarPlan = (fn) => { avisoPlan = fn; };
-export async function ponerPlan(quien, datos) {
+// opciones.unicaSuscripcion: si esa suscripción (cuenta de Patreon) ya está en otra cuenta, error 409
+// opciones.soloSiExiste: si no hay ninguna cuenta con ella, no pasa nada (sin aviso en el registro)
+export async function ponerPlan(quien, datos, opciones = {}) {
   const r = await cambiar((d) => {
-    const c = (d.cuentas || []).find((x) => (quien.id && x.id === quien.id) || (quien.suscripcion && x.plan?.suscripcion === quien.suscripcion));
-    if (!c) { console.error(`Pagos: no hay ninguna cuenta para ${quien.id || quien.suscripcion}`); return null; }
+    const c = (d.cuentas || []).find((x) => (quien.id && x.id === quien.id) || (!quien.id && quien.suscripcion && x.plan?.suscripcion === quien.suscripcion));
+    if (!c) { if (!opciones.soloSiExiste) console.error(`Pagos: no hay ninguna cuenta para ${quien.id || quien.suscripcion}`); return null; }
+    if (opciones.unicaSuscripcion && datos.suscripcion && (d.cuentas || []).some((x) => x.id !== c.id && x.plan?.suscripcion === datos.suscripcion)) {
+      throw error(409, 'Esa cuenta de Patreon ya está conectada a otra cuenta de MorvehTV');
+    }
     c.plan = { ...(c.plan || {}), ...datos, cambiado: Date.now() };
     console.log(`Pagos: ${c.usuario} → ${c.plan.estado}${c.plan.cancelado ? ' (cancelada: sigue hasta fin de mes)' : ''}`);
     return { id: c.id, plan: c.plan };

@@ -712,8 +712,11 @@ http
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado,
         legal: faltanLegal().length ? `faltan ${faltanLegal().join(', ')}` : 'ok' });
-      // Avisos de Stripe (cobros, renovaciones, cancelaciones): sin sesión, con su firma
+      // Avisos de Patreon (altas, cobros, bajas): sin sesión, con su firma
       if (url.pathname === '/api/pago/webhook' && req.method === 'POST') return await pagos.webhook(req, res, json);
+      // Vuelta de Patreon al conectar la cuenta: sin sesión (la cuenta va en el «state» firmado),
+      // así funciona aunque Patreon se haya abierto en otro navegador
+      if (url.pathname === '/api/pago/patreon/vuelta') return await pagos.alVolver(req, res, url);
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
