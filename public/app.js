@@ -114,6 +114,8 @@ function pintarMigas() {
   // Que se vea siempre dónde estás (el final de la ruta)
   requestAnimationFrame(() => { m.scrollLeft = m.scrollWidth; });
 }
+// La cabecera, transparente sobre el destacado de la portada, se vuelve sólida al bajar
+window.addEventListener('scroll', () => document.documentElement.classList.toggle('bajado', window.scrollY > 40), { passive: true });
 // (también al girar el móvil o cambiar el tamaño de la ventana)
 window.addEventListener('resize', () => { const m = $('#migas'); if (m && !m.hidden) m.scrollLeft = m.scrollWidth; });
 
@@ -162,6 +164,18 @@ function pintar() {
   const items = $('#items');
   items.className = 'rejilla';
   items.innerHTML = '';
+  document.documentElement.classList.toggle('en-portada', !estado.prefijo);
+  const raiz = estado.prefijo && estado.prefijo.split('/').filter(Boolean).length === 1;
+  // Cabecera de la biblioteca al entrar en una categoría (como en un servidor multimedia)
+  if (raiz) {
+    const cat = categoriasDe([estado.prefijo])[0].cat;
+    const cab = el('div', 'biblioteca');
+    cab.style.setProperty('--c', cat.color);
+    const n = carpetas.length + archivos.length;
+    cab.append(el('span', 'biblioteca-icono', cat.icono), el('h1', null, cat.nombre),
+      el('span', 'biblioteca-cuenta', `${n}${estado.token ? '+' : ''} ${n === 1 ? 'título' : 'títulos'}`));
+    items.append(cab);
+  }
 
   if (!estado.prefijo) {
     pintarInicio(carpetas, archivos);
@@ -203,18 +217,97 @@ function fila(titulo, irAlPulsar, clase = '') {
   const s = el('section', 'fila');
   const h = el('h2', 'fila-titulo');
   if (irAlPulsar) {
-    const a = el('a', null, `${titulo} ›`); a.href = '#'; a.onclick = (e) => { e.preventDefault(); irAlPulsar(); };
+    const a = el('a', null, titulo); a.href = '#'; a.onclick = (e) => { e.preventDefault(); irAlPulsar(); };
+    const todo = el('span', 'ver-todo', 'Ver todo ›');
+    a.append(todo);
     h.append(a);
   } else h.textContent = titulo;
   const c = el('div', `carrusel ${clase}`.trim());
-  s.append(h, c);
+  // Flechas ‹ › a los lados (con ratón): pasan una pantalla de la fila
+  const caja = el('div', 'carrusel-caja');
+  const ant = el('button', 'flecha-fila izq', '‹'); ant.setAttribute('aria-label', 'Anteriores'); ant.tabIndex = -1;
+  const sig = el('button', 'flecha-fila der', '›'); sig.setAttribute('aria-label', 'Siguientes'); sig.tabIndex = -1;
+  const mover = (dir) => c.scrollBy({ left: dir * c.clientWidth * 0.85, behavior: 'smooth' });
+  ant.onclick = () => mover(-1); sig.onclick = () => mover(1);
+  const pintarFlechas = () => {
+    ant.classList.toggle('oculta', c.scrollLeft < 8);
+    sig.classList.toggle('oculta', c.scrollLeft + c.clientWidth > c.scrollWidth - 8);
+  };
+  c.addEventListener('scroll', pintarFlechas, { passive: true });
+  setTimeout(pintarFlechas, 400); setTimeout(pintarFlechas, 2500);
+  caja.append(ant, c, sig);
+  s.append(h, caja);
   return { s, c };
+}
+
+// ---------- Destacado de la portada ----------
+// Un cartel grande con el fondo de lo último que has subido (con ficha de TMDB): título, datos,
+// sinopsis y «▶ Reproducir» / «ℹ Más información». Cambia solo cada 9 s (se para mientras el
+// ratón o el mando está encima) y tiene puntitos para elegir.
+let rotarDestacado = null;
+async function pintarDestacado(caja, d, carpetas) {
+  clearInterval(rotarDestacado);
+  // Los 2 más nuevos de cada categoría, del más nuevo al más antiguo
+  const cand = [];
+  for (const { suyas } of categoriasDe(carpetas)) {
+    const e = d.carpetas.find((x) => x.carpeta === suyas[0]);
+    if (e) cand.push(...e.titulos.slice(0, 2));
+  }
+  cand.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  const fichas = await Promise.all(cand.slice(0, 12).map(async (x) => ({ x, m: await pedirMeta(x.tipo === 'carpeta' ? 'carpeta' : 'archivo', x.key) })));
+  const con = fichas.filter((f) => f.m && f.m.encontrado && f.m.fondo).slice(0, 6);
+  if (!con.length || !caja.isConnected) return;
+  caja.innerHTML = '';
+  const fondos = el('div', 'destacado-fondos');
+  const texto = el('div', 'destacado-texto');
+  const puntos = el('div', 'destacado-puntos');
+  caja.append(fondos, texto, puntos);
+  let i = 0;
+  const imgs = con.map((f) => { const im = el('div', 'destacado-img'); im.style.backgroundImage = `url("${f.m.fondo.replace(/\/t\/p\/w\d+\//, '/t/p/w1280/')}")`; fondos.append(im); return im; });
+  const pts = con.map((f, n) => { const p = el('button', 'punto'); p.setAttribute('aria-label', `Destacado ${n + 1}`); p.tabIndex = -1; p.onclick = () => ver(n, true); puntos.append(p); return p; });
+  function ver(n, aMano) {
+    i = (n + con.length) % con.length;
+    imgs.forEach((im, k) => im.classList.toggle('visible', k === i));
+    pts.forEach((p, k) => p.classList.toggle('activo', k === i));
+    const { x, m } = con[i];
+    const serie = x.tipo === 'carpeta';
+    texto.innerHTML = '';
+    texto.append(el('span', 'destacado-etiqueta', serie ? 'SERIE · NUEVO EN MORVEHTV' : 'NUEVO EN MORVEHTV'), el('h1', null, m.titulo));
+    const datos = [m.valoracion && `★ ${Number(m.valoracion).toFixed(1)}`, m.anio,
+      serie ? (m.temporadas && `${m.temporadas} temporada${m.temporadas > 1 ? 's' : ''}`) : m.duracion && `${Math.floor(m.duracion / 60) ? `${Math.floor(m.duracion / 60)} h ` : ''}${m.duracion % 60} min`,
+      (m.generos || []).slice(0, 3).join(' · ')].filter(Boolean);
+    texto.append(el('div', 'destacado-datos', datos.join('   ·   ')));
+    if (m.sinopsis) texto.append(el('p', 'destacado-sinopsis', m.sinopsis));
+    const bs = el('div', 'destacado-botones');
+    const ver1 = el('button', 'boton reproducir', '▶ Reproducir');
+    ver1.onclick = () => (serie ? irA(x.key) : abrir(0, [x]));
+    const info = el('button', 'boton info', 'ℹ Más información');
+    info.onclick = () => (serie ? irA(x.key) : abrir(0, [x], { ficha: true }));
+    bs.append(ver1, info);
+    texto.append(bs);
+    if (aMano) reiniciar();
+  }
+  function reiniciar() {
+    clearInterval(rotarDestacado);
+    rotarDestacado = setInterval(() => {
+      if (!caja.isConnected) return clearInterval(rotarDestacado);
+      if (caja.matches(':hover') || caja.contains(document.activeElement) || actual >= 0) return;
+      ver(i + 1);
+    }, 9000);
+  }
+  ver(0);
+  reiniciar();
+  caja.hidden = false;
 }
 
 let catalogoPedido = null;
 function pintarInicio(carpetas, archivos) {
   const items = $('#items');
   items.className = 'inicio';
+  // Cartel destacado arriba (se rellena cuando llega el catálogo)
+  const destacado = el('section', 'destacado');
+  destacado.hidden = true;
+  items.append(destacado);
   const medios = fila('Mis medios', null, 'medios');
   medios.c.append(...portada(carpetas).children);
   items.append(medios.s);
@@ -249,6 +342,7 @@ function pintarInicio(carpetas, archivos) {
   pedido.then((d) => {
     if (catalogoPedido === pedido) catalogoPedido = null; // la próxima vez, datos frescos
     if (!d || estado.prefijo || !sitio.isConnected) return;
+    pintarDestacado(destacado, d, carpetas).catch(() => {});
     let filasPuestas = 0;
     for (const { cat, suyas } of categoriasDe(carpetas)) {
       const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
@@ -1464,7 +1558,7 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
   || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '#pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 
@@ -1482,7 +1576,8 @@ function moverFoco(dir) {
   const cands = [...document.querySelectorAll(enCuenta ? '#cuenta button, #cuenta input, #cuenta a' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP)].filter(visible);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
-    const primero = enVisor || enCuenta ? cands[0] : (document.querySelector('.cat:not(.vacia), #items .item') || cands[0]);
+    // En la portada, el foco empieza en «▶ Reproducir» del destacado (si lo hay)
+    const primero = enVisor || enCuenta ? cands[0] : (document.querySelector('.destacado:not([hidden]) .boton.reproducir, .cat:not(.vacia), #items .item') || cands[0]);
     if (primero) { primero.focus(); primero.scrollIntoView({ block: 'nearest' }); }
     return;
   }
@@ -1515,7 +1610,7 @@ function moverFoco(dir) {
   if (mejor) {
     mejor.focus();
     // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
-    if (mejor.closest('header')) scrollTo({ top: 0, behavior: 'smooth' });
+    if (mejor.closest('header') || mejor.closest('.destacado')) scrollTo({ top: 0, behavior: 'smooth' });
     else mejor.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   }
 }
