@@ -50,7 +50,7 @@ export function limitar(ip, ruta) {
   if (c.n === max + 1) {
     const lista = (avisos.get(ip) ?? []).filter((t) => ahora - t < 600000);
     lista.push(ahora); avisos.set(ip, lista);
-    if (lista.length >= 5) { bloqueadas.set(ip, ahora + 15 * 60000); console.warn(`Defensa: ${ip} bloqueada 15 minutos (demasiadas peticiones)`); }
+    if (lista.length >= 5) { bloqueadas.set(ip, ahora + 15 * 60000); console.warn('Defensa: una conexión bloqueada 15 minutos (demasiadas peticiones)'); }
   }
   throw error(429, 'Demasiadas peticiones. Espera un momento.', { espera: Math.ceil((c.desde + seg * 1000 - ahora) / 1000) });
 }

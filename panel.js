@@ -28,6 +28,13 @@ export function iniciar(opciones) {
   alMover = opciones.alMover ?? alMover;
   // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
   if (nube) { setTimeout(purgar, 120000).unref(); setInterval(purgar, 6 * 3600000).unref(); }
+  // Borra las IPs que guardó el registro antes de dejar de apuntarlas
+  setTimeout(async () => {
+    try {
+      const lista = await p.leerAjuste('registro');
+      if (lista?.some((x) => 'ip' in x)) await p.guardarAjuste('registro', lista.map(sinIp));
+    } catch { /* se reintenta en el próximo arranque */ }
+  }, 30000).unref();
 }
 
 export const esRuta = (ruta) => ruta.startsWith('/api/panel/');
@@ -139,7 +146,7 @@ async function aPapelera(objetos, c, ip, motivo, claves) {
   const lote = `${new Date().toISOString().replace(/[:.]/g, '-')}_${c.usuario}`;
   const tamano = objetos.reduce((t, o) => t + (o.Size || 0), 0);
   await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `${PAPELERA}${lote}/${MANIFIESTO}`, ContentType: 'application/json',
-    Body: JSON.stringify({ lote, usuario: c.usuario, ip, fecha: new Date().toISOString(), motivo, claves, objetos: objetos.length, tamano }) }));
+    Body: JSON.stringify({ lote, usuario: c.usuario, fecha: new Date().toISOString(), motivo, claves, objetos: objetos.length, tamano }) }));
   const t = nuevoTrabajo('papelera', objetos.length);
   t.lote = lote;
   (async () => {
@@ -186,10 +193,13 @@ async function purgar() {
 }
 
 // ---------- Registro: quién hizo qué (en el archivo de cuentas, las últimas 500 acciones) ----------
-async function registrar(c, ip, accion, claves = [], objetos) {
+// Sin IPs ni otros datos personales: solo el usuario, la fecha y la acción. (Las entradas
+// antiguas que llevaban IP la pierden la próxima vez que se escribe.)
+const sinIp = ({ ip, ...x }) => x;
+async function registrar(c, _ip, accion, claves = [], objetos) {
   try {
-    const lista = (await p.leerAjuste('registro')) ?? [];
-    lista.unshift({ fecha: new Date().toISOString(), usuario: c.usuario, ip, accion, claves: claves.slice(0, 20), total: claves.length, ...(objetos != null && { objetos }) });
+    const lista = ((await p.leerAjuste('registro')) ?? []).map(sinIp);
+    lista.unshift({ fecha: new Date().toISOString(), usuario: c.usuario, accion, claves: claves.slice(0, 20), total: claves.length, ...(objetos != null && { objetos }) });
     await p.guardarAjuste('registro', lista.slice(0, 500));
   } catch (e) { console.error(`Panel: no se pudo apuntar en el registro (${e.message})`); }
 }
@@ -291,7 +301,7 @@ export async function atender(ruta, req, res, json, ip) {
       seVaciaSola: new Date(new Date(l.fecha).getTime() + DIAS_PAPELERA * 864e5).toISOString(),
     })) });
   }
-  if (ruta === '/api/panel/registro') return json(res, 200, (await p.leerAjuste('registro')) ?? []);
+  if (ruta === '/api/panel/registro') return json(res, 200, ((await p.leerAjuste('registro')) ?? []).map(sinIp));
 
   // Elegir el título antes de subirlo: buscar por nombre o IMDb y su ficha con los capítulos
   if (ruta === '/api/panel/titulos') {
