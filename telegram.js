@@ -59,6 +59,10 @@ export async function iniciar(opciones) {
     }
     activo = true;
     estado = datos.chat ? 'ok' : 'falta el grupo';
+    // El bot no tiene más comandos que /anuncio, y solo en el chat privado (en el grupo, ninguno)
+    await llamar('deleteMyCommands', {}).catch(() => {});
+    await llamar('setMyCommands', { commands: [{ command: 'anuncio', description: 'Publicar un aviso en el grupo (solo administradores)' }],
+      scope: { type: 'all_private_chats' } }).catch(() => {});
     console.log(`Telegram: bot @${yo.username}${datos.chat ? `, grupo ${datos.chatNombre ?? datos.chat}` : ' (añádelo a un grupo con temas y escribe algo)'}`);
   } catch (e) {
     estado = `error: ${e.message}`;
@@ -228,6 +232,7 @@ async function escuchar() {
       for (const u of d.result) {
         offset = u.update_id + 1;
         await entrada(u).catch((e) => console.error(`Telegram: bienvenida (${e.message})`));
+        await ordenAnuncio(u).catch((e) => console.error(`Telegram: anuncio (${e.message})`));
       }
     } catch (e) {
       // 409: hay otro servidor escuchando al mismo bot; se vuelve a probar más tarde
@@ -253,6 +258,60 @@ async function entrada(u) {
   if (!gente.length || Date.now() / 1000 - fecha > ENTRADA_VIEJA) return;
   gente.forEach((p) => saludados.set(p.id, ahora));
   await bienvenida(gente);
+}
+
+// ---------- Anuncios de los administradores (/anuncio) ----------
+// Un administrador del grupo escribe al bot en privado «/anuncio texto» (o manda una foto con
+// «/anuncio texto» de pie) y el bot lo publica en el tema «📢 Avisos» del grupo, cerrado para
+// que solo escriban el bot y los administradores. El bot no responde a nada más: ni a otros
+// mensajes, ni a quien no sea administrador.
+const ORDEN = /^\/(anuncio|aviso)(@\w+)?(\s+|$)/i;
+async function esAdminGrupo(usuario) {
+  if (!datos.chat || !usuario) return false;
+  try {
+    const m = await llamar('getChatMember', { chat_id: datos.chat, user_id: usuario });
+    return m.status === 'creator' || m.status === 'administrator';
+  } catch { return false; }
+}
+async function temaAvisos() {
+  if (datos.avisos?.id) return datos.avisos;
+  const t = await llamar('createForumTopic', { chat_id: datos.chat, name: '📢 Avisos', icon_color: 16478047 });
+  datos.avisos = { id: t.message_thread_id };
+  await guardarDatos();
+  await cerrarTema(t.message_thread_id);
+  console.log('Telegram: tema «📢 Avisos» creado');
+  return datos.avisos;
+}
+async function publicarAviso(texto, foto) {
+  const cuerpo = `📢 <b>Aviso de MorvehTV</b>\n\n${html(texto)}`;
+  const base = (id) => ({ chat_id: datos.chat, message_thread_id: id, parse_mode: 'HTML' });
+  const mandar = (id) => (foto ? llamar('sendPhoto', { ...base(id), photo: foto, caption: cuerpo.slice(0, 1024) })
+    : llamar('sendMessage', { ...base(id), text: cuerpo.slice(0, 4096), link_preview_options: { is_disabled: true } }));
+  let tema = await temaAvisos();
+  try { return await mandar(tema.id); } catch (e) {
+    // Si alguien borró el tema, se crea de nuevo
+    if (!/thread|topic/i.test(e.message)) throw e;
+    datos.avisos = null;
+    tema = await temaAvisos();
+    return mandar(tema.id);
+  }
+}
+async function ordenAnuncio(u) {
+  const m = u.message;
+  if (!m || m.chat?.type !== 'private') return; // solo en privado; en el grupo, nada
+  const escrito = m.text ?? m.caption ?? '';
+  if (!ORDEN.test(escrito)) return; // cualquier otra cosa: sin respuesta
+  if (!(await esAdminGrupo(m.from?.id))) return; // quien no administra el grupo: sin respuesta
+  const responder = (t) => llamar('sendMessage', { chat_id: m.chat.id, text: t, parse_mode: 'HTML' }).catch(() => {});
+  if (!datos.chat) return responder('Todavía no hay grupo: añade el bot a un grupo con temas.');
+  const texto = escrito.replace(ORDEN, '').trim();
+  const foto = m.photo?.length ? m.photo[m.photo.length - 1].file_id : null;
+  if (!texto && !foto) {
+    return responder('Escribe el aviso detrás del comando, por ejemplo:\n<code>/anuncio Esta noche de 2:00 a 3:00 la web estará en mantenimiento.</code>\n\nTambién puedes mandar una foto con <code>/anuncio texto</code> como pie.');
+  }
+  await publicarAviso(texto, foto);
+  console.log('Telegram: aviso publicado en «📢 Avisos»');
+  return responder('✅ Publicado en el tema «📢 Avisos» del grupo.');
 }
 
 function enlaceTema(id) {
