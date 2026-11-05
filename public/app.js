@@ -1296,7 +1296,7 @@ const numTemporada = (carpeta) => { const m = nombre(carpeta).trim().match(RE_TE
 const esEpisodio = (k) => {
   if (capitulo(k) !== null || numTemporada(padre(k)) !== null) return true;
   const partes = k.split('/');
-  return partes.length >= 3 && !/pel[ií]cula|cine|movie|film/i.test(partes[0]);
+  return partes.length >= 3 && !/pel[ií]cula|cine|movie|film|documental|estreno/i.test(partes[0]);
 };
 
 async function listarTodo(prefijo) {
