@@ -78,6 +78,9 @@ async function accion(boton, msg, fn, exito) {
   boton.disabled = false;
 }
 
+// Página de donaciones voluntarias (vacía = no sale el bloque)
+const DONAR_URL = 'https://ko-fi.com/morvehtv';
+
 function abrirCuenta() {
   if (!yo) return;
   let p = $('#cuenta');
@@ -107,6 +110,15 @@ function abrirCuenta() {
   // Plan: Básico o VIP
   const bp = typeof bloquePlan === 'function' ? bloquePlan() : null;
   if (bp) caja.append(bp);
+
+  // Donación voluntaria (Ko-fi): no da ni quita nada en la cuenta
+  if (DONAR_URL) {
+    const bd = bloque('☕ Apoyar MorvehTV', 'MorvehTV es gratis. Si te gusta, puedes ayudar a pagar el servidor y el almacenamiento con una donación voluntaria. Es totalmente opcional y no cambia nada en tu cuenta.');
+    const a = el('a', 'boton boton-acento', '☕ Donar en Ko-fi ↗');
+    a.href = DONAR_URL; a.target = '_blank'; a.rel = 'noopener';
+    bd.s.append(a);
+    caja.append(bd.s);
+  }
 
   // Nombre visible
   const bn = bloque('Nombre', 'Es el que se ve arriba. Tu usuario para entrar no cambia.');
