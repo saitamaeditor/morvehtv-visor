@@ -280,16 +280,22 @@ function pintarPestanas() {
 
 function pintarVistaPerfil(vista) {
   const items = $('#items');
-  items.className = 'rejilla';
+  items.className = vista === 'seguir' ? 'rejilla anchas' : 'rejilla';
   items.innerHTML = '';
+  // No es la portada: cabecera normal (en la portada va fija y transparente encima del
+  // destacado, y aquí tapaba las tarjetas)
+  document.documentElement.classList.remove('en-portada');
   if (!yo) return;
+  const cab = el('div', 'biblioteca');
+  cab.append(el('h1', null, vista === 'seguir' ? 'Seguir viendo' : 'Favoritos'));
+  items.append(cab);
   if (vista === 'seguir') {
     const lista = listaSeguir();
-    if (!lista.length) items.innerHTML = `<div class="vacio">Aquí aparecerá lo que empieces a ver, ${yo.nombre}.</div>`;
-    lista.forEach((f, i) => items.append(tarjetaPerfil(f, () => abrir(i, lista))));
+    if (!lista.length) items.append(el('div', 'vacio', `Aquí aparecerá lo que empieces a ver, ${yo.nombre}.`));
+    lista.forEach((f, i) => items.append(tarjetaPerfil(f, () => abrir(i, lista), false, true)));
   } else {
     const archivos = yo.favoritos.filter((f) => f.tipo === 'archivo');
-    if (!yo.favoritos.length) items.innerHTML = '<div class="vacio">Aún no tienes favoritos. Pulsa ☆ en cualquier título para añadirlo.</div>';
+    if (!yo.favoritos.length) items.append(el('div', 'vacio', 'Aún no tienes favoritos. Pulsa ☆ en cualquier título para añadirlo.'));
     for (const f of yo.favoritos) {
       items.append(f.tipo === 'carpeta'
         ? tarjetaPerfil(f, () => irA(f.key), true)

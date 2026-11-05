@@ -987,6 +987,23 @@
     .categorias-chips { gap: 8px; }
     .chip-cat { padding: 8px 14px; font-size: 13.5px; min-height: 38px; }
   }
+  /* «Seguir viendo» y «Favoritos» (pestañas de arriba): título grande y, en «Seguir viendo»,
+     tarjetas apaisadas con el título y la barra de lo visto, como en la fila del inicio */
+  .rejilla.anchas, .rejilla.anchas.con-episodios { grid-template-columns: repeat(auto-fill, minmax(clamp(220px, 19vw, 330px), 1fr)); }
+  .tele .rejilla.anchas, .tele .rejilla.anchas.con-episodios { grid-template-columns: repeat(auto-fill, minmax(26vw, 1fr)); gap: 3vh 1.8vw; }
+  .rejilla.anchas .item.con-imagen:not(.episodio) .nombre { display: -webkit-box; }
+  .rejilla.anchas .item.con-imagen:not(.episodio) .meta { display: block; }
+  .rejilla.anchas .item .resumen { display: none; }
+  .rejilla.anchas .item .nombre, .rejilla.anchas .item .meta { text-align: left; }
+  /* Los episodios, como tarjeta igual que las demás (no en lista), también en el móvil */
+  .rejilla.anchas .item.episodio { display: flex; flex-direction: column; padding: 0; background: none; border-radius: 0; }
+  .rejilla.anchas .item.episodio:hover, .rejilla.anchas .item.episodio:focus { background: none; }
+  .rejilla.anchas .item.episodio .mini { aspect-ratio: 16 / 9; min-height: 0; align-self: auto; }
+  .rejilla.anchas .item.episodio .nombre { padding-top: 8px; font-size: 13.5px; }
+  .rejilla.anchas .item.episodio .estrella { left: auto; right: 6px; top: 6px; }
+  .tele .rejilla.anchas .item .nombre { font-size: 2.9vh; }
+  .tele .rejilla.anchas .item .meta { font-size: 2.3vh; }
+  @media (max-width: 600px) { .rejilla.anchas, .rejilla.anchas.con-episodios { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
