@@ -15,7 +15,7 @@ android {
         // GitHub Actions numera cada compilación; así cada APK nuevo se instala encima del anterior
         versionCode Integer.parseInt(System.getenv('NUMERO_COMPILACION') ?: '1')
         versionName "1.0.${System.getenv('NUMERO_COMPILACION') ?: '0'}"
-        buildConfigField 'String', 'SERVIDOR', '"https://morvehtv-visor.onrender.com/"'
+        buildConfigField 'String', 'SERVIDOR', '"https://morvehtv.com/"'
     }
 
     buildFeatures {

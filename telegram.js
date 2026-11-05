@@ -17,7 +17,7 @@ import * as meta from './metadatos.js';
 const TOKEN = String(process.env.TELEGRAM_TOKEN ?? '').trim();
 // Se puede cambiar para hacer pruebas con un Telegram simulado
 const API = (process.env.TELEGRAM_API ?? 'https://api.telegram.org').replace(/\/$/, '');
-const WEB = (process.env.VISOR_URL ?? 'https://morvehtv-visor.onrender.com').replace(/\/$/, '');
+const WEB = (process.env.VISOR_URL ?? 'https://morvehtv.com').replace(/\/$/, '');
 const COLORES = [7322096, 16766590, 13338331, 9367192, 16749490, 16478047]; // los que admite Telegram
 
 let activo = false;
