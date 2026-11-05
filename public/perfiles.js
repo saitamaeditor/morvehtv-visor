@@ -1072,8 +1072,7 @@ function bloquePlanKofi(premium) {
   let elegida = (planInfo.opciones[planInfo.opciones.length - 1] || {}).id;
   planInfo.opciones.forEach((o) => {
     const op = el('button', 'opcion-usdc' + (o.id === elegida ? ' activa' : ''));
-    const porMes = Math.round((o.euros / o.meses) * 100) / 100;
-    op.innerHTML = `<b>${o.titulo}</b><span>${o.texto}</span>${o.meses > 1 ? `<small>${porMes.toLocaleString('es-ES')} €/mes</small>` : ''}`;
+    op.innerHTML = `<b>${o.titulo}</b><span>${o.texto}</span><small>Pago único</small>`;
     op.onclick = () => { elegida = o.id; opciones.querySelectorAll('.opcion-usdc').forEach((x) => x.classList.remove('activa')); op.classList.add('activa'); };
     opciones.append(op);
   });
