@@ -267,7 +267,11 @@ const ESPERA_MIN = Math.max(0, Number(process.env.ANUNCIOS_ESPERA_MIN) || 0);
 const CADA_MIN = Number(process.env.ANUNCIOS_CADA_MIN) > 0 ? Math.max(5, Number(process.env.ANUNCIOS_CADA_MIN)) : 0;
 const EN_PAUSA = process.env.ANUNCIOS_PAUSA === '1';
 const BANNERS = process.env.ANUNCIOS_BANNERS === '1';
+// Anuncios apagados salvo que se pida ANUNCIOS=1: sin eso no se manda ninguna configuración de
+// anuncios a la web ni a la app (ni los de Google, ni los propios del gestor)
+export const CON_ANUNCIOS = process.env.ANUNCIOS === '1';
 async function anuncios() {
+  if (!CON_ANUNCIOS) return null;
   const propios = ((await p.leerAjuste('anuncios')) ?? []).filter((a) => a.activo !== false);
   return {
     adsense: /^ca-pub-\d+$/.test(ADSENSE) ? { cliente: ADSENSE, slot: ADSENSE_SLOT || null } : null,
@@ -288,6 +292,7 @@ async function anuncios() {
 // Sale de ANUNCIOS_ADSTXT (el texto que da Google, tal cual) o, si no está, del ca-pub de
 // ANUNCIOS_ADSENSE / ANUNCIOS_GOOGLE_PUB
 export function adsTxt() {
+  if (!CON_ANUNCIOS) return null;
   const propio = String(process.env.ANUNCIOS_ADSTXT ?? '').trim();
   if (propio) return propio.replace(/\\n/g, '\n') + '\n';
   const pub = String(process.env.ANUNCIOS_GOOGLE_PUB ?? ADSENSE).trim().replace(/^ca-/, '');

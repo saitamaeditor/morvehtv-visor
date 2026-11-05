@@ -45,7 +45,7 @@ function pintarBotonCuenta() {
   b.hidden = !yo;
   b.innerHTML = '';
   if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
-  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'PREMIUM'));
+  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'PREMIUM'));
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -323,7 +323,8 @@ const enApp = () => !!window.MorvehApp;
 
 async function cargarPlan() {
   try { planInfo = await api('/api/pago/info'); } catch (e) { planInfo = null; }
-  document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.plan === 'premium'));
+  // Sin pagos no hay planes: nadie lleva la marca de Premium
+  document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.activo && planInfo.plan === 'premium'));
   pintarBotonCuenta();
   avisoRenovar();
   return planInfo;

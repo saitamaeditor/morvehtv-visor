@@ -715,6 +715,9 @@ async function legal(html, req) {
   valores.ANIO = String(new Date().getFullYear());
   // Lo de Premium y los pagos solo sale si los pagos están activados (y al revés)
   const [fuera, queda] = pagos.activo ? ['SINPAGOS', 'PAGOS'] : ['PAGOS', 'SINPAGOS'];
+  for (const [si, no] of [pagos.CON_ANUNCIOS ? ['ANUNCIOS', 'SINANUNCIOS'] : ['SINANUNCIOS', 'ANUNCIOS']]) {
+    html = html.replace(new RegExp(`<!--${no}-->[\\s\\S]*?<!--/${no}-->`, 'g'), '').replace(new RegExp(`<!--/?${si}-->`, 'g'), '');
+  }
   html = html.replace(new RegExp(`<!--${fuera}-->[\\s\\S]*?<!--/${fuera}-->`, 'g'), '').replace(new RegExp(`<!--/?${queda}-->`, 'g'), '');
   // (en el pie, sin enlaces ni avisos: solo el nombre)
   return html.replace(/© \{\{ANIO\}\} \{\{TITULAR\}\}/, `© ${valores.ANIO} ${escHtml(String(process.env.LEGAL_TITULAR ?? '').trim())}`)
