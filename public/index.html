@@ -452,6 +452,12 @@
   .acepto-premium b { color: var(--texto); }
   /* VIP con USDC: opciones, pantalla de pago y guía */
   .pago-metamask { display: flex; flex-direction: column; gap: 6px; }
+  /* Aviso de bloqueador de anuncios antes del vídeo */
+  .muro-bloqueo .caja { width: min(560px, 100%); padding: 22px; border-radius: 14px; background: var(--panel); border: 1px solid var(--borde); }
+  .muro-texto { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; line-height: 1.5; }
+  .muro-texto > b { font-size: 20px; }
+  .muro-texto span { color: var(--suave); }
+  .tele .muro-bloqueo .caja { width: 56vw; } .tele .muro-texto { font-size: 20px; } .tele .muro-texto > b { font-size: 28px; }
   .boton-metamask { font-size: 16px; padding: 12px 18px; }
   .opciones-usdc { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; width: 100%; }
   .opcion-usdc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 10px; cursor: pointer;

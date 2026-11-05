@@ -475,8 +475,74 @@ function cuentaAtras(c, terminar, segundos = SALTAR_EN) {
 }
 
 const barajar = (l) => l.map((x) => [Math.random(), x]).sort((p, q) => p[0] - q[0]).map((p) => p[1]);
+// ---------- Bloqueadores de anuncios ----------
+// La web es gratis gracias a los anuncios: con un bloqueador activo no se reproduce. Se mira de
+// tres formas: un «cebo» con aspecto de anuncio que los bloqueadores esconden, un archivo con
+// nombre de anuncio (/ads.js) que no dejan cargar y el script de la red de anuncios (lo frenan
+// los bloqueadores del navegador y los de DNS, como AdGuard o el «DNS privado» del móvil).
+async function hayBloqueador() {
+  const cebo = el('div', 'adsbox ad-banner ad-placement pub_300x250 text-ad textads banner-ads');
+  cebo.innerHTML = '&nbsp;';
+  cebo.style.cssText = 'position:absolute;left:-9999px;top:-9999px;width:300px;height:250px;';
+  document.body.append(cebo);
+  const sondas = [
+    fetch('/ads.js?' + Date.now(), { cache: 'no-store', credentials: 'same-origin' }).then((r) => !r.ok, () => true),
+  ];
+  const s = planInfo.anuncios && planInfo.anuncios.sonda;
+  if (s) sondas.push(fetch(s, { mode: 'no-cors', cache: 'no-store', credentials: 'omit', referrerPolicy: 'origin' }).then(() => false, () => true));
+  await new Promise((r) => setTimeout(r, 150));
+  const escondido = !cebo.isConnected || cebo.offsetHeight === 0 || cebo.offsetParent === null || getComputedStyle(cebo).display === 'none' || getComputedStyle(cebo).visibility === 'hidden';
+  cebo.remove();
+  const bloqueos = await Promise.all(sondas.map((p) => Promise.race([p, new Promise((r) => setTimeout(() => r(false), 5000))])));
+  return escondido || bloqueos.some(Boolean);
+}
+
+// Pantalla «Desactiva el bloqueador o hazte VIP». Devuelve 'reintentar', 'vip' o 'cerrado'.
+function muroBloqueador() {
+  return new Promise((listo) => {
+    const capa = el('div', 'anuncio-previo muro-bloqueo');
+    capa.setAttribute('role', 'dialog');
+    capa.setAttribute('aria-label', 'Bloqueador de anuncios');
+    const caja = el('div', 'caja');
+    const t = el('div', 'muro-texto');
+    t.innerHTML = '<b>🛑 Tienes un bloqueador de anuncios</b>'
+      + '<span>MorvehTV es gratis gracias a un anuncio corto antes de cada vídeo. Desactiva el bloqueador para esta web (o el DNS que bloquea anuncios) y pulsa «Ya lo he desactivado».</span>'
+      + (planInfo.activo ? `<span>O hazte <b>VIP</b>${planInfo.precio ? ' por ' + planInfo.precio : ''} y míralo todo sin anuncios.</span>` : '');
+    const pie = el('div', 'pie');
+    const otra = el('button', 'boton', '🔄 Ya lo he desactivado');
+    pie.append(otra);
+    if (planInfo.activo) {
+      const vip = el('button', 'boton boton-acento', '⭐ Hazte VIP');
+      vip.onclick = () => fin('vip');
+      pie.append(vip);
+    }
+    caja.append(t, pie);
+    capa.append(caja);
+    let hecho = false;
+    const vigia = setInterval(() => { if (!$('#visor').classList.contains('abierto')) fin('cerrado'); }, 500);
+    function fin(r) {
+      if (hecho) return; hecho = true;
+      clearInterval(vigia); capa.remove();
+      if (r === 'vip') { cerrar(); abrirCuenta(); }
+      listo(r);
+    }
+    capa._fin = () => fin('cerrado');
+    otra.onclick = () => fin('reintentar');
+    $('#visor').append(capa);
+    setTimeout(() => { if (capa.isConnected) otra.focus(); }, 50);
+  });
+}
+
 async function anuncioPrevio() {
   if (!conAnuncios()) return;
+  // Con bloqueador no hay vídeo: o lo quita, o se hace VIP, o cierra
+  while (await hayBloqueador()) {
+    if (!$('#visor').classList.contains('abierto')) return;
+    const r = await muroBloqueador();
+    if (r !== 'reintentar') { if ($('#visor').classList.contains('abierto')) cerrar(); return; }
+    // (al volver a mirar, «Ya lo he desactivado» suele necesitar recargar el bloqueador: se da un respiro)
+    await new Promise((ok) => setTimeout(ok, 300));
+  }
   const conf = planInfo.anuncios.previos || { cantidad: 3, esperaMin: 0 };
   if (Date.now() - ultimoPrevio < conf.esperaMin * 60000) return;
   ultimoPrevio = Date.now();
