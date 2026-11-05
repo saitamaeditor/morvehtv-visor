@@ -149,12 +149,6 @@ async function temasAlDia(carpetas) {
 }
 
 // ---------- Mensajes ----------
-function tamano(n) {
-  if (!n) return '';
-  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.min(u.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
-  return `${(n / 1024 ** i).toFixed(i >= 3 ? 1 : 0)} ${u[i]}`;
-}
 const limpio = (key) => key.split('/').pop().replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim();
 const corto = (t, n) => (t && t.length > n ? `${t.slice(0, n - 1).trim()}…` : t);
 
@@ -162,15 +156,16 @@ const corto = (t, n) => (t && t.length > n ? `${t.slice(0, n - 1).trim()}…` : 
 async function mensaje(carpeta, clave, archivos) {
   const seccion = nombreSeccion(carpeta);
   const m = await meta.deArchivo(archivos[0].key).catch(() => null);
-  const total = archivos.reduce((s, a) => s + (a.tamano || 0), 0);
   const ver = clave.endsWith('/') ? clave : clave.slice(0, clave.lastIndexOf('/') + 1);
+  // En qué carpeta de e2 está (en vez del peso)
+  const carpetaE2 = `📁 <code>${html(ver || carpeta)}</code>`;
   const boton = { reply_markup: { inline_keyboard: [[{ text: '▶ Ver en MorvehTV', url: `${WEB}/#${encodeURIComponent(ver)}` }]] } };
   const datosTitulo = (f) => [f.valoracion && `⭐ ${Number(f.valoracion).toFixed(1)}`, f.anio, ...(f.generos ?? []).slice(0, 3)].filter(Boolean).join(' · ');
 
   if (!m || !m.encontrado) {
     const nombres = archivos.slice(0, 8).map((a) => `• ${html(limpio(a.key))}`);
     if (archivos.length > 8) nombres.push(`• y ${archivos.length - 8} más`);
-    const texto = `${seccion.emoji} <b>${archivos.length === 1 ? 'Nuevo' : `${archivos.length} nuevos`} en ${html(seccion.nombre)}</b>\n\n${nombres.join('\n')}\n\n📦 ${tamano(total)}`;
+    const texto = `${seccion.emoji} <b>${archivos.length === 1 ? 'Nuevo' : `${archivos.length} nuevos`} en ${html(seccion.nombre)}</b>\n\n${nombres.join('\n')}\n\n${carpetaE2}`;
     return { texto, foto: null, boton };
   }
 
@@ -191,7 +186,7 @@ async function mensaje(carpeta, clave, archivos) {
     cabecera = `${seccion.emoji} <b>Nuevo en ${html(seccion.nombre)}</b>`;
     if (m.sinopsis) cuerpo = `<i>${html(corto(m.sinopsis, 320))}</i>`;
   }
-  const texto = [cabecera, '', `<b>${html(m.titulo)}</b>`, html(datosTitulo(m)), cuerpo && `\n${cuerpo}`, `\n📦 ${tamano(total)}`]
+  const texto = [cabecera, '', `<b>${html(m.titulo)}</b>`, html(datosTitulo(m)), cuerpo && `\n${cuerpo}`, `\n${carpetaE2}`]
     .filter((l) => l !== '' && l != null).join('\n');
   // El cartel de TMDB, en un tamaño que se vea bien en Telegram
   const foto = (m.poster ?? m.fondo ?? '').replace(/\/t\/p\/w\d+\//, '/t/p/w780/') || null;
