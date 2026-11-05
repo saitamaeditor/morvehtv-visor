@@ -729,7 +729,14 @@
   .carrusel.medios .cat { width: clamp(250px, 24vw, 400px); aspect-ratio: 16 / 9; }
   .tele .carrusel .item { width: 15vw; }
   .tele .carrusel.anchas .item, .tele .carrusel .item.episodio { width: 26vw; }
-  .tele .carrusel.medios .cat { width: 30vw; }
+  /* «Mis medios»: todas las carpetas a la vista en una rejilla (sin desplazarse de lado) y algo
+     más pequeñas: 5 por fila en un ordenador grande, menos según el ancho, 2 en el móvil */
+  .carrusel.medios { display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(200px, 17vw, 330px), 1fr));
+    overflow: visible; scroll-snap-type: none; padding: 0; margin: 0; }
+  .carrusel.medios .cat { width: auto; }
+  .carrusel-caja:has(> .medios) .flecha-fila { display: none; }
+  .tele .carrusel.medios { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tele .carrusel.medios .cat { width: auto; }
   .tele .fila-titulo { font-size: 3.2vh; }
 
   /* Tarjetas: el cartel con esquinas redondeadas y sombra; título y datos debajo, centrados */
@@ -866,10 +873,8 @@
     .en-portada header { padding-top: max(10px, env(safe-area-inset-top)); }
     .carrusel .item { width: 31vw; }
     .carrusel.anchas .item, .carrusel .item.episodio { width: 66vw; }
-    .carrusel.medios .cat { width: 78vw; }
-    .carrusel.medios .cat .texto { max-width: 50%; }
-    .carrusel.medios .cat .abanico { top: 15%; bottom: 15%; right: 5%; width: 38%; }
-    .carrusel.medios .cat .icono { display: block; }
+    .carrusel.medios { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .carrusel.medios .cat { aspect-ratio: 4 / 3; }
     #cabecera { margin: -16px -12px 16px; padding: 120px 12px 4px; }
     #cabecera.con-fondo { background-size: auto 260px; background-repeat: no-repeat; }
     .item .nombre { font-size: 12.5px; }
