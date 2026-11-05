@@ -750,6 +750,17 @@ http
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(t);
       }
+      // El banner de la red de anuncios, dentro de un marco aislado de la propia web: es la única
+      // página que se deja enmarcar (solo por MorvehTV) y que dice a la red desde qué web se ve
+      // (solo el dominio: así la red comprueba que es la web dada de alta)
+      if (url.pathname === '/marco-previo.html') {
+        const pagina = pagos.paginaBanner();
+        if (!pagina) return json(res, 404, { error: 'Sin banner' });
+        res.setHeader('x-frame-options', 'SAMEORIGIN');
+        res.setHeader('content-security-policy', "frame-ancestors 'self'; base-uri 'none'; object-src 'none'");
+        res.setHeader('referrer-policy', 'origin');
+        return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
+      }
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado,
         legal: faltanLegal().length ? `faltan ${faltanLegal().join(', ')}` : 'ok' });

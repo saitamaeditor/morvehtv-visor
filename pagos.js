@@ -267,11 +267,41 @@ const VAST = String(process.env.ANUNCIOS_VAST ?? '').split(/\s+/).filter((u) => 
 // si la red marca el suyo, manda el de la red)
 const PREVIOS = Math.min(3, Math.max(1, Number(process.env.ANUNCIOS_PREVIOS) || 1));
 const SALTAR = Math.min(30, Math.max(0, Number(process.env.ANUNCIOS_SALTAR ?? 5) || 0));
-// Anuncios apagados salvo que se pida ANUNCIOS=1 (y haya alguna etiqueta VAST)
-export const CON_ANUNCIOS = process.env.ANUNCIOS === '1' && VAST.length > 0;
+// Si ninguna red da vídeo (o no hay VAST), un banner de una red externa en la pantalla previa
+// (p. ej. el «Banner 300x250» de Adsterra): ANUNCIOS_BANNER_KEY (la «key» de su código) y
+// ANUNCIOS_BANNER_SRC (la dirección del <script src> de su código); ANUNCIOS_BANNER_TAMANO, 300x250
+const BANNER_KEY = String(process.env.ANUNCIOS_BANNER_KEY ?? '').trim();
+const BANNER_SRC = String(process.env.ANUNCIOS_BANNER_SRC ?? '').trim();
+const [BANNER_ANCHO, BANNER_ALTO] = (/^(\d{2,4})x(\d{2,4})$/.exec(String(process.env.ANUNCIOS_BANNER_TAMANO ?? '300x250').trim()) ?? [0, 300, 250]).slice(1).map(Number);
+const BANNER = /^[\w-]{8,80}$/.test(BANNER_KEY) && (() => {
+  try { const x = new URL(BANNER_SRC); return x.protocol === 'https:' && !ES_GOOGLE.test(x.hostname); } catch (e) { return false; }
+})();
+// Anuncios apagados salvo que se pida ANUNCIOS=1 (y haya alguna etiqueta VAST o un banner)
+export const CON_ANUNCIOS = process.env.ANUNCIOS === '1' && (VAST.length > 0 || BANNER);
 async function anuncios() {
   if (!CON_ANUNCIOS) return null;
-  return { vast: VAST, previos: { cantidad: PREVIOS, esperaMin: 0 }, saltarEn: SALTAR, durante: { cadaMin: 0 }, pausa: false, banners: false, propios: [] };
+  return { vast: VAST, banner: BANNER ? { ancho: BANNER_ANCHO, alto: BANNER_ALTO } : null,
+    previos: { cantidad: PREVIOS, esperaMin: 0 }, saltarEn: SALTAR, durante: { cadaMin: 0 }, pausa: false, banners: false, propios: [] };
+}
+
+// La página que va dentro del marco aislado del banner (sin sesión ni datos de nadie: solo el
+// código de la red). Si el código de la red no carga (bloqueador), se avisa a la web para no
+// tener al usuario mirando un hueco vacío.
+export function paginaBanner() {
+  if (!CON_ANUNCIOS || !BANNER) return null;
+  const opciones = JSON.stringify({ key: BANNER_KEY, format: 'iframe', height: BANNER_ALTO, width: BANNER_ANCHO, params: {} });
+  const fuente = BANNER_SRC.replace(/[&"<>]/g, (c) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' })[c]);
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<style>html,body{margin:0;padding:0;background:transparent;overflow:hidden;display:flex;align-items:center;justify-content:center;width:100%;height:100%}</style>
+</head><body>
+<script>atOptions = ${opciones};
+function avisar(m) { try { parent.postMessage(m, '*'); } catch (e) {} }
+function sinAnuncio() { avisar('morvehtv-previo-vacio'); }
+// En cuanto la red pinta algo, se avisa a la web (si no llega el aviso, la web no espera)
+var mirar = setInterval(function () { if (document.querySelector('iframe, img, ins, a')) { clearInterval(mirar); avisar('morvehtv-previo-listo'); } }, 250);
+setTimeout(function () { clearInterval(mirar); if (!document.querySelector('iframe, img, ins, a')) sinAnuncio(); }, 5000);</script>
+<script src="${fuente}" onerror="sinAnuncio()"></script>
+</body></html>`;
 }
 
 // ads.txt: algunas redes piden publicar sus líneas; se pone tal cual en ANUNCIOS_ADSTXT

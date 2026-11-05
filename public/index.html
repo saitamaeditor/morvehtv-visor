@@ -88,6 +88,10 @@
   #visor iframe { width: 100%; height: calc(100vh - 110px); border: 0; background: #fff; }
   /* (el iframe de los anuncios de Google lo pone y lo mide su SDK: sin el fondo blanco de arriba) */
   #visor .anuncio-previo .ima iframe { width: 100%; height: 100%; background: transparent; }
+  /* Banner de la red de anuncios en la pantalla previa: a su tamaño, centrado (más grande en la tele) */
+  #visor .anuncio-previo iframe.marco-previo { width: var(--ancho, 300px); height: var(--alto, 250px); max-width: 100%; background: transparent; align-self: center; border-radius: 6px; }
+  .anuncio-previo .escena.con-banner { align-items: center; gap: 16px; padding: 8px 0; }
+  .tele #visor .anuncio-previo iframe.marco-previo { zoom: 1.6; }
   /* Reproductor de otro sitio (enlace .url / .strm) y su aviso de fallo */
   #visor iframe.incrustado { background: #000; flex: 1; min-height: 0; }
   .fallo-enlace { display: flex; flex-direction: column; align-items: center; gap: 12px; }

@@ -460,8 +460,9 @@ function capaAnuncio() {
   return { capa, escena, saltar, etiqueta, arriba, pie };
 }
 
-function cuentaAtras(c, terminar) {
-  let s = SALTAR_EN;
+function cuentaAtras(c, terminar, segundos = SALTAR_EN) {
+  let s = Math.max(1, Math.round(segundos));
+  c.saltar.pintar('Saltar en ' + s + ' s', false);
   const reloj = setInterval(() => {
     if (!$('#visor').classList.contains('abierto')) return terminar();
     if (--s > 0) { c.saltar.pintar('Saltar en ' + s + ' s', false); return; }
@@ -494,9 +495,53 @@ async function tandaAnuncios(cantidad, nombre) {
       marcaAnuncio = cantidad > 1 ? `${nombre} · ${n + 1} de ${cantidad}` : nombre;
       if (await anuncioVast(etiqueta)) { salio = true; break; }
     }
+    // Ninguna red dio vídeo: el banner de la pantalla previa
+    if (!salio && planInfo.anuncios.banner && $('#visor').classList.contains('abierto')) {
+      marcaAnuncio = cantidad > 1 ? `${nombre} · ${n + 1} de ${cantidad}` : nombre;
+      salio = await anuncioBannerPrevio(planInfo.anuncios.banner);
+    }
     if (!salio) break;
   }
   marcaAnuncio = 'Anuncio';
+}
+
+// El banner de la red externa (p. ej. Adsterra 300x250) en la pantalla previa, con la cuenta
+// atrás de «Saltar». Va en un marco aislado (sandbox, sin acceso a la web ni a la sesión): solo
+// puede abrir la web del anunciante en otra pestaña al tocarlo. Si la red no da anuncio, el
+// vídeo empieza sin esperar. Devuelve true si se mostró.
+function anuncioBannerPrevio(b) {
+  return new Promise((listo) => {
+    const c = capaAnuncio();
+    c.escena.classList.add('sin-video', 'con-banner');
+    const fr = el('iframe', 'marco-previo');
+    fr.title = 'Anuncio';
+    fr.setAttribute('sandbox', 'allow-scripts allow-popups allow-popups-to-escape-sandbox');
+    fr.setAttribute('scrolling', 'no');
+    fr.width = b.ancho; fr.height = b.alto;
+    fr.style.setProperty('--ancho', b.ancho + 'px'); fr.style.setProperty('--alto', b.alto + 'px');
+    fr.src = '/marco-previo.html';
+    c.escena.insertBefore(fr, c.saltar);
+    let hecho = false;
+    let vacio = false;
+    let listoBanner = false;
+    const alMensaje = (e) => {
+      if (e.source !== fr.contentWindow) return;
+      if (e.data === 'morvehtv-previo-listo') listoBanner = true;
+      if (e.data === 'morvehtv-previo-vacio') { vacio = true; terminar(); }
+    };
+    // Si un bloqueador quita el marco o la red no pinta nada en 4 s, no se espera más
+    const sinRespuesta = setTimeout(() => { if (!listoBanner) { vacio = true; terminar(); } }, 4000);
+    window.addEventListener('message', alMensaje);
+    const parar = cuentaAtras(c, () => terminar(), planInfo.anuncios.saltarEn || SALTAR_EN);
+    function terminar() {
+      if (hecho) return; hecho = true;
+      parar(); clearTimeout(sinRespuesta); window.removeEventListener('message', alMensaje);
+      c.capa.remove(); listo(!vacio);
+    }
+    c.capa._fin = terminar;
+    c.saltar.onclick = () => { if (c.saltar._listo) terminar(); };
+    $('#visor').append(c.capa);
+  });
 }
 
 // Uno de tus vídeos de anuncio
