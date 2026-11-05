@@ -393,7 +393,7 @@ function promoVIP(conBoton) {
   if (!planInfo.activo) return null;
   const c = el('div', 'anuncio-propio promo');
   const t = el('div', 'texto');
-  t.append(el('b', null, '⭐ MorvehTV VIP'), el('span', null, 'Todo sin anuncios en la web y la app' + (planInfo.precio ? ' por ' + planInfo.precio : '') + '.'));
+  t.append(el('b', null, '⭐ MorvehTV VIP'), el('span', null, 'Todo sin anuncios en la web y la app' + (planInfo.precio ? ': ' + planInfo.precio : '') + '.'));
   c.append(t);
   if (conBoton) {
     const b = el('button', 'boton boton-acento', 'Quitar anuncios');
@@ -457,7 +457,7 @@ function capaAnuncio() {
   saltar.pintar('Saltar en ' + SALTAR_EN + ' s', false);
   escena.append(saltar);
   if (planInfo.activo) {
-    const pr = el('button', 'boton', '⭐ Sin anuncios' + (planInfo.precio ? ' · ' + planInfo.precio : ''));
+    const pr = el('button', 'boton', '⭐ Quitar anuncios (VIP)');
     pr.onclick = () => { capa._fin(); cerrar(); abrirCuenta(); };
     pie.append(pr);
   }
@@ -514,7 +514,7 @@ function muroBloqueador() {
     const t = el('div', 'muro-texto');
     t.innerHTML = '<b>🛑 Tienes un bloqueador de anuncios</b>'
       + '<span>MorvehTV es gratis gracias a un anuncio corto antes de cada vídeo. Desactiva el bloqueador para esta web (o el DNS que bloquea anuncios) y pulsa «Ya lo he desactivado».</span>'
-      + (planInfo.activo ? `<span>O hazte <b>VIP</b>${planInfo.precio ? ' por ' + planInfo.precio : ''} y míralo todo sin anuncios.</span>` : '');
+      + (planInfo.activo ? `<span>O hazte <b>VIP</b>${planInfo.precio ? ' (' + planInfo.precio + ')' : ''} y míralo todo sin anuncios.</span>` : '');
     const pie = el('div', 'pie');
     const otra = el('button', 'boton', '🔄 Ya lo he desactivado');
     pie.append(otra);
@@ -1051,12 +1051,98 @@ function ofertaVipAlEntrar() {
   }, 150);
 }
 
+// ---------- VIP con Ko-fi ----------
+// Se elige el plan, sale un código (MV7K3P9Q) y se paga en Ko-fi pegándolo en el mensaje. Ko-fi
+// avisa al servidor y el VIP se activa solo (aquí se ve al momento, y en la app y la tele también).
+function bloquePlanKofi(premium) {
+  let texto;
+  if (premium && planInfo.admin) texto = 'VIP de por vida (administrador): sin anuncios y sin pagar nunca.';
+  else if (premium) texto = `Eres VIP hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. No se renueva solo; si quieres, puedes sumar más tiempo cuando quieras.`;
+  else texto = (planInfo.vencio ? `Tu VIP terminó el ${fechaLarga(planInfo.vencio)}. ` : '')
+    + 'Gratis, con un anuncio corto antes de cada vídeo. Hazte VIP y míralo todo sin anuncios en la web y la app. Pago único en Ko-fi (tarjeta o PayPal), sin suscripción.';
+  const b = bloque('Plan', texto);
+  b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
+  if (planInfo.admin) { b.s.append(b.msg); return b.s; }
+  if (planInfo.pendiente) {
+    pantallaKofi(b, planInfo.pendiente);
+    b.s.append(b.msg);
+    return b.s;
+  }
+  const opciones = el('div', 'opciones-usdc');
+  let elegida = (planInfo.opciones[planInfo.opciones.length - 1] || {}).id;
+  planInfo.opciones.forEach((o) => {
+    const op = el('button', 'opcion-usdc' + (o.id === elegida ? ' activa' : ''));
+    const porMes = Math.round((o.euros / o.meses) * 100) / 100;
+    op.innerHTML = `<b>${o.titulo}</b><span>${o.texto}</span>${o.meses > 1 ? `<small>${porMes.toLocaleString('es-ES')} €/mes</small>` : ''}`;
+    op.onclick = () => { elegida = o.id; opciones.querySelectorAll('.opcion-usdc').forEach((x) => x.classList.remove('activa')); op.classList.add('activa'); };
+    opciones.append(op);
+  });
+  const acepto = el('label', 'acepto-premium');
+  const casilla = el('input'); casilla.type = 'checkbox';
+  const txt = el('span');
+  txt.innerHTML = 'Entiendo que el VIP empieza <b>en cuanto llegue el pago</b> y que, por eso, no se puede devolver.';
+  acepto.append(casilla, txt);
+  const seguir = el('button', 'boton boton-acento', premium ? '⭐ Sumar más tiempo de VIP' : '⭐ Hazte VIP');
+  seguir.onclick = () => accion(seguir, b.msg, async () => {
+    if (!casilla.checked) { casilla.focus(); throw new Error('Marca la casilla para continuar'); }
+    const d = await enviar('/api/pago/kofi/pedido', { opcion: elegida, acepta: true });
+    paso.remove(); opciones.remove(); acepto.remove(); seguir.remove();
+    pantallaKofi(b, d);
+  });
+  const paso = el('p', 'pago-paso', premium ? 'Sumar tiempo (se añade al que te queda):' : 'Elige tu plan:');
+  b.s.append(paso, opciones, acepto, seguir);
+  if (planInfo.pagos && planInfo.pagos.length) {
+    const l = el('ul', 'pagos-hechos');
+    planInfo.pagos.forEach((x) => l.append(el('li', null, `${fechaLarga(x.fecha)} · ${x.meses} ${x.meses === 1 ? 'mes' : 'meses'}${x.importeTexto ? ' · ' + x.importeTexto : ''}`)));
+    b.s.append(el('p', 'pago-paso', 'Tus pagos:'), l);
+  }
+  b.s.append(b.msg);
+  return b.s;
+}
+
+function pantallaKofi(b, d) {
+  clearInterval(vigiaPago);
+  const caja = el('div', 'pago-usdc pago-kofi');
+  caja.append(el('p', 'pago-paso', `Para activar ${d.titulo} de VIP (${d.importeTexto}):`));
+  const p1 = el('p', 'pago-paso', '1. Copia tu código:');
+  const cod = el('div', 'pago-importe');
+  cod.append(el('b', null, d.codigo));
+  const cCod = el('button', 'boton', 'Copiar código'); cCod.onclick = () => copiar(d.codigo, cCod);
+  cod.append(cCod);
+  const p2 = el('p', 'pago-paso');
+  p2.innerHTML = `2. Pulsa el botón, elige <b>${d.importeTexto}</b> y <b>pega el código en el mensaje</b> del pago. Puedes marcar el mensaje como privado.`;
+  const ir = el('a', 'boton boton-acento', `☕ Pagar ${d.importeTexto} en Ko-fi ↗`);
+  ir.href = d.url; ir.target = '_blank'; ir.rel = 'noopener';
+  const p3 = el('p', 'pago-paso', '3. Vuelve aquí: el VIP se activa solo en cuanto Ko-fi avise (normalmente en unos segundos).');
+  const nota = el('small', 'suave', 'Sin el código también se puede activar, pero a mano: si se te olvida, avisa a la administración con tu usuario. Si vuelves a pagar desde el mismo correo de PayPal, se reconoce solo.');
+  const estado = el('div', 'pago-estado esperando');
+  estado.innerHTML = '<span class="girando"></span> Esperando tu pago en Ko-fi… Puedes cerrar esta pantalla y volver más tarde: el código sigue valiendo 30 días.';
+  const cancelar = el('button', 'boton', 'Cancelar este pedido');
+  cancelar.onclick = async () => { clearInterval(vigiaPago); await enviar('/api/pago/kofi/cancelar', { id: d.id }).catch(() => {}); await planCambiado(false); abrirCuenta(); };
+  caja.append(p1, cod, p2, ir, p3, nota, estado, cancelar);
+  b.s.append(caja);
+  vigiaPago = setInterval(async () => {
+    if (!caja.isConnected) return clearInterval(vigiaPago);
+    try {
+      const r = await api('/api/pago/kofi/estado', { id: d.id });
+      if (r.estado === 'pagado') {
+        clearInterval(vigiaPago);
+        estado.className = 'pago-estado hecho';
+        estado.innerHTML = '✅ <b>¡Pago recibido!</b> Ya eres VIP: sin anuncios en la web y la app.';
+        cancelar.remove();
+        await planCambiado(true);
+      }
+    } catch (e) {}
+  }, 5000);
+}
+
 function bloquePlan() {
   if (!planInfo) return null;
   clearInterval(vigiaPago);
   const premium = planInfo.plan === 'premium';
   // Pagos apagados: no se habla de planes (salvo a quien aún tiene VIP pagado)
   if (!planInfo.activo && (!premium || planInfo.admin)) return null;
+  if (planInfo.activo && planInfo.proveedor === 'kofi') return bloquePlanKofi(premium);
   let texto;
   if (premium && planInfo.admin) texto = 'VIP de por vida (administrador): sin anuncios y sin pagar nunca.';
   else if (premium && !planInfo.activo) texto = `VIP hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app.`;
@@ -1106,7 +1192,7 @@ function bloquePlan() {
     const l = el('ul', 'pagos-hechos');
     planInfo.pagos.forEach((x) => {
       const li = el('li');
-      li.innerHTML = `${fechaLarga(x.fecha)} · ${x.meses} ${x.meses === 1 ? 'mes' : 'meses'}${x.importe ? ` · ${x.importe} USDC` : ''}`
+      li.innerHTML = `${fechaLarga(x.fecha)} · ${x.meses} ${x.meses === 1 ? 'mes' : 'meses'}${x.importeTexto ? ` · ${x.importeTexto}` : ''}`
         + (x.tx ? ` · <a href="https://basescan.org/tx/${x.tx}" target="_blank" rel="noopener">ver ↗</a>` : '');
       l.append(li);
     });

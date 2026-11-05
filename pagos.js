@@ -31,7 +31,7 @@
 // Anuncios del plan Básico: vídeos propios (subidos desde el gestor) o, en la web, anuncios de
 // vídeo de Google (ANUNCIOS_VAST) antes de reproducir; además banners: AdSense
 // (ANUNCIOS_ADSENSE + ANUNCIOS_ADSENSE_SLOT) o los propios del gestor.
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash, timingSafeEqual, randomInt } from 'node:crypto';
 import QRCode from 'qrcode';
 
 export const USDC_BASE = '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913';
@@ -74,9 +74,34 @@ let problema = !DIRECCION ? 'desactivados (sin CRIPTO_DIRECCION)'
   : !valida ? 'CRIPTO_DIRECCION no es una dirección válida (0x y 40 caracteres)'
     : PROHIBIDAS.has(DIRECCION) ? 'CRIPTO_DIRECCION es la dirección de un CONTRATO DE MONEDA, no de tu cartera: los pagos se perderían. Pon la dirección pública de tu cartera en Base'
       : !OPCIONES.length ? 'CRIPTO_PRECIOS no es válido (formato 4:1,10:3,40:12)' : null;
-export let activo = !problema;
-export let estado = problema ?? `ok (USDC en Base · ${DIRECCION.slice(0, 6)}…${DIRECCION.slice(-4)})`;
-function desactivar(motivo) { problema = motivo; activo = false; estado = motivo; console.error(`Pagos: ${motivo}`); }
+// ---------- Ko-fi ----------
+// VIP pagado en Ko-fi (tarjeta, PayPal, Apple Pay…). Cada pedido lleva un código (MV7K3P9Q) que
+// la persona pega en el mensaje del pago; Ko-fi avisa al servidor (webhook) y el VIP se activa
+// solo. Los meses salen del importe pagado (KOFI_PLANES). Si alguien paga desde el mismo correo
+// que una vez anterior, se reconoce aunque no ponga el código (se guarda solo una huella del
+// correo, no el correo). Lo que llegue sin poder identificarse queda para asignarlo a mano.
+//  · KOFI_TOKEN: el «Verification Token» de Ko-fi (Ajustes → API). Sin él, no hay Ko-fi
+//  · KOFI_URL (opcional): la página de Ko-fi; por defecto https://ko-fi.com/morvehtv
+//  · KOFI_PLANES (opcional): «euros:meses» separados por comas; por defecto 5:1,10:6,15:12
+const KOFI_TOKEN = String(process.env.KOFI_TOKEN ?? '').trim();
+const KOFI_URL = /^https:\/\/(www\.)?ko-fi\.com\/[\w-]+\/?$/.test(String(process.env.KOFI_URL ?? '').trim()) ? String(process.env.KOFI_URL).trim() : 'https://ko-fi.com/morvehtv';
+const KOFI_PLANES = String(process.env.KOFI_PLANES ?? '5:1,10:6,15:12').split(',').map((x) => x.trim().split(':').map(Number))
+  .filter(([e, m]) => e > 0 && m > 0 && Number.isFinite(e) && Number.isInteger(m))
+  .map(([euros, meses], i) => ({ id: String(i + 1), euros, meses }));
+export const KOFI = KOFI_TOKEN.length >= 8 && KOFI_PLANES.length > 0;
+const eur = (n) => `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: Number.isInteger(Number(n)) ? 0 : 2, maximumFractionDigits: 2 })} €`;
+const mesesTexto = (m) => (m === 12 ? '1 año' : m === 1 ? '1 mes' : `${m} meses`);
+const KOFI_CADUCA = 30 * 864e5; // un código sirve durante 30 días
+
+let usdc = !problema;
+export let activo = usdc || KOFI;
+const estadoUsdc = () => (usdc ? `USDC en Base · ${DIRECCION.slice(0, 6)}…${DIRECCION.slice(-4)}` : null);
+export let estado = activo ? `ok (${[KOFI ? 'Ko-fi' : null, estadoUsdc()].filter(Boolean).join(' y ')})` : problema;
+function desactivar(motivo) {
+  problema = motivo; usdc = false; activo = KOFI;
+  estado = KOFI ? `ok (Ko-fi) · USDC: ${motivo}` : motivo;
+  console.error(`Pagos: ${motivo}`);
+}
 
 // Al arrancar, se pregunta a Base si la dirección es una moneda (responde a «symbol()»): si lo
 // es, los pagos se desactivan para que nadie envíe nada a donde se perdería
@@ -92,14 +117,15 @@ let firmar = async () => null; // enlaces firmados de e2 (vídeos de anuncios)
 export function iniciar(opciones) {
   ({ perfiles: p } = opciones);
   firmar = opciones.firmar ?? firmar;
-  if (activo) comprobarDireccion().then(() => { if (activo) setTimeout(vigilar, 5000); });
+  if (usdc) comprobarDireccion().then(() => { if (usdc) setTimeout(vigilar, 5000); });
 }
 
 const error = (status, message) => Object.assign(new Error(message), { status });
 const EUR_POR_USD = Number(process.env.CRIPTO_EUR_POR_USD) > 0 ? Number(process.env.CRIPTO_EUR_POR_USD) : 0.92;
 // «5,50 USDC (unos 5 €) / 12 meses»
 const euros = (usdc) => { const e = Math.round(usdc * EUR_POR_USD * 2) / 2; return `unos ${e.toLocaleString('es-ES', { maximumFractionDigits: 2 })} €`; };
-export const precioTexto = async () => (OPCIONES[0] ? `${fmt(OPCIONES[0].usdc * 1e6)} USDC (${euros(OPCIONES[0].usdc)}) / ${OPCIONES[0].meses === 1 ? 'mes' : `${OPCIONES[0].meses} meses`}` : null);
+export const precioTexto = async () => (KOFI ? KOFI_PLANES.map((o) => `${eur(o.euros)} ${o.meses === 1 ? 'al mes' : o.meses === 12 ? 'al año' : `${o.meses} meses`}`).join(', ').replace(/, ([^,]*)$/, ' o $1')
+  : OPCIONES[0] ? `${fmt(OPCIONES[0].usdc * 1e6)} USDC (${euros(OPCIONES[0].usdc)}) / ${OPCIONES[0].meses === 1 ? 'mes' : `${OPCIONES[0].meses} meses`}` : null);
 
 // Importes en «micro-USDC» (enteros, sin decimales: 4,37 USDC = 4370000) para no perder céntimos
 const fmt = (micro) => (Number(micro) / 1e6).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
@@ -107,12 +133,12 @@ const conPunto = (micro) => (Number(micro) / 1e6).toFixed(6).replace(/0{1,4}$/, 
 
 // ¿Premium? Pagado y dentro del tiempo comprado
 export function esPremium(plan) {
-  return Boolean(plan && plan.proveedor === 'usdc' && plan.hasta && plan.hasta > Date.now());
+  return Boolean(plan && (plan.proveedor === 'usdc' || plan.proveedor === 'kofi') && plan.hasta && plan.hasta > Date.now());
 }
 
 // ---------- Estado guardado (en el archivo de cuentas: sobrevive a los reinicios de Render) ----------
 // { ultimoBloque, pedidos: [...], sueltos: [...] }
-async function leerEstado() { return { pedidos: [], sueltos: [], ...((await p.leerAjuste('cripto')) ?? {}) }; }
+async function leerEstado() { return { pedidos: [], sueltos: [], kpedidos: [], ksueltos: [], kvistos: [], kclientes: {}, ...((await p.leerAjuste('cripto')) ?? {}) }; }
 // Los cambios van de uno en uno (leer, cambiar y guardar): así un pedido nuevo y el repaso de la
 // blockchain nunca se pisan
 let cola = Promise.resolve();
@@ -126,6 +152,9 @@ const guardarEstado = (e) => p.guardarAjuste('cripto', {
   // Solo lo reciente: pedidos de 7 días y pagos sin identificar de 90
   pedidos: e.pedidos.filter((x) => Date.now() - x.creado < 7 * 864e5).slice(-500),
   sueltos: e.sueltos.filter((x) => Date.now() - x.fecha < 90 * 864e5).slice(-200),
+  kpedidos: e.kpedidos.filter((x) => Date.now() - x.creado < 90 * 864e5).slice(-1000),
+  ksueltos: e.ksueltos.filter((x) => Date.now() - x.fecha < 180 * 864e5).slice(-300),
+  kvistos: e.kvistos.slice(-2000),
 });
 
 // ---------- Lectura de la blockchain (JSON-RPC de Base) ----------
@@ -202,22 +231,23 @@ async function recibido(e, l) {
 }
 
 // Suma meses de Premium a una cuenta (desde hoy o desde que acabe lo que ya tenía)
-export async function darMeses(cuentaId, meses, pago) {
+export async function darMeses(cuentaId, meses, pago, proveedor = 'usdc') {
   const yo = await p.cuentaPorId(cuentaId);
   if (!yo) throw error(404, 'Esa cuenta ya no existe');
   const desde = Math.max(Date.now(), esPremium(yo.plan) ? yo.plan.hasta : 0);
-  const pagos = [...((yo.plan?.proveedor === 'usdc' && yo.plan.pagos) || []), { ...pago, meses, fecha: Date.now() }].slice(-50);
+  const antes = (yo.plan?.proveedor === 'usdc' || yo.plan?.proveedor === 'kofi') ? yo.plan.pagos ?? [] : [];
+  const pagos = [...antes, { ...pago, meses, fecha: Date.now() }].slice(-50);
   // Meses de calendario (12 meses = un año exacto: del 4 de noviembre al 4 de noviembre)
   const fin = new Date(desde);
   fin.setMonth(fin.getMonth() + meses);
-  return p.ponerPlan({ id: cuentaId }, { proveedor: 'usdc', estado: 'pagado', hasta: fin.getTime(), pagos });
+  return p.ponerPlan({ id: cuentaId }, { proveedor, estado: 'pagado', hasta: fin.getTime(), pagos });
 }
 
 // Repaso automático: cada 15 s si hay pedidos esperando; si no, cada 10 min (solo para apuntar
 // pagos que lleguen sin pedido). Si Base no responde, se espera cada vez más (hasta 5 min).
 let fallos = 0;
 async function vigilar() {
-  if (!activo) return;
+  if (!usdc) return;
   let espera = 600000;
   try {
     const e = await leerEstado();
@@ -319,31 +349,41 @@ export function adsTxt() {
 }
 
 // ---------- Rutas (con sesión) ----------
-export const RUTAS = ['/api/pago/info', '/api/pago/usdc/pedido', '/api/pago/usdc/estado', '/api/pago/usdc/cancelar'];
+export const RUTAS = ['/api/pago/info', '/api/pago/usdc/pedido', '/api/pago/usdc/estado', '/api/pago/usdc/cancelar',
+  '/api/pago/kofi/pedido', '/api/pago/kofi/estado', '/api/pago/kofi/cancelar'];
+const importeTexto = (x) => (x.euros != null ? eur(x.euros) : x.importe ? `${fmt(x.importe)} USDC` : null);
 export async function atender(ruta, req, res, json, cuenta) {
   const url = new URL(req.url, 'http://x');
   if (ruta === '/api/pago/info') {
     const plan = await p.planDe(cuenta);
     let pendiente = null;
-    if (activo) {
+    if (KOFI) {
+      const e = await leerEstado();
+      const x = e.kpedidos.filter((y) => y.cuenta === cuenta.id && !y.tx && Date.now() - y.creado < KOFI_CADUCA).at(-1);
+      if (x) pendiente = paraKofi(x);
+    } else if (usdc) {
       const e = await leerEstado();
       const x = e.pedidos.filter((y) => y.cuenta === cuenta.id && !y.tx && Date.now() - y.creado < CADUCA).at(-1);
       if (x) pendiente = await paraPagar(x);
     }
+    const conPlan = cuenta.plan?.proveedor === 'usdc' || cuenta.plan?.proveedor === 'kofi';
     return json(res, 200, {
-      activo, proveedor: 'usdc', red: 'Base', plan: plan.tipo, hasta: plan.hasta ?? null, admin: !!plan.admin,
-      // Renovación: se puede pagar sin Premium o en su último mes; «vencio» = cuándo acabó el anterior
-      puedeRenovar: !plan.admin && puedeRenovar(cuenta.plan),
-      vencio: cuenta.plan?.proveedor === 'usdc' && cuenta.plan.hasta && cuenta.plan.hasta <= Date.now() ? cuenta.plan.hasta : null,
-      opciones: OPCIONES.map((o) => ({ ...o, texto: `${fmt(o.usdc * 1e6)} USDC` })),
+      activo, proveedor: KOFI ? 'kofi' : 'usdc', red: 'Base', plan: plan.tipo, hasta: plan.hasta ?? null, admin: !!plan.admin,
+      // Renovación: con Ko-fi se puede pagar siempre (los meses se suman); con USDC, sin VIP o en su último mes
+      puedeRenovar: !plan.admin && (KOFI || puedeRenovar(cuenta.plan)),
+      vencio: conPlan && cuenta.plan.hasta && cuenta.plan.hasta <= Date.now() ? cuenta.plan.hasta : null,
+      opciones: KOFI ? KOFI_PLANES.map((o) => ({ ...o, texto: eur(o.euros), titulo: mesesTexto(o.meses) }))
+        : OPCIONES.map((o) => ({ ...o, texto: `${fmt(o.usdc * 1e6)} USDC` })),
       precio: await precioTexto(), pendiente,
-      pagos: (cuenta.plan?.proveedor === 'usdc' ? cuenta.plan.pagos ?? [] : []).slice(-5).reverse()
-        .map((x) => ({ fecha: x.fecha, meses: x.meses, importe: x.importe ? fmt(x.importe) : null, tx: x.tx ?? null })),
+      pagos: (conPlan ? cuenta.plan.pagos ?? [] : []).slice(-5).reverse()
+        .map((x) => ({ fecha: x.fecha, meses: x.meses, importe: x.importe ? fmt(x.importe) : null, importeTexto: importeTexto(x), tx: x.tx ?? null })),
       // Premium no ve anuncios: ni se le manda la configuración
       anuncios: plan.tipo === 'premium' ? null : await anuncios(),
     });
   }
   if (!activo) throw error(503, 'Los pagos no están activados todavía');
+  if (ruta.startsWith('/api/pago/kofi/')) return atenderKofi(ruta, req, res, json, cuenta, url);
+  if (!usdc) throw error(503, 'El pago con USDC no está activado');
 
   // Cómo va un pedido (la pantalla de pago lo mira cada pocos segundos; si hace falta, repasa ya)
   if (ruta === '/api/pago/usdc/estado') {
@@ -398,21 +438,119 @@ export async function atender(ruta, req, res, json, cuenta) {
 export async function resumenAdmin() {
   const e = await leerEstado();
   return {
-    estado, direccion: activo ? DIRECCION : null, opciones: OPCIONES,
+    estado, direccion: usdc ? DIRECCION : null, opciones: OPCIONES,
     pedidos: e.pedidos.slice(-100).reverse().map((x) => ({ id: x.id, usuario: x.usuario, meses: x.meses, importe: fmt(x.importe), creado: x.creado, tx: x.tx ?? null, pagado: x.pagado ?? null })),
-    sueltos: e.sueltos.slice().reverse().map((x) => ({ tx: x.tx, de: x.de, importe: fmt(x.importe), fecha: x.fecha, asignado: x.asignado ?? null })),
+    sueltos: [
+      ...e.ksueltos.map((x) => ({ tx: x.tx, de: `Ko-fi · ${x.nombre || 'sin nombre'}${x.mensaje ? ` · «${x.mensaje}»` : ''}`, importe: `${x.euros} ${x.moneda}`, fecha: x.fecha, asignado: x.asignado ?? null })),
+      ...e.sueltos.map((x) => ({ tx: x.tx, de: x.de, importe: fmt(x.importe), fecha: x.fecha, asignado: x.asignado ?? null })),
+    ].sort((a, b) => b.fecha - a.fecha),
+    kofi: KOFI ? { url: KOFI_URL, planes: KOFI_PLANES, pedidos: e.kpedidos.slice(-100).reverse().map((x) => ({ codigo: x.codigo, usuario: x.usuario, meses: x.meses, euros: x.euros, creado: x.creado, pagado: x.pagado ?? null })) } : null,
   };
 }
 // Un pago sin identificar se asigna a una cuenta (meses a mano)
 export function asignarSuelto(tx, cuentaId, meses, quien) {
   return conEstado(async (e) => {
-    const s = e.sueltos.find((x) => x.tx === tx);
+    const k = e.ksueltos.find((x) => x.tx === tx);
+    const s = k ?? e.sueltos.find((x) => x.tx === tx);
     if (!s) throw error(404, 'Ese pago no está en la lista');
     if (s.asignado) throw error(409, 'Ese pago ya se asignó');
-    await darMeses(cuentaId, meses, { tx, importe: s.importe, de: s.de, asignadoPor: quien });
+    if (k) {
+      await darMeses(cuentaId, meses, { kofi: tx, euros: k.euros, asignadoPor: quien }, 'kofi');
+      if (k.cliente) e.kclientes[k.cliente] = cuentaId; // la próxima vez desde ese correo, sola
+    } else await darMeses(cuentaId, meses, { tx, importe: s.importe, de: s.de, asignadoPor: quien });
     s.asignado = { cuenta: cuentaId, meses, por: quien, fecha: Date.now() };
   });
 }
 
 // Sin suscripciones: al borrar una cuenta no hay nada que cancelar
 export async function cancelarDe() {}
+
+// ---------- Ko-fi: pedidos, aviso de pago y activación ----------
+const LETRAS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0/O ni 1/I/L, que se confunden
+const nuevoCodigo = () => 'MV' + Array.from({ length: 6 }, () => LETRAS[randomInt(LETRAS.length)]).join('');
+const paraKofi = (x) => ({ id: x.id, codigo: x.codigo, meses: x.meses, titulo: mesesTexto(x.meses), euros: x.euros, importeTexto: eur(x.euros), url: KOFI_URL, estado: x.tx ? 'pagado' : 'esperando' });
+// Meses según lo pagado: el plan más largo cuyo precio alcanza
+const mesesPorImporte = (euros) => KOFI_PLANES.filter((o) => euros + 0.005 >= o.euros).sort((a, b) => b.meses - a.meses)[0]?.meses ?? 0;
+const huella = (correo) => (correo ? createHash('sha256').update(`morvehtv-kofi:${String(correo).trim().toLowerCase()}`).digest('hex').slice(0, 32) : null);
+
+async function atenderKofi(ruta, req, res, json, cuenta, url) {
+  if (!KOFI) throw error(503, 'El pago con Ko-fi no está activado');
+  if (ruta === '/api/pago/kofi/estado') {
+    const id = String(url.searchParams.get('id') ?? '');
+    const x = (await leerEstado()).kpedidos.find((y) => y.id === id && y.cuenta === cuenta.id);
+    if (!x) throw error(404, 'Ese pedido no existe');
+    return json(res, 200, { estado: x.tx ? 'pagado' : 'esperando', plan: (await p.planDe(await p.cuentaPorId(cuenta.id))).tipo });
+  }
+  if (req.method !== 'POST') throw error(405, 'Método no permitido');
+  let cuerpo = '';
+  for await (const t of req) { cuerpo += t; if (cuerpo.length > 10000) throw error(413, 'Demasiado grande'); }
+  const datos = cuerpo ? JSON.parse(cuerpo) : {};
+  if (ruta === '/api/pago/kofi/pedido') {
+    const plan = await p.planDe(cuenta);
+    if (plan.admin) throw error(409, 'Los administradores ya son VIP de por vida');
+    if (datos.acepta !== true) throw error(400, 'Marca la casilla para continuar');
+    const o = KOFI_PLANES.find((x) => x.id === String(datos.opcion));
+    if (!o) throw error(400, 'Elige una de las opciones');
+    await p.anotarAceptacion(cuenta.id, 'premium');
+    const x = await conEstado((e) => {
+      // Un pedido abierto por cuenta: el nuevo sustituye al anterior sin pagar
+      e.kpedidos = e.kpedidos.filter((y) => !(y.cuenta === cuenta.id && !y.tx));
+      let codigo;
+      do codigo = nuevoCodigo(); while (e.kpedidos.some((y) => y.codigo === codigo));
+      const nuevo = { id: randomUUID(), codigo, cuenta: cuenta.id, usuario: cuenta.usuario, meses: o.meses, euros: o.euros, creado: Date.now() };
+      e.kpedidos.push(nuevo);
+      return nuevo;
+    });
+    console.log(`Pagos: ${cuenta.usuario} pide ${mesesTexto(o.meses)} de VIP por Ko-fi (${eur(o.euros)}, código ${x.codigo})`);
+    return json(res, 200, paraKofi(x));
+  }
+  if (ruta === '/api/pago/kofi/cancelar') {
+    await conEstado((e) => { e.kpedidos = e.kpedidos.filter((x) => !(x.id === String(datos.id) && x.cuenta === cuenta.id && !x.tx)); });
+    return json(res, 200, { ok: true });
+  }
+  throw error(404, 'No existe');
+}
+
+// Aviso de Ko-fi (POST /api/kofi/webhook, sin sesión): un formulario con «data» = JSON del pago.
+// Se comprueba su token; cada pago se apunta una sola vez (Ko-fi puede repetir el aviso).
+export async function webhookKofi(req, res, json) {
+  if (!KOFI) return json(res, 404, { error: 'Ko-fi no está activado' });
+  if (req.method !== 'POST') return json(res, 405, { error: 'Método no permitido' });
+  let cuerpo = '';
+  for await (const t of req) { cuerpo += t; if (cuerpo.length > 50000) return json(res, 413, { error: 'Demasiado grande' }); }
+  let d;
+  try { d = JSON.parse(new URLSearchParams(cuerpo).get('data') ?? cuerpo); } catch { return json(res, 400, { error: 'Formato no válido' }); }
+  const token = Buffer.from(String(d?.verification_token ?? ''));
+  const bueno = Buffer.from(KOFI_TOKEN);
+  if (token.length !== bueno.length || !timingSafeEqual(token, bueno)) {
+    console.warn('Pagos: aviso de Ko-fi con un token que no es el tuyo (ignorado)');
+    return json(res, 403, { error: 'Token no válido' });
+  }
+  const tx = String(d.kofi_transaction_id ?? d.message_id ?? '').slice(0, 80);
+  const euros = Math.round(Number(String(d.amount ?? '0').replace(',', '.')) * 100) / 100;
+  const moneda = String(d.currency ?? '').toUpperCase().slice(0, 5);
+  const mensaje = String(d.message ?? '').slice(0, 300);
+  const cliente = huella(d.email);
+  if (!tx) return json(res, 400, { error: 'Sin identificador de pago' });
+  const r = await conEstado(async (e) => {
+    if (e.kvistos.includes(tx)) return 'repetido';
+    e.kvistos.push(tx);
+    const m = /MV[\s-]*([A-Z0-9]{6})/i.exec(`${mensaje} ${d.from_name ?? ''}`);
+    let pedido = m ? e.kpedidos.find((x) => x.codigo === `MV${m[1].toUpperCase()}`) : null;
+    const meses = moneda === 'EUR' ? mesesPorImporte(euros) : 0;
+    // Sin código: si ese correo ya pagó antes, es de la misma cuenta
+    let cuentaId = pedido?.cuenta ?? (cliente ? e.kclientes[cliente] : null);
+    if (cuentaId && !(await p.cuentaPorId(cuentaId))) cuentaId = null;
+    if (!cuentaId || !meses) {
+      e.ksueltos.push({ tx, euros, moneda, nombre: String(d.from_name ?? '').slice(0, 60), mensaje, cliente, fecha: Date.now() });
+      console.log(`Pagos: Ko-fi ${euros} ${moneda} sin poder asignarlo (${!cuentaId ? 'sin código' : 'importe por debajo del plan más barato o en otra moneda'})`);
+      return 'suelto';
+    }
+    await darMeses(cuentaId, meses, { kofi: tx, euros }, 'kofi');
+    if (pedido) { pedido.tx = tx; pedido.pagado = Date.now(); }
+    if (cliente) e.kclientes[cliente] = cuentaId;
+    console.log(`Pagos: Ko-fi ${eur(euros)} → ${mesesTexto(meses)} de VIP${pedido ? ` (código ${pedido.codigo})` : ' (mismo correo que antes)'}`);
+    return 'activado';
+  });
+  return json(res, 200, { ok: true, resultado: r });
+}

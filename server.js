@@ -725,6 +725,8 @@ http
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(t);
       }
+      // Aviso de pago de Ko-fi (lo manda Ko-fi, sin sesión: se comprueba con su token)
+      if (url.pathname === '/api/kofi/webhook') return await pagos.webhookKofi(req, res, json);
       // El banner de la red de anuncios, dentro de un marco aislado de la propia web: es la única
       // página que se deja enmarcar (solo por MorvehTV) y que dice a la red desde qué web se ve
       // (solo el dominio: así la red comprueba que es la web dada de alta)
