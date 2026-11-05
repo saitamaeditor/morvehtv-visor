@@ -1,6 +1,8 @@
 // Avisos de contenido nuevo en un grupo de Telegram con temas: cada sección de subida (carpeta
 // de primer nivel de e2: «SERIES», «Estrenos 2026»…) tiene su tema, que se crea solo, también
-// para las carpetas nuevas. Los episodios de una misma serie subidos juntos van en un mensaje.
+// para las carpetas nuevas. De una serie se avisa una sola vez, cuando llega por primera vez
+// (con todos los episodios que hayan llegado juntos): los capítulos que se suban después a una
+// serie que ya estaba no avisan.
 //
 // Se configura con variables de entorno (nunca en el código: el repositorio es público):
 //  · TELEGRAM_TOKEN: el del bot de @BotFather. El bot tiene que ser administrador del grupo con
@@ -167,6 +169,13 @@ async function mensaje(carpeta, clave, archivos) {
   const datosTitulo = (f) => [f.valoracion && `⭐ ${Number(f.valoracion).toFixed(1)}`, f.anio, ...(f.generos ?? []).slice(0, 3)].filter(Boolean).join(' · ');
 
   if (!m || !m.encontrado) {
+    // Sin ficha: si es la carpeta de una serie, se anuncia la serie con su nombre (no los capítulos)
+    const pareceSerie = clave.endsWith('/') && (archivos.length > 1 || archivos.some((a) => /S\d{1,2}\s*E\d{1,3}|\b\d{1,2}x\d{1,3}\b|temporada|episodio|cap[ií]tulo/i.test(a.key)));
+    if (pareceSerie) {
+      const serie = clave.split('/').filter(Boolean).pop();
+      const texto = `📺 <b>Nueva serie en ${html(seccion.nombre)}</b>\n\n<b>${html(serie)}</b>\n▸ ${archivos.length} episodio${archivos.length === 1 ? '' : 's'} disponible${archivos.length === 1 ? '' : 's'}\n\n${carpetaE2}`;
+      return { texto, foto: null, boton };
+    }
     const nombres = archivos.slice(0, 8).map((a) => `• ${html(limpio(a.key))}`);
     if (archivos.length > 8) nombres.push(`• y ${archivos.length - 8} más`);
     const texto = `${seccion.emoji} <b>${archivos.length === 1 ? 'Nuevo' : `${archivos.length} nuevos`} en ${html(seccion.nombre)}</b>\n\n${nombres.join('\n')}\n\n${carpetaE2}`;
@@ -180,12 +189,12 @@ async function mensaje(carpeta, clave, archivos) {
       ? { t: e.episodio.temporada, n: e.episodio.numero, titulo: e.episodio.titulo }
       : { t: 0, n: 0, titulo: limpio(archivos[i].key) }))
       .sort((a, b) => a.t - b.t || a.n - b.n);
-    cabecera = lista.length === 1 ? `📺 <b>Nuevo episodio en ${html(seccion.nombre)}</b>` : `📺 <b>${lista.length} episodios nuevos en ${html(seccion.nombre)}</b>`;
-    const lineas = lista.slice(0, 8).map((e) => (e.n ? `▸ T${e.t}·E${String(e.n).padStart(2, '0')} ${html(e.titulo)}` : `▸ ${html(e.titulo)}`));
-    if (lista.length > 8) lineas.push(`▸ y ${lista.length - 8} más`);
-    cuerpo = lineas.join('\n');
-    if (lista.length === 1 && m.episodio.sinopsis) cuerpo += `\n\n<i>${html(corto(m.episodio.sinopsis, 280))}</i>`;
-    else if (m.sinopsis) cuerpo += `\n\n<i>${html(corto(m.sinopsis, 220))}</i>`;
+    // Una serie nueva: se anuncia la serie (no la lista de capítulos)
+    cabecera = `📺 <b>Nueva serie en ${html(seccion.nombre)}</b>`;
+    const temporadas = [...new Set(lista.map((e) => e.t).filter(Boolean))];
+    const disponible = `▸ ${lista.length} episodio${lista.length === 1 ? '' : 's'} disponible${lista.length === 1 ? '' : 's'}`
+      + (temporadas.length ? ` (${temporadas.length === 1 ? `temporada ${temporadas[0]}` : `temporadas ${temporadas.join(', ')}`})` : '');
+    cuerpo = m.sinopsis ? `<i>${html(corto(m.sinopsis, 300))}</i>\n\n${disponible}` : disponible;
   } else {
     cabecera = `${seccion.emoji} <b>Nuevo en ${html(seccion.nombre)}</b>`;
     if (m.sinopsis) cuerpo = `<i>${html(corto(m.sinopsis, 320))}</i>`;
@@ -393,7 +402,17 @@ export async function repaso(foto) {
       if (!grupos.has(id)) grupos.set(id, { carpeta: `${partes[0]}/`, clave, archivos: [] });
       grupos.get(id).archivos.push(v);
     }
+    // Una carpeta (serie) que ya tenía vídeos de antes no se vuelve a anunciar: son capítulos
+    // nuevos de algo que ya estaba
+    const corte = datos.ultimo;
+    const yaEstaba = (clave) => clave.endsWith('/') && videos.some((v) => v.key.startsWith(clave) && v.fecha <= corte);
     for (const g of grupos.values()) {
+      if (yaEstaba(g.clave)) {
+        datos.ultimo = Math.max(datos.ultimo, ...g.archivos.map((a) => a.fecha));
+        await guardarDatos();
+        console.log(`Telegram: sin aviso (capítulos nuevos de «${g.clave}», que ya estaba)`);
+        continue;
+      }
       const m = await mensaje(g.carpeta, g.clave, g.archivos);
       let tema = datos.temas[g.carpeta] ?? await crearTema(g.carpeta);
       try {
