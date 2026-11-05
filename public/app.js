@@ -318,9 +318,16 @@ function pintarInicio(carpetas, archivos) {
   const destacado = el('section', 'destacado');
   destacado.hidden = true;
   items.append(destacado);
-  const medios = fila('Mis medios', null, 'medios');
-  medios.c.append(...portada(carpetas).children);
-  items.append(medios.s);
+  // Categorías: una línea de botones con su nombre (sin mosaicos de biblioteca ni recuentos)
+  const cats = el('nav', 'categorias-chips');
+  cats.setAttribute('aria-label', 'Categorías');
+  for (const { cat, suyas } of categoriasDe(carpetas)) {
+    const b = el('button', 'chip-cat', cat.nombre);
+    b.title = suyas.map(nombre).join(', ');
+    b.onclick = () => irA(suyas[0]);
+    cats.append(b);
+  }
+  items.append(cats);
   // Plan Básico: un anuncio debajo de las categorías
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);
@@ -358,7 +365,7 @@ function pintarInicio(carpetas, archivos) {
       const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
       const titulos = entrada ? entrada.titulos.slice(0, 20) : [];
       if (!titulos.length) continue;
-      const f = fila(`Últimos añadidos en ${cat.nombre}`, () => irA(suyas[0]));
+      const f = fila(`Novedades en ${cat.nombre}`, () => irA(suyas[0]));
       const pelis = titulos.filter((x) => x.tipo === 'archivo');
       for (const x of titulos) {
         if (x.tipo === 'carpeta') {
@@ -632,7 +639,8 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
     if (d.episodio.sinopsis) meta.after(el('p', 'resumen', d.episodio.sinopsis));
     return;
   }
-  // Película o serie: nota, año, duración o temporadas y géneros
+  // Película o serie: solo el cartel (el título y los datos se ven en la ficha y al pasar por encima)
+  if (imagen) t.classList.add('con-imagen');
   meta.textContent = [d.valoracion && `★ ${d.valoracion}`,
     d.tipo === 'serie' ? (d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`) : d.duracion && `${d.duracion} min`,
     d.generos.slice(0, 2).join(', '), tam].filter(Boolean).join(' · ');
