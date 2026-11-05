@@ -136,7 +136,12 @@ function natural(a, b) {
 // aunque cada archivo esté nombrado de una forma
 function capitulo(k) {
   const m = nombre(k).match(/(?:^|[^a-z0-9])(?:s(\d{1,2})[ ._-]?e(\d{1,3})|(\d{1,2})x(\d{2,3})(?!\d)|t(\d{1,2})[ ._-]?e(\d{1,3}))/i);
-  if (!m) return null;
+  if (!m) {
+    // «Capitulo_05» / «Episodio 5» dentro de una carpeta «Temporada_02» (como los sube el bot)
+    const c = nombre(k).match(/(?:^|[^a-z0-9])(?:cap[ií]tulo|episodio|ep)[ ._-]*0*(\d{1,3})(?!\d)/i);
+    const t = c && numTemporada(padre(k));
+    return c && t !== null ? t * 1000 + Number(c[1]) : null;
+  }
   const n = m.slice(1).filter(Boolean).map(Number);
   return n[0] * 1000 + n[1];
 }
@@ -1284,7 +1289,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
 // imágenes). Si es el último (o el primero) de una carpeta «Temporada N», sigue en la temporada
 // siguiente (o anterior) de la misma serie.
 const esVideoClave = (k) => { const c = tipo(k)[1]; return c === 'video' || c === 'video-raro'; };
-const RE_TEMPORADA = /^(?:temporada|season|temp|t|s)\s*0*(\d{1,2})$/i;
+const RE_TEMPORADA = /^(?:temporada|season|temp|t|s)[\s._-]*0*(\d{1,2})$/i;
 const numTemporada = (carpeta) => { const m = nombre(carpeta).trim().match(RE_TEMPORADA); return m ? Number(m[1]) : (/^especiales?$/i.test(nombre(carpeta).trim()) ? 0 : null); };
 // Es un episodio si lo dice el nombre (S01E02, 1x02…), si está en una carpeta «Temporada N» o si
 // está dentro de la carpeta de una serie (cualquier subcarpeta de una sección que no sea de películas)
