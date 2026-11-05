@@ -398,6 +398,9 @@ async function hlsIniciar(p, quien) {
   if (sesionesHls.size >= MAX_FFMPEG) throw Object.assign(new Error('El servidor está ocupado preparando otros vídeos. Prueba en un minuto.'), { status: 503 });
   const desde = Math.max(0, Math.floor(Number(p.get('desde')) || 0));
   const info = await medio(key);
+  // Sin pista de imagen (p. ej. solo el audio de un vídeo, o un archivo incompleto) no hay nada que
+  // preparar: se dice claro en vez de mostrar el error de ffmpeg
+  if (!info.video) throw Object.assign(new Error('Este archivo no tiene imagen (solo audio o está incompleto): hay que volver a subir el vídeo completo'), { status: 422 });
   const audio = Math.min(Math.max(0, Number(p.get('audio')) || 0), Math.max(0, info.audios.length - 1));
   const url = await firmar(key, { segundos: 12 * 3600 });
   const id = randomUUID();
@@ -409,7 +412,8 @@ async function hlsIniciar(p, quien) {
     '-v', 'error', '-readrate', '3', ...RAFAGA, '-multiple_requests', '1',
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_on_network_error', '1', '-reconnect_delay_max', '10',
     '-ss', String(desde), '-i', url,
-    '-map', '0:v:0', ...(info.audios.length ? ['-map', `0:a:${audio}`] : []),
+    // «?»: si una pista no está donde decía ffprobe, se sigue sin ella en vez de fallar
+    '-map', '0:v:0', ...(info.audios.length ? ['-map', `0:a:${audio}?`] : []),
     ...(VIDEO_NATIVO.includes(info.video)
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-g', '96']),
