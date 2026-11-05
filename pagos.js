@@ -253,50 +253,33 @@ async function paraPagar(x) {
 }
 
 // ---------- Anuncios ----------
-const ADSENSE = String(process.env.ANUNCIOS_ADSENSE ?? '').trim();
-const ADSENSE_SLOT = String(process.env.ANUNCIOS_ADSENSE_SLOT ?? '').trim();
-const VAST = String(process.env.ANUNCIOS_VAST ?? '').trim();
-// Los anuncios solo salen AL ENTRAR A VER UN VÍDEO: uno antes de que empiece (ANUNCIOS_PREVIOS
-// cambia cuántos, máximo 6) y, como mínimo, cada ANUNCIOS_ESPERA_MIN minutos (0 = antes de cada vídeo).
-// Primero el de Google (ANUNCIOS_VAST), si lo hay.
-const PREVIOS = Math.min(6, Math.max(1, Number(process.env.ANUNCIOS_PREVIOS) || 1));
-const ESPERA_MIN = Math.max(0, Number(process.env.ANUNCIOS_ESPERA_MIN) || 0);
-// Lo demás, apagado salvo que se pida: pausas publicitarias durante el vídeo cada
-// ANUNCIOS_CADA_MIN minutos, anuncio pequeño al pausar (ANUNCIOS_PAUSA=1) y banners en la portada y
-// las carpetas (ANUNCIOS_BANNERS=1)
-const CADA_MIN = Number(process.env.ANUNCIOS_CADA_MIN) > 0 ? Math.max(5, Number(process.env.ANUNCIOS_CADA_MIN)) : 0;
-const EN_PAUSA = process.env.ANUNCIOS_PAUSA === '1';
-const BANNERS = process.env.ANUNCIOS_BANNERS === '1';
-// Anuncios apagados salvo que se pida ANUNCIOS=1: sin eso no se manda ninguna configuración de
-// anuncios a la web ni a la app (ni los de Google, ni los propios del gestor)
-export const CON_ANUNCIOS = process.env.ANUNCIOS === '1';
+// Solo anuncios en vídeo ANTES DE REPRODUCIR, de redes de anuncios externas que no son Google
+// (Adsterra, ExoClick, HilltopAds, Monetag…): en ANUNCIOS_VAST, la etiqueta (dirección) VAST que
+// da la red. Se pueden poner varias separadas por espacios o saltos de línea: si la primera no
+// tiene anuncio para ese usuario, se prueba la siguiente. Ni anuncios propios ni de Google: las
+// direcciones de Google (doubleclick, googlesyndication…) se ignoran.
+const ES_GOOGLE = /(^|\.)(google|googlesyndication|googleadservices|doubleclick|googlevideo|gstatic|2mdn|youtube)\.[a-z.]+$/i;
+const VAST = String(process.env.ANUNCIOS_VAST ?? '').split(/\s+/).filter((u) => {
+  try { const x = new URL(u); return x.protocol === 'https:' && !ES_GOOGLE.test(x.hostname); } catch (e) { return false; }
+}).slice(0, 6);
+// Cuántos anuncios seguidos antes de cada vídeo (ANUNCIOS_PREVIOS, 1 a 3) y a los cuántos
+// segundos se pueden saltar si el anuncio no dice otra cosa (ANUNCIOS_SALTAR, 5 por defecto;
+// si la red marca el suyo, manda el de la red)
+const PREVIOS = Math.min(3, Math.max(1, Number(process.env.ANUNCIOS_PREVIOS) || 1));
+const SALTAR = Math.min(30, Math.max(0, Number(process.env.ANUNCIOS_SALTAR ?? 5) || 0));
+// Anuncios apagados salvo que se pida ANUNCIOS=1 (y haya alguna etiqueta VAST)
+export const CON_ANUNCIOS = process.env.ANUNCIOS === '1' && VAST.length > 0;
 async function anuncios() {
   if (!CON_ANUNCIOS) return null;
-  const propios = ((await p.leerAjuste('anuncios')) ?? []).filter((a) => a.activo !== false);
-  return {
-    adsense: /^ca-pub-\d+$/.test(ADSENSE) ? { cliente: ADSENSE, slot: ADSENSE_SLOT || null } : null,
-    vast: /^https:\/\//.test(VAST) ? VAST : null,
-    previos: { cantidad: PREVIOS, esperaMin: ESPERA_MIN },
-    durante: { cadaMin: CADA_MIN, cantidad: 1 },
-    pausa: EN_PAUSA,
-    banners: BANNERS,
-    propios: await Promise.all(propios.map(async ({ id, imagen, enlace, texto, titulo, video }) => ({
-      id, imagen, enlace, texto, titulo,
-      // El vídeo del anuncio: un archivo subido desde el gestor (en e2) o una dirección https
-      video: !video ? null : /^https:\/\//.test(video) ? video : await firmar(video, { segundos: 6 * 3600 }),
-    }))),
-  };
+  return { vast: VAST, previos: { cantidad: PREVIOS, esperaMin: 0 }, saltarEn: SALTAR, durante: { cadaMin: 0 }, pausa: false, banners: false, propios: [] };
 }
 
-// ads.txt: el archivo público con el que Google comprueba que la web puede mostrar sus anuncios.
-// Sale de ANUNCIOS_ADSTXT (el texto que da Google, tal cual) o, si no está, del ca-pub de
-// ANUNCIOS_ADSENSE / ANUNCIOS_GOOGLE_PUB
+// ads.txt: algunas redes piden publicar sus líneas; se pone tal cual en ANUNCIOS_ADSTXT
+// (con \n para separar líneas)
 export function adsTxt() {
   if (!CON_ANUNCIOS) return null;
   const propio = String(process.env.ANUNCIOS_ADSTXT ?? '').trim();
-  if (propio) return propio.replace(/\\n/g, '\n') + '\n';
-  const pub = String(process.env.ANUNCIOS_GOOGLE_PUB ?? ADSENSE).trim().replace(/^ca-/, '');
-  return /^pub-\d{10,20}$/.test(pub) ? `google.com, ${pub}, DIRECT, f08c47fec0942fa0\n` : null;
+  return propio ? propio.replace(/\\n/g, '\n') + '\n' : null;
 }
 
 // ---------- Rutas (con sesión) ----------

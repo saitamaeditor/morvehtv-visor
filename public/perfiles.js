@@ -364,36 +364,12 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && yo
 // (Premium con USDC no sale de la web: no hay vuelta de ninguna página de pago)
 function vueltaDelPago() {}
 
-let adsenseCargado = false;
-function cargarAdsense(cliente) {
-  if (adsenseCargado) return;
-  adsenseCargado = true;
-  const s = document.createElement('script');
-  s.async = true; s.crossOrigin = 'anonymous';
-  s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(cliente);
-  document.head.append(s);
-}
-
 const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
 
-// Banner: AdSense (solo en la web: dentro de la app de Android no está permitido), uno propio
-// con imagen al azar o, si no hay ninguno, el aviso de Premium
+// Banner (apagado: solo hay anuncios antes de reproducir)
 function contenidoBanner() {
-  const a = planInfo.anuncios;
-  if (a.adsense && a.adsense.slot && !enApp()) {
-    cargarAdsense(a.adsense.cliente);
-    const ins = el('ins', 'adsbygoogle');
-    ins.style.display = 'block';
-    ins.setAttribute('data-ad-client', a.adsense.cliente);
-    ins.setAttribute('data-ad-slot', a.adsense.slot);
-    ins.setAttribute('data-ad-format', 'auto');
-    ins.setAttribute('data-full-width-responsive', 'true');
-    setTimeout(() => { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {} }, 0);
-    return ins;
-  }
-  const conImagen = (a.propios || []).filter((x) => x.imagen || x.titulo);
-  if (conImagen.length) return tarjetaAnuncio(azar(conImagen));
-  return promoPremium(true);
+  const conImagen = (planInfo.anuncios.propios || []).filter((x) => x.imagen || x.titulo);
+  return conImagen.length ? tarjetaAnuncio(azar(conImagen)) : null;
 }
 function tarjetaAnuncio(x) {
   const c = el(x.enlace ? 'a' : 'div', 'anuncio-propio');
@@ -430,11 +406,10 @@ function anuncioBanner(donde) {
 }
 
 // ---------- Anuncios antes de reproducir (plan Básico) ----------
-// Antes de cada vídeo, una tanda de varios anuncios seguidos («Anuncio 1 de 3»…; cuántos y cada
-// cuánto lo dice el servidor): primero el de Google (VAST, solo en la web), luego tus vídeos de
-// anuncio y tus anuncios con imagen, sin repetir ninguno en la misma tanda; si faltan, el aviso
-// de Premium. Cada uno se salta a los 5 s y, si acaba antes, pasa solo al siguiente. Devuelve
-// una promesa que se cumple cuando hay que empezar el vídeo.
+// Antes de cada vídeo, en la web y en la app, uno o varios anuncios en vídeo (VAST) de las redes
+// externas que diga el servidor (nunca de Google ni propios). Se saltan cuando la red lo permite
+// o, si no lo dice, a los ANUNCIOS_SALTAR segundos. Si ninguna red tiene anuncio, el vídeo empieza
+// sin más. Devuelve una promesa que se cumple cuando hay que empezar el vídeo.
 const SALTAR_EN = 5;
 let ultimoPrevio = 0;
 let marcaAnuncio = 'Anuncio';
@@ -509,24 +484,17 @@ async function anuncioPrevio() {
 // Una tanda de «cantidad» anuncios seguidos; «nombre» es lo que pone la etiqueta («Anuncio»,
 // «Pausa publicitaria»…). Devuelve cuando han acabado (o se cerró el vídeo).
 async function tandaAnuncios(cantidad, nombre) {
-  const a = planInfo.anuncios;
-  // La tanda: Google, tus vídeos, tus imágenes y, si aún faltan, el aviso de Premium
-  const tanda = [];
-  if (a.vast && !enApp()) tanda.push({ tipo: 'vast' });
-  barajar((a.propios || []).filter((x) => x.video)).forEach((x) => tanda.push({ tipo: 'video', x }));
-  barajar((a.propios || []).filter((x) => !x.video && (x.imagen || x.titulo))).forEach((x) => tanda.push({ tipo: 'imagen', x }));
-  if (planInfo.activo) tanda.push({ tipo: 'promo' });
-  const total = Math.min(cantidad, tanda.length);
-  let hechos = 0;
-  for (const t of tanda) {
-    if (hechos >= total) break;
-    // Si se cerró el vídeo (o se fue a hacerse Premium), no siguen los anuncios
-    if (!$('#visor').classList.contains('abierto')) break;
-    marcaAnuncio = total > 1 ? `${nombre} · ${hechos + 1} de ${total}` : nombre;
-    if (t.tipo === 'vast') { if (await anuncioVast(a.vast)) hechos++; continue; } // si Google no da anuncio, cuenta el siguiente
-    if (t.tipo === 'video') await anuncioVideo(t.x);
-    else await anuncioImagen(t.tipo === 'imagen' ? t.x : null);
-    hechos++;
+  const etiquetas = planInfo.anuncios.vast || [];
+  for (let n = 0; n < cantidad; n++) {
+    let salio = false;
+    // Si una red no tiene anuncio para este usuario, se prueba la siguiente
+    for (const etiqueta of etiquetas) {
+      // Si se cerró el vídeo, no siguen los anuncios
+      if (!$('#visor').classList.contains('abierto')) { marcaAnuncio = 'Anuncio'; return; }
+      marcaAnuncio = cantidad > 1 ? `${nombre} · ${n + 1} de ${cantidad}` : nombre;
+      if (await anuncioVast(etiqueta)) { salio = true; break; }
+    }
+    if (!salio) break;
   }
   marcaAnuncio = 'Anuncio';
 }
@@ -583,77 +551,153 @@ function anuncioImagen(x) {
   });
 }
 
-// Anuncio de Google en vídeo (VAST, con el SDK IMA de Google). Devuelve true si se mostró
-// (o se intentó y terminó); false si no se pudo (sin anuncio disponible, bloqueador…)
-let imaCargado = null;
-function cargarIma() {
-  if (!imaCargado) {
-    imaCargado = new Promise((ok, mal) => {
-      const s = document.createElement('script');
-      s.src = 'https://imasdk.googleapis.com/js/sdkloader/ima3.js';
-      s.onload = () => (window.google && google.ima ? ok() : mal(new Error('IMA')));
-      s.onerror = () => { imaCargado = null; mal(new Error('IMA bloqueado')); };
-      document.head.append(s);
-    });
-  }
-  return imaCargado;
+// ---------- Anuncio en vídeo VAST (redes externas, sin SDK de nadie) ----------
+// Se lee el XML VAST de la red aquí mismo (siguiendo sus «Wrapper», hasta 5), se elige el MP4 o
+// WebM que mejor va y se reproduce en nuestro propio reproductor, con nuestro botón «Saltar» (que
+// funciona con el dedo, el ratón y el mando de la tele, también en la app). Se avisan a la red
+// las impresiones, los cuartiles, el clic, el salto y los errores, como pide VAST.
+const SEG_VAST = (t) => { const m = /^(\d+):(\d+):(\d+(?:\.\d+)?)$/.exec(String(t || '').trim()); return m ? +m[1] * 3600 + +m[2] * 60 + +m[3] : null; };
+function macrosVast(u, extra = {}) {
+  const azarNum = String(Math.floor(Math.random() * 1e10));
+  const valores = { CACHEBUSTING: azarNum, CACHEBUSTER: azarNum, RANDOM: azarNum, TIMESTAMP: new Date().toISOString(),
+    PAGEURL: location.origin + '/', PAGE_URL: location.origin + '/', REFERRER_URL: location.origin + '/', DOMAIN: location.hostname,
+    WIDTH: String(Math.round(innerWidth)), HEIGHT: String(Math.round(innerHeight)), ...extra };
+  return String(u).trim()
+    .replace(/\[([A-Z_]+)\]/g, (m, k) => (k in valores ? encodeURIComponent(valores[k]) : m))
+    .replace(/%%CACHEBUSTER%%|\{cachebuster\}|\{random\}/gi, azarNum)
+    .replace(/\{timestamp\}/gi, String(Date.now()));
 }
+// Avisos a la red (píxeles): sin cookies ni datos nuestros, solo la dirección que dio la red
+function pixelVast(urls, extra) {
+  (urls || []).forEach((u) => { try { const i = new Image(); i.referrerPolicy = 'origin'; i.src = macrosVast(u, extra); } catch (e) {} });
+}
+const textosVast = (raiz, sel) => [...raiz.querySelectorAll(sel)].map((n) => n.textContent.trim()).filter((t) => /^https?:\/\//.test(t));
+
+async function leerVast(url, nivel = 0, acum = { impresiones: [], errores: [], eventos: {}, clics: [] }) {
+  if (nivel > 5) throw Object.assign(new Error('Demasiados saltos'), { codigo: 302 });
+  const ctl = new AbortController();
+  const reloj = setTimeout(() => ctl.abort(), 6000);
+  let texto;
+  try {
+    const r = await fetch(macrosVast(url), { credentials: 'omit', signal: ctl.signal, referrerPolicy: 'origin' });
+    if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { codigo: 301 });
+    texto = await r.text();
+  } finally { clearTimeout(reloj); }
+  const xml = new DOMParser().parseFromString(texto, 'text/xml');
+  if (xml.querySelector('parsererror')) throw Object.assign(new Error('XML'), { codigo: 100 });
+  acum.errores.push(...textosVast(xml, 'VAST > Error'));
+  const ad = [...xml.querySelectorAll('VAST > Ad')].find((x) => x.querySelector('InLine, Wrapper'));
+  if (!ad) throw Object.assign(new Error('Sin anuncio'), { codigo: 303 });
+  acum.impresiones.push(...textosVast(ad, 'Impression'));
+  acum.errores.push(...textosVast(ad, ':scope > * > Error'));
+  ad.querySelectorAll('Linear TrackingEvents Tracking').forEach((t) => {
+    const ev = t.getAttribute('event'); const u = t.textContent.trim();
+    if (ev && /^https?:\/\//.test(u)) (acum.eventos[ev] = acum.eventos[ev] || []).push(u);
+  });
+  acum.clics.push(...textosVast(ad, 'Linear VideoClicks ClickTracking'));
+  const wrapper = ad.querySelector('Wrapper');
+  if (wrapper) {
+    const sig = textosVast(wrapper, 'VASTAdTagURI')[0];
+    if (!sig) throw Object.assign(new Error('Wrapper vacío'), { codigo: 303 });
+    return leerVast(sig, nivel + 1, acum);
+  }
+  const lineal = ad.querySelector('InLine Creative Linear');
+  if (!lineal) throw Object.assign(new Error('Sin vídeo'), { codigo: 201 });
+  // Solo vídeo de verdad (MP4/WebM): ni VPAID (código de la red) ni streaming
+  const prueba = document.createElement('video');
+  const medios = [...lineal.querySelectorAll('MediaFile')].map((m) => ({
+    url: m.textContent.trim(), tipo: (m.getAttribute('type') || '').toLowerCase(), ancho: +m.getAttribute('width') || 0,
+    entrega: (m.getAttribute('delivery') || 'progressive').toLowerCase(), api: m.getAttribute('apiFramework'),
+  })).filter((m) => /^https:\/\//.test(m.url) && /^video\/(mp4|webm)$/.test(m.tipo) && m.entrega === 'progressive' && !m.api && prueba.canPlayType(m.tipo));
+  if (!medios.length) throw Object.assign(new Error('Sin vídeo compatible'), { codigo: 403 });
+  // El más cercano al ancho de la pantalla (sin pasarse mucho: ahorra datos en el móvil)
+  const quiero = Math.min(1920, innerWidth * (devicePixelRatio || 1));
+  medios.sort((x, y) => Math.abs(x.ancho - quiero) - Math.abs(y.ancho - quiero));
+  const duracion = SEG_VAST(lineal.querySelector('Duration')?.textContent);
+  const so = lineal.getAttribute('skipoffset');
+  let saltarEn = null;
+  if (so) saltarEn = /%$/.test(so) ? (duracion ? duracion * parseFloat(so) / 100 : null) : SEG_VAST(so);
+  const clic = textosVast(lineal, 'VideoClicks ClickThrough')[0] || null;
+  return { ...acum, video: medios[0].url, duracion, saltarEn, clic };
+}
+
+// Devuelve true si se vio el anuncio (aunque se saltara); false si no hubo anuncio
 function anuncioVast(etiqueta) {
   return new Promise((listo) => {
     let hecho = false;
     let mostrado = false;
+    let datos = null;
+    // (lo que se va leyendo, para avisar de errores aunque el VAST falle a medias)
+    const acum = { impresiones: [], errores: [], eventos: {}, clics: [] };
     const c = capaAnuncio();
-    // Los anuncios de Google traen su «Saltar», pero dentro de un marco al que no llega el mando:
-    // se deja también el nuestro, que salta cuando Google lo permite y si no dice cuánto queda
-    c.saltar.pintar('Anuncio de Google', false);
-    const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
-    const zona = el('div', 'ima');
-    c.escena.classList.add('con-ima');
-    c.escena.append(v, zona);
-    let gestor = null;
+    c.saltar.pintar('Cargando anuncio…', false);
+    const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+    c.escena.append(v);
+    const resto = el('span', 'resto');
+    c.arriba.append(resto);
+    const sonido = el('button', 'boton sonido-anuncio', '🔇 Activar sonido');
+    sonido.hidden = true;
+    sonido.onclick = () => { v.muted = false; sonido.hidden = true; if (datos) pixelVast(datos.eventos.unmute); };
+    c.arriba.append(sonido);
+    let reloj = null;
     function terminar() {
       if (hecho) return; hecho = true;
-      try { if (gestor) gestor.destroy(); } catch (e) {}
+      clearInterval(reloj); clearTimeout(limite);
+      v.pause(); v.removeAttribute('src'); v.load();
       c.capa.remove(); listo(mostrado);
+    }
+    function fallo(codigo) {
+      pixelVast(acum.errores, { ERRORCODE: String(codigo || 900) });
+      terminar();
     }
     c.capa._fin = terminar;
     $('#visor').append(c.capa);
-    const limite = setTimeout(() => { if (!mostrado) terminar(); }, 8000);
-    cargarIma().then(() => {
-      const ima = google.ima;
-      try { ima.settings.setLocale('es'); } catch (e) {}
-      const contenedor = new ima.AdDisplayContainer(zona, v);
-      contenedor.initialize();
-      const cargador = new ima.AdsLoader(contenedor);
-      cargador.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, terminar);
-      cargador.addEventListener(ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED, (e) => {
-        gestor = e.getAdsManager(v);
-        gestor.addEventListener(ima.AdErrorEvent.Type.AD_ERROR, terminar);
-        gestor.addEventListener(ima.AdEvent.Type.STARTED, () => {
-          mostrado = true; clearTimeout(limite);
-          const reloj = setInterval(() => {
-            if (hecho) return clearInterval(reloj);
-            let saltable = false; let queda = 0;
-            try { saltable = gestor.getAdSkippableState(); queda = Math.ceil(gestor.getRemainingTime()); } catch (e) {}
-            if (saltable) c.saltar.pintar('Saltar anuncio', true);
-            else c.saltar.pintar(queda > 0 ? `El anuncio acaba en ${queda} s` : 'Anuncio', false);
-          }, 500);
-        });
-        c.saltar.onclick = () => { try { gestor.skip(); } catch (e) {} };
-        gestor.addEventListener(ima.AdEvent.Type.ALL_ADS_COMPLETED, terminar);
-        gestor.addEventListener(ima.AdEvent.Type.SKIPPED, terminar);
-        try {
-          const r = zona.getBoundingClientRect();
-          gestor.init(Math.max(320, r.width), Math.max(180, r.height), ima.ViewMode.NORMAL);
-          gestor.start();
-        } catch (err) { terminar(); }
-      });
-      const pedido = new ima.AdsRequest();
-      pedido.adTagUrl = etiqueta;
-      const r = zona.getBoundingClientRect();
-      pedido.linearAdSlotWidth = Math.max(320, r.width); pedido.linearAdSlotHeight = Math.max(180, r.height);
-      cargador.requestAds(pedido);
-    }).catch(terminar);
+    // Si la red tarda o el vídeo no arranca, no se queda nadie esperando
+    const limite = setTimeout(() => { if (!mostrado) fallo(402); }, 12000);
+    leerVast(etiqueta, 0, acum).then((d) => {
+      if (hecho) return;
+      datos = d;
+      const saltarEn = d.saltarEn != null ? d.saltarEn : (planInfo.anuncios.saltarEn ?? SALTAR_EN);
+      const dados = new Set();
+      const evento = (n) => { if (!dados.has(n)) { dados.add(n); pixelVast(d.eventos[n]); } };
+      v.onplaying = () => {
+        if (mostrado) return;
+        mostrado = true; clearTimeout(limite);
+        pixelVast(d.impresiones); evento('creativeView'); evento('start');
+      };
+      v.ontimeupdate = () => {
+        const tot = v.duration || d.duracion || 0;
+        const t = v.currentTime;
+        if (tot) {
+          resto.textContent = ' · ' + Math.max(0, Math.ceil(tot - t)) + ' s';
+          if (t >= tot / 4) evento('firstQuartile');
+          if (t >= tot / 2) evento('midpoint');
+          if (t >= tot * 3 / 4) evento('thirdQuartile');
+        }
+        if (saltarEn > 0 && (!tot || saltarEn < tot - 1)) {
+          if (t >= saltarEn) { if (!c.saltar._listo) { c.saltar.pintar('Saltar anuncio', true); c.saltar.focus(); } }
+          else c.saltar.pintar('Saltar en ' + Math.ceil(saltarEn - t) + ' s', false);
+        } else c.saltar.pintar(tot ? `El anuncio acaba en ${Math.max(0, Math.ceil(tot - t))} s` : 'Anuncio', false);
+      };
+      v.onended = () => { evento('complete'); terminar(); };
+      v.onerror = () => fallo(405);
+      v.onpause = () => { if (mostrado && !v.ended && !hecho) evento('pause'); };
+      c.saltar.onclick = () => { if (c.saltar._listo) { evento('skip'); terminar(); } };
+      // Al tocar el anuncio (o «Más información») se abre la web del anunciante en otra pestaña
+      // (en la app, en el navegador del móvil)
+      if (d.clic) {
+        const abrirClic = () => { pixelVast(d.clics); window.open(d.clic, '_blank', 'noopener'); };
+        const mas = el('button', 'boton', 'Más información ↗');
+        mas.onclick = abrirClic;
+        c.pie.insertBefore(mas, c.pie.firstChild);
+        v.style.cursor = 'pointer';
+        v.onclick = abrirClic;
+      }
+      v.src = d.video;
+      v.play().catch(() => { v.muted = true; sonido.hidden = false; pixelVast(d.eventos.mute); v.play().catch(() => fallo(400)); });
+      // Si se queda colgado sin avanzar
+      reloj = setInterval(() => { if (!$('#visor').classList.contains('abierto')) terminar(); }, 1000);
+    }).catch((e) => fallo(e && e.codigo));
   });
 }
 

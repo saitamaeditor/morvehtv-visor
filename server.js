@@ -743,10 +743,10 @@ http
       const ip = acceso.ipDe(req);
       // Límite de peticiones por conexión (Render lo comprueba en /api/salud: esa no cuenta)
       if (url.pathname !== '/api/salud') { defensa.limitar(ip, url.pathname); ultimaVisita = Date.now(); }
-      // ads.txt de Google (público: lo lee el rastreador de Google)
+      // ads.txt de la red de anuncios (público: lo lee su rastreador)
       if (url.pathname === '/ads.txt') {
         const t = pagos.adsTxt();
-        if (!t) return json(res, 404, { error: 'Sin anuncios de Google configurados' });
+        if (!t) return json(res, 404, { error: 'Sin ads.txt' });
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(t);
       }

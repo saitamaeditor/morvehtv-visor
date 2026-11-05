@@ -1251,7 +1251,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
         && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec));
       // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
-      // Plan Básico: un anuncio corto antes del vídeo (como mucho uno cada 10 minutos)
+      // Anuncio en vídeo (VAST de una red externa) antes de empezar, si están activados
       if (typeof anuncioPrevio === 'function') await anuncioPrevio();
       if (actual !== i) return;
       const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null, undefined, { reproducir: opciones.reproducir });
