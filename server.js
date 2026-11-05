@@ -702,17 +702,20 @@ function enviar(res, status, cabeceras, cuerpo) {
   res.end(buf);
 }
 // ---------- Páginas legales ----------
-// Los datos del titular (obligatorios por la LSSI para cobrar) van en variables de entorno de
-// Render, no en el código: el repositorio es público. Lo que falte sale como «pendiente».
+// Los datos del titular van en variables de entorno, no en el código (el repositorio es
+// público). Cada uno sale solo si está puesto: sin ellos, la página no enseña ningún dato personal.
 const LEGAL = { TITULAR: 'LEGAL_TITULAR', NIF: 'LEGAL_NIF', DIRECCION: 'LEGAL_DIRECCION', EMAIL: 'LEGAL_EMAIL' };
 const faltanLegal = () => Object.values(LEGAL).filter((v) => !String(process.env[v] ?? '').trim());
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 async function legal(html, req) {
-  const valores = Object.fromEntries(Object.entries(LEGAL).map(([k, v]) => {
+  const valores = {};
+  for (const [k, v] of Object.entries(LEGAL)) {
     const x = String(process.env[v] ?? '').trim();
-    if (!x) return [k, '<em style="color:#ffb224">[pendiente de completar]</em>'];
-    return [k, k === 'EMAIL' ? `<a href="mailto:${escHtml(x)}">${escHtml(x)}</a>` : escHtml(x)];
-  }));
+    // <!--SI:X--> solo si el dato está puesto; <!--NO:X--> solo si no
+    const [fuera, queda] = x ? ['NO', 'SI'] : ['SI', 'NO'];
+    html = html.replace(new RegExp(`<!--${fuera}:${k}-->[\\s\\S]*?<!--/${fuera}:${k}-->`, 'g'), '').replace(new RegExp(`<!--/?${queda}:${k}-->`, 'g'), '');
+    if (x) valores[k] = k === 'EMAIL' ? `<a href="mailto:${escHtml(x)}">${escHtml(x)}</a>` : escHtml(x);
+  }
   const web = process.env.VISOR_URL || `https://${req.headers.host}`;
   valores.WEB = `<a href="${escHtml(web)}">${escHtml(web.replace(/^https?:\/\//, ''))}</a>`;
   valores.PRECIO = escHtml((await pagos.precioTexto().catch(() => null)) || 'el indicado antes de pagar');
@@ -723,9 +726,7 @@ async function legal(html, req) {
     html = html.replace(new RegExp(`<!--${no}-->[\\s\\S]*?<!--/${no}-->`, 'g'), '').replace(new RegExp(`<!--/?${si}-->`, 'g'), '');
   }
   html = html.replace(new RegExp(`<!--${fuera}-->[\\s\\S]*?<!--/${fuera}-->`, 'g'), '').replace(new RegExp(`<!--/?${queda}-->`, 'g'), '');
-  // (en el pie, sin enlaces ni avisos: solo el nombre)
-  return html.replace(/© \{\{ANIO\}\} \{\{TITULAR\}\}/, `© ${valores.ANIO} ${escHtml(String(process.env.LEGAL_TITULAR ?? '').trim())}`)
-    .replace(/\{\{([A-Z]+)\}\}/g, (m, k) => valores[k] ?? m);
+  return html.replace(/\{\{([A-Z]+)\}\}/g, (m, k) => valores[k] ?? m);
 }
 
 const json = (res, status, datos) => enviar(res, status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, JSON.stringify(datos));

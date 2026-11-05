@@ -56,19 +56,19 @@
   <section id="aviso-legal">
     <h2>Aviso legal</h2>
     <h3>1. Titular del servicio</h3>
-    <p>En cumplimiento del artículo 10 de la Ley 34/2002, de Servicios de la Sociedad de la Información y de Comercio Electrónico (LSSI-CE), se informa de los datos del titular de MorvehTV (la web, la aplicación y los servicios asociados):</p>
+    <p>MorvehTV comprende la web, la aplicación y los servicios asociados.</p>
     <div class="datos">
-      <p><b>Titular:</b> {{TITULAR}}</p>
-      <p><b>NIF/NIE:</b> {{NIF}}</p>
-      <p><b>Domicilio:</b> {{DIRECCION}}</p>
-      <p><b>Correo electrónico de contacto:</b> {{EMAIL}}</p>
+      <!--SI:TITULAR--><p><b>Titular:</b> {{TITULAR}}</p><!--/SI:TITULAR-->
+      <!--SI:NIF--><p><b>NIF/NIE:</b> {{NIF}}</p><!--/SI:NIF-->
+      <!--SI:DIRECCION--><p><b>Domicilio:</b> {{DIRECCION}}</p><!--/SI:DIRECCION-->
+      <!--SI:EMAIL--><p><b>Correo electrónico de contacto:</b> {{EMAIL}}</p><!--/SI:EMAIL-->
       <p><b>Sitio web:</b> {{WEB}}</p>
     </div>
     <h3>2. Objeto</h3>
     <p>MorvehTV es un servicio de vídeo bajo demanda que permite a los usuarios registrados ver el contenido audiovisual publicado por el titular en la web y en la aplicación. El acceso y uso del servicio atribuye la condición de usuario e implica la aceptación de este aviso legal y de las condiciones de uso.</p>
     <h3>3. Propiedad intelectual e industrial</h3>
     <p>El contenido publicado en MorvehTV es propiedad del titular o se publica con autorización de sus titulares. La marca, el logotipo, el diseño y el código del servicio pertenecen al titular. Se permite su visualización para uso personal y privado dentro del servicio; queda prohibida cualquier reproducción, descarga, distribución, comunicación pública o transformación sin autorización expresa.</p>
-    <p>Si consideras que algún contenido vulnera tus derechos, escríbenos a {{EMAIL}} indicando el contenido concreto y acreditando tu titularidad; lo revisaremos y, si procede, lo retiraremos con la mayor brevedad.</p>
+    <p>Si consideras que algún contenido vulnera tus derechos, <!--SI:EMAIL-->escríbenos a {{EMAIL}}<!--/SI:EMAIL--><!--NO:EMAIL-->contacta con la administración de MorvehTV<!--/NO:EMAIL--> indicando el contenido concreto y acreditando tu titularidad; lo revisaremos y, si procede, lo retiraremos con la mayor brevedad.</p>
     <h3>4. Responsabilidad</h3>
     <p>El titular trabaja para que el servicio funcione de forma continua y segura, pero no puede garantizar la ausencia total de interrupciones o errores técnicos y no responde de los daños derivados de causas ajenas a su control (fallos de red, del dispositivo del usuario o de proveedores externos), ni del uso indebido del servicio por parte de los usuarios.</p>
     <h3>5. Enlaces<!--ANUNCIOS--> y anuncios<!--/ANUNCIOS--> de terceros</h3>
@@ -114,7 +114,7 @@
     <h3><!--PAGOS-->7<!--/PAGOS--><!--SINPAGOS-->4<!--/SINPAGOS-->. Cambios en el servicio y en estas condiciones</h3>
     <p>El catálogo puede cambiar con el tiempo. El titular puede modificar estas condiciones; los cambios importantes se anunciarán en el servicio con antelación razonable.</p>
     <h3><!--PAGOS-->8<!--/PAGOS--><!--SINPAGOS-->5<!--/SINPAGOS-->. Contacto y reclamaciones</h3>
-    <p>Para cualquier duda, incidencia o reclamación escríbenos a {{EMAIL}}. También puedes usar la plataforma europea de resolución de litigios en línea: <a href="https://ec.europa.eu/consumers/odr" rel="noopener" target="_blank">ec.europa.eu/consumers/odr</a>.</p>
+    <p>Para cualquier duda, incidencia o reclamación <!--SI:EMAIL-->escríbenos a {{EMAIL}}<!--/SI:EMAIL--><!--NO:EMAIL-->contacta con la administración de MorvehTV<!--/NO:EMAIL-->. También puedes usar la plataforma europea de resolución de litigios en línea: <a href="https://ec.europa.eu/consumers/odr" rel="noopener" target="_blank">ec.europa.eu/consumers/odr</a>.</p>
   </section>
 
   <!-- ===================== PRIVACIDAD ===================== -->
@@ -122,7 +122,7 @@
     <h2>Política de privacidad</h2>
     <p>Esta política explica qué datos personales trata MorvehTV y cómo, conforme al Reglamento (UE) 2016/679 (RGPD) y a la Ley Orgánica 3/2018 (LOPDGDD).</p>
     <h3>1. Responsable</h3>
-    <p>{{TITULAR}} (NIF/NIE {{NIF}}), con domicilio en {{DIRECCION}}. Contacto: {{EMAIL}}.</p>
+    <p>El titular de MorvehTV<!--SI:TITULAR--> ({{TITULAR}}<!--SI:NIF-->, NIF/NIE {{NIF}}<!--/SI:NIF-->)<!--/SI:TITULAR--><!--SI:DIRECCION-->, con domicilio en {{DIRECCION}}<!--/SI:DIRECCION-->.<!--SI:EMAIL--> Contacto: {{EMAIL}}.<!--/SI:EMAIL--></p>
     <h3>2. Qué datos tratamos y para qué</h3>
     <div class="tabla"><table>
       <tr><th>Datos</th><th>Para qué</th><th>Base legal</th></tr>
@@ -145,7 +145,7 @@
     <h3>4. Cuánto tiempo los guardamos</h3>
     <p>Mientras tengas la cuenta. Si la borras, se eliminan tu cuenta, tus favoritos y tu progreso.<!--PAGOS--> Los datos de facturación pueden conservarse el tiempo que exija la ley (en general, hasta 6 años por obligaciones mercantiles y fiscales).<!--/PAGOS--></p>
     <h3>5. Tus derechos</h3>
-    <p>Puedes ejercer tus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad escribiendo a {{EMAIL}}. Puedes cambiar tu nombre y tu contraseña y borrar tu cuenta tú mismo desde «Mi cuenta». Si crees que no hemos atendido bien tu solicitud, puedes reclamar ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" rel="noopener" target="_blank">www.aepd.es</a>).</p>
+    <p>Puedes ejercer tus derechos de acceso, rectificación, supresión, oposición, limitación y portabilidad <!--SI:EMAIL-->escribiendo a {{EMAIL}}<!--/SI:EMAIL--><!--NO:EMAIL-->contactando con la administración de MorvehTV<!--/NO:EMAIL-->. Puedes cambiar tu nombre y tu contraseña y borrar tu cuenta tú mismo desde «Mi cuenta». Si crees que no hemos atendido bien tu solicitud, puedes reclamar ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" rel="noopener" target="_blank">www.aepd.es</a>).</p>
     <h3>6. Menores</h3>
     <p>MorvehTV no está dirigido a menores de 14 años, que no pueden crear una cuenta.</p>
     <h3>7. Seguridad</h3>
@@ -166,7 +166,7 @@
     <p>Puedes borrar o bloquear las cookies desde la configuración de tu navegador; si bloqueas la de sesión no podrás iniciar sesión.</p>
   </section>
 
-  <p class="fecha" style="margin-top:24px">© {{ANIO}} {{TITULAR}} · MorvehTV</p>
+  <p class="fecha" style="margin-top:24px">© {{ANIO}} <!--SI:TITULAR-->{{TITULAR}} · <!--/SI:TITULAR-->MorvehTV</p>
 </div>
 </body>
 </html>
