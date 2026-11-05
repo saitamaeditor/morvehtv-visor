@@ -6,7 +6,8 @@ import { spawn, execFile } from 'node:child_process';
 import { readFile, mkdir, rm, stat } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { gzip, brotliCompress, constants as zlibC } from 'node:zlib';
+import { promisify } from 'node:util';
 import os from 'node:os';
 import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -670,7 +671,9 @@ async function js(fichero) {
   const { mtimeMs } = await stat(fichero);
   const c = compilados.get(fichero);
   if (c?.mtimeMs === mtimeMs) return c.codigo;
-  const { code } = await transform(await readFile(fichero, 'utf8'), { target: ['chrome56', 'safari12'], loader: 'js' });
+  // Minificado: pesa la mitad y el móvil o la tele lo analiza antes. Los nombres de primer nivel
+  // se conservan (los archivos comparten funciones entre sí)
+  const { code } = await transform(await readFile(fichero, 'utf8'), { target: ['chrome56', 'safari12'], loader: 'js', minify: true, legalComments: 'none' });
   compilados.set(fichero, { mtimeMs, codigo: code });
   return code;
 }
@@ -690,16 +693,68 @@ const VERSION = (() => {
 const CON_VERSION = /(src|href)="(polyfills\.js|intro\.css|intro\.js|app\.js|perfiles\.js)"/g;
 
 // Las respuestas grandes (catálogo, listados) van comprimidas: con mucho contenido pesan 5-10
-// veces menos y la tele o el móvil las reciben antes
-const aceptaGzip = (res) => /\bgzip\b/.test(String(res.req?.headers['accept-encoding'] ?? ''));
-function enviar(res, status, cabeceras, cuerpo) {
+// veces menos y la tele o el móvil las reciben antes. Brotli si el navegador lo entiende (pesa
+// ~20 % menos que gzip) y siempre fuera del hilo principal, para no frenar a los demás.
+const gzipA = promisify(gzip), brotliA = promisify(brotliCompress);
+const COMPRIMIBLE = /^(text\/|application\/(json|javascript|manifest\+json)|image\/svg)/;
+function codificacion(res) {
+  const a = String(res.req?.headers['accept-encoding'] ?? '');
+  return /\bbr\b/.test(a) ? 'br' : /\bgzip\b/.test(a) ? 'gzip' : null;
+}
+// fijo = archivo que no cambia hasta la próxima versión: se comprime al máximo una sola vez
+const comprimir = (buf, cod, fijo) => (cod === 'br'
+  ? brotliA(buf, { params: { [zlibC.BROTLI_PARAM_QUALITY]: fijo ? 11 : 4, [zlibC.BROTLI_PARAM_SIZE_HINT]: buf.length } })
+  : gzipA(buf, { level: fijo ? 9 : 5 }));
+async function enviar(res, status, cabeceras, cuerpo) {
   const buf = Buffer.isBuffer(cuerpo) ? cuerpo : Buffer.from(cuerpo);
-  if (buf.length > 2048 && aceptaGzip(res)) {
-    res.writeHead(status, { ...cabeceras, 'content-encoding': 'gzip', vary: 'accept-encoding' });
-    return res.end(gzipSync(buf, { level: 5 }));
+  const cod = buf.length > 1024 && COMPRIMIBLE.test(cabeceras['content-type'] ?? '') && codificacion(res);
+  if (cod) {
+    try {
+      const z = await comprimir(buf, cod, false);
+      if (res.headersSent) return;
+      res.writeHead(status, { ...cabeceras, 'content-encoding': cod, vary: 'accept-encoding' });
+      return res.end(z);
+    } catch {}
   }
+  if (res.headersSent) return;
   res.writeHead(status, cabeceras);
   res.end(buf);
+}
+
+// Archivos de la app (js, css, iconos): se preparan una vez (compilados y comprimidos) y se
+// guardan en memoria. Los que la página pide con «?v=versión» se quedan en la caché del
+// navegador para siempre (la versión cambia con cada publicación), así que abrir la app ya no
+// descarga nada; el resto se revalida con su huella (ETag) y, si no cambió, no viaja nada.
+const preparados = new Map(); // fichero → { mtimeMs, tipo, etag, crudo, br, gzip }
+async function preparado(fichero, tipo) {
+  const { mtimeMs } = await stat(fichero);
+  let p = preparados.get(fichero);
+  if (p?.mtimeMs !== mtimeMs) {
+    const crudo = fichero.endsWith('.js') && fichero.includes(`${path.sep}public${path.sep}`) ? Buffer.from(await js(fichero)) : await readFile(fichero);
+    p = { mtimeMs, tipo, crudo, etag: `"${createHash('sha1').update(crudo).digest('base64url').slice(0, 16)}"` };
+    preparados.set(fichero, p);
+  }
+  return p;
+}
+async function servirFijo(req, res, fichero, tipo, cache) {
+  const p = await preparado(fichero, tipo);
+  const cab = { 'content-type': tipo, 'cache-control': cache, etag: p.etag, vary: 'accept-encoding' };
+  if (req.headers['if-none-match'] === p.etag) { res.writeHead(304, cab); return res.end(); }
+  const cod = p.crudo.length > 1024 && COMPRIMIBLE.test(tipo) && codificacion(res);
+  if (cod) {
+    p[cod] = p[cod] || comprimir(p.crudo, cod, true).catch(() => null);
+    const z = await p[cod];
+    if (z) { res.writeHead(200, { ...cab, 'content-encoding': cod, 'content-length': z.length }); return res.end(z); }
+  }
+  res.writeHead(200, { ...cab, 'content-length': p.crudo.length });
+  res.end(p.crudo);
+}
+// Al arrancar se deja todo listo, para que el primer visitante no espere a compilar ni comprimir
+async function precalentar() {
+  for (const f of ['app.js', 'perfiles.js', 'intro.js', 'polyfills.js', 'intro.css']) {
+    const p = await preparado(path.join(dir, 'public', f), tipos[path.extname(f)]).catch(() => null);
+    if (p) { p.br = comprimir(p.crudo, 'br', true).catch(() => null); p.gzip = comprimir(p.crudo, 'gzip', true).catch(() => null); await p.br; }
+  }
 }
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -765,7 +820,7 @@ http
       if (ruta) return json(res, 200, await ruta(url.searchParams, req, { cuenta, ip, admin: await perfiles.esAdmin(cuenta) }));
 
       if (VENDOR[url.pathname]) {
-        return enviar(res, 200, { 'content-type': tipos['.js'], 'cache-control': 'max-age=86400' }, await readFile(path.join(dir, VENDOR[url.pathname])));
+        return await servirFijo(req, res, path.join(dir, VENDOR[url.pathname]), tipos['.js'], 'public, max-age=604800');
       }
       const fichero = path.join(dir, 'public', url.pathname === '/' ? 'index.html' : path.normalize(decodeURIComponent(url.pathname)));
       if (!fichero.startsWith(path.join(dir, 'public'))) throw Object.assign(new Error('No'), { status: 403 });
@@ -781,8 +836,10 @@ http
         }
         return enviar(res, 200, { 'content-type': tipos[ext], 'cache-control': 'no-store' }, html);
       }
-      const cuerpo = ext === '.js' ? await js(fichero) : await readFile(fichero);
-      enviar(res, 200, { 'content-type': tipos[ext] ?? 'application/octet-stream', 'cache-control': 'no-cache' }, cuerpo);
+      const conVersion = url.searchParams.get('v') === VERSION;
+      const cache = conVersion ? 'public, max-age=31536000, immutable'
+        : ['.png', '.svg', '.webmanifest'].includes(ext) ? 'public, max-age=604800' : 'no-cache';
+      return await servirFijo(req, res, fichero, tipos[ext] ?? 'application/octet-stream', cache);
     } catch (err) {
       if (err.espera && !res.headersSent) res.setHeader('retry-after', String(err.espera));
       if (res.headersSent) return res.end();
@@ -797,4 +854,5 @@ http
       for (const u of acceso.direcciones(PUERTO)) console.log(`  En el móvil o la tele (misma wifi): ${u}`);
     }
     vigilar();
+    precalentar().catch(() => {});
   });

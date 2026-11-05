@@ -382,7 +382,7 @@ function contenidoBanner() {
 function tarjetaAnuncio(x) {
   const c = el(x.enlace ? 'a' : 'div', 'anuncio-propio');
   if (x.enlace) { c.href = x.enlace; c.target = '_blank'; c.rel = 'sponsored noopener'; }
-  if (x.imagen) { const im = el('img'); im.src = x.imagen; im.alt = x.titulo || ''; im.loading = 'lazy'; c.append(im); }
+  if (x.imagen) { const im = el('img'); im.loading = 'lazy'; im.decoding = 'async'; im.src = x.imagen; im.alt = x.titulo || ''; c.append(im); }
   const t = el('div', 'texto');
   if (x.titulo) t.append(el('b', null, x.titulo));
   if (x.texto) t.append(el('span', null, x.texto));

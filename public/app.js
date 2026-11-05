@@ -268,10 +268,15 @@ async function pintarDestacado(caja, d, carpetas) {
   const puntos = el('div', 'destacado-puntos');
   caja.append(fondos, texto, puntos);
   let i = 0;
-  const imgs = con.map((f) => { const im = el('div', 'destacado-img'); im.style.backgroundImage = `url("${f.m.fondo.replace(/\/t\/p\/w\d+\//, '/t/p/w1280/')}")`; fondos.append(im); return im; });
+  // A la medida de la pantalla (en el móvil, la mitad de peso) y cada fondo se descarga cuando
+  // le toca (y el siguiente, para que el cambio sea instantáneo), no los seis de golpe
+  const tam = (window.innerWidth || 1280) * (window.devicePixelRatio || 1) > 1400 ? 'w1280' : 'w780';
+  const imgs = con.map((f) => { const im = el('div', 'destacado-img'); im._fondo = f.m.fondo.replace(/\/t\/p\/w\d+\//, `/t/p/${tam}/`); fondos.append(im); return im; });
+  const cargarFondo = (k) => { const im = imgs[(k + imgs.length) % imgs.length]; if (im._fondo) { im.style.backgroundImage = `url("${im._fondo}")`; im._fondo = null; } };
   const pts = con.map((f, n) => { const p = el('button', 'punto'); p.setAttribute('aria-label', `Destacado ${n + 1}`); p.tabIndex = -1; p.onclick = () => ver(n, true); puntos.append(p); return p; });
   function ver(n, aMano) {
     i = (n + con.length) % con.length;
+    cargarFondo(i); setTimeout(() => cargarFondo(i + 1), 1500);
     imgs.forEach((im, k) => im.classList.toggle('visible', k === i));
     pts.forEach((p, k) => p.classList.toggle('activo', k === i));
     const { x, m } = con[i];
@@ -494,7 +499,7 @@ function portada(carpetas) {
       if (f) { t.style.setProperty('--img', `url("${f}")`); t.classList.add('con-imagen'); }
       cs.filter(Boolean).forEach((u, i) => {
         const img = el('img', `cartel-cat c${i + 1}`);
-        img.src = u; img.alt = '';
+        img.decoding = 'async'; img.src = u; img.alt = '';
         abanico.append(img);
       });
       if (cs.some(Boolean)) t.classList.add('con-carteles');
@@ -519,7 +524,7 @@ function tarjeta({ icono, titulo, miniatura, meta, alPulsar, nuevo }) {
   d.tabIndex = 0; d.setAttribute('role', 'button');
   const mini = document.createElement('div'); mini.className = 'mini';
   if (miniatura) {
-    const img = document.createElement('img'); img.loading = 'lazy'; img.src = miniatura; img.alt = '';
+    const img = document.createElement('img'); img.loading = 'lazy'; img.decoding = 'async'; img.src = miniatura; img.alt = '';
     img.onerror = () => { mini.textContent = icono; };
     mini.append(img);
   } else mini.textContent = icono;
@@ -601,7 +606,7 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   const imagen = apaisada ?? temp?.poster ?? d.poster;
   const mini = t.querySelector('.mini');
   if (imagen) {
-    const img = el('img'); img.loading = 'lazy'; img.src = imagen; img.alt = '';
+    const img = el('img'); img.loading = 'lazy'; img.decoding = 'async'; img.src = imagen; img.alt = '';
     const visto = mini.querySelector('.visto'); // la barra de lo que ya has visto se queda
     mini.replaceChildren(img);
     if (visto) mini.append(visto);

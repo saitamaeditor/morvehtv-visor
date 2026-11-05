@@ -9,6 +9,9 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icono-192.png">
+<!-- Las carátulas vienen de aquí: se abre la conexión ya, mientras carga la app -->
+<link rel="preconnect" href="https://image.tmdb.org">
+<link rel="dns-prefetch" href="https://static.tvmaze.com">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -809,6 +812,16 @@
   .destacado-img { background-size: cover; background-position: center 20%; opacity: 0; transition: opacity 1s ease; transform: scale(1.03); }
   .destacado-img.visible { opacity: 1; animation: acercar 12s ease-out forwards; }
   @keyframes acercar { from { transform: scale(1.03); } to { transform: scale(1.09); } }
+  /* Fluidez: en móviles, tablets y teles la cabecera va sin desenfoque detrás (es lo que más
+     cuesta al desplazar) y el fondo destacado no hace zoom continuo; cada fila se pinta aparte */
+  @media (hover: none), (pointer: coarse) {
+    header, .en-portada.bajado header { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+    header { background: rgba(16,17,20,.96); }
+  }
+  .tele header { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+  .tele .destacado-img.visible { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .destacado-img.visible { animation: none; } }
+  .carrusel { contain: layout paint; }
   .destacado::after { content: ''; position: absolute; inset: 0; pointer-events: none;
     background: linear-gradient(90deg, rgba(11,12,16,.92) 0%, rgba(11,12,16,.6) 38%, rgba(11,12,16,0) 70%),
       linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,16,.55) 22%, rgba(11,12,16,0) 50%); }
