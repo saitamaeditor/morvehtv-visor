@@ -21,11 +21,13 @@
   const modesto = (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 2;
   let calidad = esTele || (esMovil && modesto) ? 'baja' : esMovil || modesto ? 'media' : 'alta';
   const AJUSTES = {
-    alta: { estrellas: 520, escala: 1, maxPixeles: 3e6, chispas: 22 },
-    media: { estrellas: 340, escala: 1, maxPixeles: 2.6e6, chispas: 18 },
-    baja: { estrellas: 220, escala: 1, maxPixeles: 2.1e6, chispas: 10 },
+    alta: { estrellas: 480, escala: 1, maxPixeles: 2.2e6, chispas: 22 },
+    media: { estrellas: 300, escala: 1, maxPixeles: 1.4e6, chispas: 16 },
+    baja: { estrellas: 200, escala: 1, maxPixeles: 0.9e6, chispas: 10 },
   };
-  const DURACION = reducir ? 1500 : 3900;
+  // Cada parte tiene su momento: el logo, el título, el lema y medio segundo quieto antes del
+  // salto final (antes el salto llegaba con las letras y el lema todavía entrando)
+  const DURACION = reducir ? 1500 : 4300;
 
   const intro = document.createElement('div');
   intro.id = 'intro';
@@ -93,8 +95,8 @@
 
   // ---------- Campo de estrellas en 3D: lento al principio, salto a la velocidad de la luz al final ----------
   const lienzo = intro.querySelector('canvas');
-  // desynchronized: en Android el lienzo se presenta sin esperar al resto de la página
-  const ctx = lienzo.getContext('2d', { alpha: false, desynchronized: true });
+  // Sin «desynchronized»: en algunos Android y gráficas de PC hacía parpadear o cortar el lienzo
+  const ctx = lienzo.getContext('2d', { alpha: false });
   const COLORES = ['#ffffff', '#cfe0ff', '#8fb4ff', '#d6a8ff', '#ff9fd2'];
   const NIVELES = 3; // lejos / medio / cerca: cada uno con su grosor y brillo
   let ancho = 0, alto = 0, px = 1;
@@ -108,7 +110,8 @@
     const a = AJUSTES[calidad];
     // Resolución interna del lienzo: limitada para no pintar millones de píxeles por fotograma
     // (en una tele 4K el navegador dice tener 3840×2160)
-    px = Math.min(devicePixelRatio || 1, 2) * a.escala;
+    // Las estrellas son trazos finos y en movimiento: no ganan nada con más de 1,5 píxeles por punto
+    px = Math.min(devicePixelRatio || 1, 1.5) * a.escala;
     const total = innerWidth * innerHeight * px * px;
     if (total > a.maxPixeles) px *= Math.sqrt(a.maxPixeles / total);
     ancho = lienzo.width = Math.max(1, Math.round(innerWidth * px));

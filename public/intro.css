@@ -26,8 +26,7 @@
   transition: transform 1s cubic-bezier(.6,0,.9,.4), opacity .9s ease;
 }
 #intro.salto .intro-centro { transform: scale(2.6); opacity: 0; }
-#intro.calidad-alta .intro-centro { transition: transform 1s cubic-bezier(.6,0,.9,.4), filter 1s ease, opacity .9s ease; }
-#intro.calidad-alta.salto .intro-centro { filter: blur(10px); }
+/* (Sin desenfoque al salir: un filtro sobre todo el centro daba tirones en el último segundo) */
 
 /* Nebulosa de color al fondo, moviéndose despacio (un degradado: no cuesta nada) */
 .intro-nebulosa {
@@ -129,20 +128,20 @@
 .intro-titulo span.tv { --color: linear-gradient(135deg, #4f8cff, #8e4ec6 50%, #d6409f); margin-left: .12em; }
 @keyframes intro-letra { to { opacity: 1; transform: none; } }
 @keyframes intro-barrido { to { background-position: -50% 0, 0 0; } }
-/* En ordenador, además, las letras llegan desenfocadas y con brillo */
-#intro.calidad-alta .intro-titulo span { filter: blur(10px); animation-name: intro-letra-alta, intro-barrido; }
-/* En la tele, sin barrido de luz: repintar el texto degradado en cada fotograma es lo que más le cuesta */
-#intro.calidad-baja .intro-titulo span { animation-name: intro-letra; }
+/* Sin desenfoques ni sombras en las letras: con el texto recortado al degradado, Chrome las
+   pintaba a veces como cajas o parpadeando. El barrido de luz solo en ordenador: repintar el texto
+   degradado en cada fotograma es lo que más cuesta a móviles y teles */
+#intro.calidad-media .intro-titulo span, #intro.calidad-baja .intro-titulo span { animation-name: intro-letra; }
 #intro.calidad-baja .intro-chispas i { box-shadow: none; }
-@keyframes intro-letra-alta { to { opacity: 1; transform: none; filter: blur(0) drop-shadow(0 0 14px rgba(79,140,255,.45)); } }
 
 .intro-sub {
   margin-top: 16px; margin-top: calc(var(--u) * 2.2); color: #c9d4e8;
   font: 600 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: clamp(10px, calc(var(--u) * 1.6), 17px);
-  letter-spacing: .1em; opacity: 0; white-space: nowrap; animation: intro-sub 1.2s 2.4s ease-out forwards;
+  letter-spacing: .42em; opacity: 0; transform: translateY(.6em); white-space: nowrap; animation: intro-sub 1s 2.2s ease-out forwards;
 }
-@keyframes intro-sub { to { opacity: 1; letter-spacing: .42em; } }
+/* Solo opacidad y posición: animar el espaciado entre letras recalculaba el texto en cada fotograma */
+@keyframes intro-sub { to { opacity: 1; transform: none; } }
 @keyframes intro-aparece { to { opacity: 1; transform: none; } }
 
 .intro-saltar {
