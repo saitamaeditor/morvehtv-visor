@@ -297,7 +297,7 @@ export async function atender(ruta, req, res, json, ip) {
     const nombre = String(datos.nombre ?? '').trim().slice(0, 30) || usuario;
     if (!usuarioValido(usuario)) throw error(400, 'El usuario debe tener de 3 a 20 caracteres: letras, números, punto, guion o guion bajo');
     claveNueva(clave);
-    if (datos.acepta !== true) throw error(400, 'Tienes que aceptar las condiciones de uso y la política de privacidad');
+    if (datos.acepta !== true) throw error(400, 'Tienes que confirmar que tienes al menos 14 años');
     const anotar = frenar(`registro:${ip}`, 5, 60);
     const sal = randomBytes(16).toString('hex');
     const hash = await hashClave(clave, sal);

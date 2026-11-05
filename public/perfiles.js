@@ -178,11 +178,6 @@ function abrirCuenta() {
   bb.s.append(cb.l, borrar, bb.msg);
   caja.append(bb.s);
 
-  // Información legal
-  const leg = el('p', 'cuenta-legal');
-  leg.innerHTML = '<a href="/legal.html#aviso-legal" target="_blank">Aviso legal</a> · <a href="/legal.html#condiciones" target="_blank">Condiciones</a> · <a href="/legal.html#privacidad" target="_blank">Privacidad</a> · <a href="/legal.html#cookies" target="_blank">Cookies</a>';
-  caja.append(leg);
-
   x.focus();
 }
 
@@ -927,7 +922,7 @@ function guiaUsdc(abierta) {
     '<li><b>El importe exacto, con sus céntimos:</b> es lo que nos dice que el pago es tuyo. Si envías otra cantidad no se pierde, pero hay que activarlo a mano: avísanos.</li>',
     '<li>Los envíos en blockchain <b>no se pueden deshacer</b>: revisa la dirección antes de enviar.</li>',
     '</ul>',
-    '<p class="suave">¿Dudas o algún problema? Escríbenos (contacto en la <a href="/legal.html#aviso-legal" target="_blank">información legal</a>).</p>',
+    '<p class="suave">¿Dudas o algún problema? Contacta con la administración de MorvehTV.</p>',
   ].join('');
   d.append(c);
   return d;
@@ -1094,7 +1089,7 @@ function bloquePlan() {
     const acepto = el('label', 'acepto-premium');
     const casilla = el('input'); casilla.type = 'checkbox';
     const txt = el('span');
-    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> y pido que VIP empiece <b>en cuanto llegue el pago</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
+    txt.innerHTML = 'Acepto las condiciones y pido que VIP empiece <b>en cuanto llegue el pago</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
     acepto.append(casilla, txt);
     const seguir = el('button', 'boton boton-acento', premium || planInfo.vencio ? '⭐ Renovar VIP con USDC' : '⭐ Hazte VIP con USDC');
     seguir.onclick = () => accion(seguir, b.msg, async () => {

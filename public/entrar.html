@@ -53,8 +53,6 @@
   [hidden] { display: none !important; }
   .acepto { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: #a3a9b4; font-size: 13.5px; line-height: 1.45; margin: 4px 0 14px; cursor: pointer; }
   .acepto input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; accent-color: #00a4dc; }
-  .acepto a, .legales a { color: #00a4dc; }
-  .legales { margin-top: 18px; font-size: 12.5px; }
   .tele .acepto { font-size: 18px; } .tele .acepto input { width: 28px; height: 28px; }
   /* Tele: todo más grande */
   .tele .caja { max-width: 560px; }
@@ -106,7 +104,7 @@
         <div class="campo"><input id="r-clave2" class="con-ojo" type="password" autocomplete="new-password" maxlength="200">
           <button type="button" class="ojo" data-para="r-clave2">Mostrar</button></div>
       </label>
-      <label class="acepto"><input type="checkbox" id="r-acepta"> <span>Tengo al menos 14 años y acepto las <a href="/legal.html#condiciones" target="_blank">condiciones de uso</a> y la <a href="/legal.html#privacidad" target="_blank">política de privacidad</a>.</span></label>
+      <label class="acepto"><input type="checkbox" id="r-acepta"> <span>Tengo al menos 14 años.</span></label>
       <button class="enviar" type="submit">Crear cuenta</button>
       <!--PAGOS--><div class="vip" id="r-vip">
         <b>⭐ Hazte VIP y evita los anuncios</b>
@@ -117,7 +115,6 @@
       <p class="pie">Guarda bien tu contraseña: no se puede recuperar por correo.</p>
     </form>
   </div>
-  <p class="pie legales"><a href="/legal.html#aviso-legal">Aviso legal</a> · <a href="/legal.html#condiciones">Condiciones</a> · <a href="/legal.html#privacidad">Privacidad</a> · <a href="/legal.html#cookies">Cookies</a></p>
   <p class="pie" id="cambiar-txt">¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate</button></p>
 </div>
 <script>
@@ -211,7 +208,7 @@
       if (!/^[a-z0-9._-]{3,20}$/.test(u)) { err.textContent = 'El usuario debe tener de 3 a 20 caracteres: letras, números, punto, guion o guion bajo'; return; }
       if (c.length < 8) { err.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
       if (c !== $('r-clave2').value) { err.textContent = 'Las contraseñas no coinciden'; return; }
-      if (!$('r-acepta').checked) { err.textContent = 'Para crear la cuenta tienes que aceptar las condiciones y la política de privacidad'; return; }
+      if (!$('r-acepta').checked) { err.textContent = 'Para crear la cuenta tienes que confirmar que tienes al menos 14 años'; return; }
       enviar('/api/registro', { nombre: $('r-nombre').value.trim(), usuario: u, clave: c, acepta: true }, err, this.querySelector('.enviar'));
     };
 

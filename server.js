@@ -701,38 +701,12 @@ function enviar(res, status, cabeceras, cuerpo) {
   res.writeHead(status, cabeceras);
   res.end(buf);
 }
-// ---------- Páginas legales ----------
-// Los datos del titular van en variables de entorno, no en el código (el repositorio es
-// público). Cada uno sale solo si está puesto: sin ellos, la página no enseña ningún dato personal.
-const LEGAL = { TITULAR: 'LEGAL_TITULAR', NIF: 'LEGAL_NIF', DIRECCION: 'LEGAL_DIRECCION', EMAIL: 'LEGAL_EMAIL' };
-const faltanLegal = () => Object.values(LEGAL).filter((v) => !String(process.env[v] ?? '').trim());
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-async function legal(html, req) {
-  const valores = {};
-  for (const [k, v] of Object.entries(LEGAL)) {
-    const x = String(process.env[v] ?? '').trim();
-    // <!--SI:X--> solo si el dato está puesto; <!--NO:X--> solo si no
-    const [fuera, queda] = x ? ['NO', 'SI'] : ['SI', 'NO'];
-    html = html.replace(new RegExp(`<!--${fuera}:${k}-->[\\s\\S]*?<!--/${fuera}:${k}-->`, 'g'), '').replace(new RegExp(`<!--/?${queda}:${k}-->`, 'g'), '');
-    if (x) valores[k] = k === 'EMAIL' ? `<a href="mailto:${escHtml(x)}">${escHtml(x)}</a>` : escHtml(x);
-  }
-  const web = process.env.VISOR_URL || `https://${req.headers.host}`;
-  valores.WEB = `<a href="${escHtml(web)}">${escHtml(web.replace(/^https?:\/\//, ''))}</a>`;
-  valores.PRECIO = escHtml((await pagos.precioTexto().catch(() => null)) || 'el indicado antes de pagar');
-  valores.ANIO = String(new Date().getFullYear());
-  // Lo de Premium y los pagos solo sale si los pagos están activados (y al revés)
-  const [fuera, queda] = pagos.activo ? ['SINPAGOS', 'PAGOS'] : ['PAGOS', 'SINPAGOS'];
-  for (const [si, no] of [pagos.CON_ANUNCIOS ? ['ANUNCIOS', 'SINANUNCIOS'] : ['SINANUNCIOS', 'ANUNCIOS']]) {
-    html = html.replace(new RegExp(`<!--${no}-->[\\s\\S]*?<!--/${no}-->`, 'g'), '').replace(new RegExp(`<!--/?${si}-->`, 'g'), '');
-  }
-  html = html.replace(new RegExp(`<!--${fuera}-->[\\s\\S]*?<!--/${fuera}-->`, 'g'), '').replace(new RegExp(`<!--/?${queda}-->`, 'g'), '');
-  return html.replace(/\{\{([A-Z]+)\}\}/g, (m, k) => valores[k] ?? m);
-}
 
 const json = (res, status, datos) => enviar(res, status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, JSON.stringify(datos));
 
 // Lo que se puede abrir sin haber entrado: la pantalla de entrada y los iconos
-const PUBLICO = ['/entrar.html', '/legal.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
+const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
 
 http
   .createServer(async (req, res) => {
@@ -763,8 +737,7 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado,
-        legal: faltanLegal().length ? `faltan ${faltanLegal().join(', ')}` : 'ok' });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
@@ -798,7 +771,6 @@ http
       // La página nunca se guarda en caché y enlaza sus archivos con la versión
       if (ext === '.html') {
         let html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
-        if (url.pathname === '/legal.html') html = await legal(html, req);
         // La oferta VIP del registro, solo con los pagos activados (y con su precio)
         if (url.pathname === '/entrar.html') {
           html = pagos.activo
