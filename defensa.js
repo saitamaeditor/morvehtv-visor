@@ -19,6 +19,7 @@ const GRUPOS = {
   pesado: [30, 60], // buscar en todo el bucket, calcular tamaños, analizar o preparar un vídeo
   video: [120, 60], // enlaces a vídeos
   panel: [600, 60], // el gestor (subir un archivo grande pide muchas firmas)
+  subida: [2400, 60], // los trozos que el gestor sube a través del servidor (muchos y rápidos)
   xtream: [600, 60], // reproductores externos: navegan por el catálogo a base de peticiones
 };
 // (buscar y tamaño ya salen de la memoria: no cuentan como pesadas)
@@ -28,6 +29,7 @@ const avisos = new Map(); // ip → [marcas de veces que se pasó]
 const bloqueadas = new Map(); // ip → hasta cuándo
 
 export function grupoDe(ruta) {
+  if (ruta === '/api/panel/subir/trozo') return 'subida';
   if (ruta.startsWith('/api/panel/')) return 'panel';
   if (/^\/(player_api|get|xmltv)\.php$/.test(ruta) || /^\/(movie|series)\//.test(ruta)) return 'xtream';
   if (PESADAS.includes(ruta)) return 'pesado';

@@ -12,7 +12,30 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'node:crypto';
+import http from 'node:http';
+import https from 'node:https';
 import * as meta from './metadatos.js';
+
+// Subidas a través del servidor: el navegador manda cada trozo aquí (por HTTP/2, muchos a la vez
+// sobre una sola conexión) y se reenvía a e2 según va llegando, sin guardarlo. Desde el navegador
+// directo a e2 no se pasa de unos 5 MB/s (e2 limita cada conexión y el navegador abre pocas);
+// el servidor llega a e2 a más de 60 MB/s con muchas conexiones a la vez.
+const agenteE2 = new https.Agent({ keepAlive: true, maxSockets: 64 });
+function reenviarTrozo(destino, req, largo) {
+  return new Promise((ok, mal) => {
+    const u = new URL(destino);
+    const local = u.protocol === 'http:';
+    const fallo = (m) => mal(Object.assign(new Error(m), { status: 502 }));
+    const sal = (local ? http : https).request(u, { method: 'PUT', agent: local ? undefined : agenteE2, headers: { 'content-length': largo } }, (r) => {
+      r.resume();
+      r.on('end', () => (r.statusCode >= 200 && r.statusCode < 300 && r.headers.etag ? ok(r.headers.etag) : fallo(`e2 respondió ${r.statusCode}`)));
+    });
+    sal.on('error', (e) => fallo(`No se pudo enviar a e2 (${e.message})`));
+    req.on('aborted', () => sal.destroy(new Error('el navegador cortó la subida')));
+    req.on('error', (e) => sal.destroy(e));
+    req.pipe(sal);
+  });
+}
 
 const TAM_PARTE = 64 * 1024 * 1024; // el trozo más grande: 64 MB (hasta 640 GB por archivo)
 // Trozo a la medida de cada archivo: unos 48 trozos (así las 12 conexiones del panel van llenas
@@ -225,7 +248,7 @@ function cors(req, res) {
     res.setHeader('access-control-allow-origin', origen);
     res.setHeader('vary', 'origin');
     res.setHeader('access-control-allow-headers', 'authorization, content-type');
-    res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+    res.setHeader('access-control-allow-methods', 'GET, POST, PUT, OPTIONS');
     res.setHeader('access-control-max-age', '3600');
   }
   return vale;
@@ -416,6 +439,23 @@ export async function atender(ruta, req, res, json, ip) {
     return json(res, 200, await meta.buscarParaSubir(q));
   }
   if (ruta === '/api/panel/titulo') return json(res, 200, await meta.fichaParaSubir(url.searchParams.get('tipo'), url.searchParams.get('id')));
+
+  // Un trozo que llega por el servidor: se reenvía a e2 tal cual va llegando (con PUT, por eso va
+  // antes de la regla de solo POST). PANEL_POR_SERVIDOR=0 lo apaga: el gestor vuelve solo a subir
+  // directo a e2.
+  if (ruta === '/api/panel/subir/trozo') {
+    if (process.env.PANEL_POR_SERVIDOR === '0') throw error(404, 'Subida por el servidor desactivada');
+    if (req.method !== 'PUT') throw error(405, 'Se envía con PUT');
+    const key = claveSubida(url.searchParams.get('key'));
+    if (!puede(key)) throw fuera();
+    const uploadId = String(url.searchParams.get('uploadId') ?? '');
+    const n = Number(url.searchParams.get('n'));
+    const largo = Number(req.headers['content-length']);
+    if (!uploadId || !Number.isInteger(n) || n < 1 || n > 10000) throw error(400, 'Trozo no válido');
+    if (!(largo > 0) || largo > TAM_PARTE) throw error(413, 'Trozo demasiado grande');
+    const destino = await getSignedUrl(s3, new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: n }), { expiresIn: 3600 });
+    return json(res, 200, { etag: await reenviarTrozo(destino, req, largo) });
+  }
 
   if (req.method !== 'POST') throw error(405, 'Método no permitido');
 
