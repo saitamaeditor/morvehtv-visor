@@ -1579,7 +1579,7 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
   || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
 

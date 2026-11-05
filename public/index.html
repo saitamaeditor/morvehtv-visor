@@ -929,6 +929,17 @@
   .chip-cat { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.4); color: #fff; border-radius: 999px; padding: 7px 18px;
     font: 600 clamp(13px, 1vw, 15px) system-ui, sans-serif; cursor: pointer; transition: background .15s, color .15s; }
   .chip-cat:hover, .chip-cat:focus { background: #fff; color: #0a0a0c; border-color: #fff; outline: none; }
+  .chip-cat:focus { box-shadow: 0 0 0 3px var(--acento); }
+  .usa-mando .chip-cat:focus { transform: scale(1.08); }
+  /* La cabecera de la portada está fija encima: al moverse con el mando o las flechas, lo
+     enfocado se coloca por debajo de ella y no queda tapado */
+  html.en-portada { scroll-padding-top: 120px; }
+  /* Sin cartel destacado (aún no ha llegado o no hay fichas), las categorías bajan para no
+     quedar debajo de la cabecera */
+  .destacado[hidden] + .categorias-chips { padding-top: clamp(64px, 9vh, 96px); }
+  @media (max-width: 600px) { .destacado[hidden] + .categorias-chips { padding-top: max(96px, calc(env(safe-area-inset-top) + 88px)); } }
+  @media (max-width: 600px) { html.en-portada { scroll-padding-top: 100px; } }
+  .chip-cat { transition: background .15s, color .15s, transform .15s; }
   .tele .chip-cat { font-size: 2.4vh; padding: 1vh 1.6vw; }
   .tele .chip-cat:focus { transform: scale(1.08); }
   /* Filas */
@@ -972,9 +983,9 @@
   #cabecera .ficha h2 { font-weight: 900; }
   #cabecera .chip { border-radius: 4px; }
   @media (max-width: 600px) {
-    .categorias-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-left: -12px; margin-right: -12px; padding: 0 12px; }
-    .categorias-chips::-webkit-scrollbar { display: none; }
-    .chip-cat { flex: 0 0 auto; padding: 6px 14px; }
+    /* En el móvil, todas a la vista (en varias líneas) y fáciles de tocar */
+    .categorias-chips { gap: 8px; }
+    .chip-cat { padding: 8px 14px; font-size: 13.5px; min-height: 38px; }
   }
 </style>
 <link rel="stylesheet" href="intro.css">
