@@ -74,6 +74,18 @@ const s3 = new S3Client({
   forcePathStyle: true,
   credentials: { accessKeyId: E2_ACCESS_KEY_ID, secretAccessKey: E2_SECRET_ACCESS_KEY },
 });
+// La misma conexión con la otra dirección que admite e2 para el bucket (bucket.servidor en vez de
+// servidor/bucket). Solo para las subidas del panel: e2 habla HTTP/1.1 y el navegador abre como
+// mucho 6 conexiones por dirección, así que con dos direcciones sube con 12 a la vez (el doble de
+// rápido cuando cada conexión va limitada). PANEL_DOS_DIRECCIONES=0 lo desactiva.
+const s3Virtual = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(E2_BUCKET) && process.env.PANEL_DOS_DIRECCIONES !== '0'
+  ? new S3Client({
+    endpoint: /^https?:\/\//.test(E2_ENDPOINT) ? E2_ENDPOINT : `https://${E2_ENDPOINT}`,
+    region: E2_REGION,
+    forcePathStyle: false,
+    credentials: { accessKeyId: E2_ACCESS_KEY_ID, secretAccessKey: E2_SECRET_ACCESS_KEY },
+  })
+  : null;
 perfiles.iniciar(s3, E2_BUCKET, acceso.NUBE);
 // Render apaga el servidor a menudo: antes se guarda el progreso pendiente de cada perfil
 for (const senal of ['SIGTERM', 'SIGINT']) {
@@ -88,7 +100,7 @@ pagos.iniciar({ perfiles, firmar: (k, o) => firmar(k, o) });
 xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales, esAdmin: perfiles.esAdmin,
   permitido: async (c) => !pagos.activo || (await perfiles.planDe(c)).tipo === 'premium' });
 // API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
-panel.iniciar({ s3, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos });
+panel.iniciar({ s3, s3Virtual, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos });
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);
 
 function firmar(key, { segundos = 4 * 3600 } = {}) {

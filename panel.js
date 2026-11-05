@@ -15,10 +15,10 @@ import { randomUUID } from 'node:crypto';
 import * as meta from './metadatos.js';
 
 const TAM_PARTE = 64 * 1024 * 1024; // el trozo más grande: 64 MB (hasta 640 GB por archivo)
-// Trozo a la medida de cada archivo: unos 24 trozos (así se envían varios a la vez desde el
-// principio), nunca menos de 8 MB ni más de 64 MB, y siempre menos de los 10 000 que admite e2
+// Trozo a la medida de cada archivo: unos 48 trozos (así las 12 conexiones del panel van llenas
+// casi hasta el final), nunca menos de 8 MB ni más de 64 MB, y siempre menos de los 10 000 que admite e2
 const MB = 1024 * 1024;
-const tamParteDe = (tamano) => Math.max(8 * MB, Math.min(TAM_PARTE, Math.ceil(tamano / 24 / MB) * MB, Infinity), Math.ceil(tamano / 9999));
+const tamParteDe = (tamano) => Math.max(8 * MB, Math.min(TAM_PARTE, Math.ceil(tamano / 48 / MB) * MB, Infinity), Math.ceil(tamano / 9999));
 const TAM_COPIA = 1024 ** 3; // copias de más de 5 GB: por trozos de 1 GB
 const SUBIBLES = /\.(mp4|m4v|mkv|webm|mov|avi|ts|wmv|flv|srt|vtt|ass|jpg|jpeg|png|webp)$/i;
 const TIPOS = { mp4: 'video/mp4', m4v: 'video/mp4', mkv: 'video/x-matroska', webm: 'video/webm', mov: 'video/quicktime',
@@ -26,11 +26,12 @@ const TIPOS = { mp4: 'video/mp4', m4v: 'video/mp4', mkv: 'video/x-matroska', web
 // Webs desde las que se puede usar (además, en casa, cualquier localhost para probar)
 const ORIGENES = String(process.env.PANEL_ORIGENES ?? 'https://saitamaeditor.github.io').split(',').map((o) => o.trim()).filter(Boolean);
 
-let s3; let bucket; let foto; let nube; let p; let alMover = () => {};
+let s3; let s3Virtual = null; let bucket; let foto; let nube; let p; let alMover = () => {};
 let pagosEstado = () => 'desactivado';
 let pagos = null; // pagos.js (USDC)
 export function iniciar(opciones) {
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
+  s3Virtual = opciones.s3Virtual ?? null;
   alMover = opciones.alMover ?? alMover;
   pagosEstado = opciones.pagosEstado ?? pagosEstado;
   pagos = opciones.pagos ?? null;
@@ -575,9 +576,15 @@ export async function atender(ruta, req, res, json, ip) {
     if (ruta === '/api/panel/subir/partes') {
       const numeros = (Array.isArray(datos.numeros) ? datos.numeros : []).map(Number);
       if (!numeros.length || numeros.length > 200 || numeros.some((n) => !Number.isInteger(n) || n < 1 || n > 10000)) throw error(400, 'Partes no válidas');
-      const urls = {};
-      for (const n of numeros) urls[n] = await getSignedUrl(s3, new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: n }), { expiresIn: 6 * 3600 });
-      return json(res, 200, { urls });
+      // Cada trozo, firmado para las dos direcciones del bucket (el panel reparte los trozos entre
+      // ellas para tener el doble de conexiones a la vez)
+      const urls = {}; const urls2 = {};
+      for (const n of numeros) {
+        const orden = () => new UploadPartCommand({ Bucket: bucket, Key: key, UploadId: uploadId, PartNumber: n });
+        urls[n] = await getSignedUrl(s3, orden(), { expiresIn: 6 * 3600 });
+        if (s3Virtual) urls2[n] = await getSignedUrl(s3Virtual, orden(), { expiresIn: 6 * 3600 });
+      }
+      return json(res, 200, s3Virtual ? { urls, urls2 } : { urls });
     }
     if (ruta === '/api/panel/subir/completar') {
       const partes = (Array.isArray(datos.partes) ? datos.partes : [])
