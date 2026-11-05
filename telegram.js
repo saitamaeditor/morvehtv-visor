@@ -323,13 +323,14 @@ function enlaceTema(id) {
 async function bienvenida(gente) {
   const nombres = gente.map((p) => `<a href="tg://user?id=${p.id}">${html([p.first_name, p.last_name].filter(Boolean).join(' ') || p.username || 'nuevo miembro')}</a>`);
   const quien = nombres.length === 1 ? nombres[0] : `${nombres.slice(0, -1).join(', ')} y ${nombres.at(-1)}`;
-  const secciones = Object.values(datos.temas).map((t) => t.nombre).slice(0, 8);
+  const secciones = Object.values(datos.temas).map((t) => t.nombre).slice(0, 20);
   const texto = [
     `👋 <b>¡Bienvenid${gente.length === 1 ? 'o/a' : 'os/as'} a MorvehTV, ${quien}!</b>`,
     '',
     'Nos alegra tenerte aquí. Esto es lo que encontrarás en el grupo:',
     '',
     secciones.length ? `🔔 <b>Avisos de contenido nuevo</b>, cada sección en su tema:\n${secciones.map((s) => `   ${html(s)}`).join('\n')}` : '🔔 <b>Avisos de contenido nuevo</b>, cada sección en su tema.',
+    datos.avisos?.id ? '📢 <b>Avisos</b>: mantenimientos y novedades importantes de MorvehTV.' : null,
     datos.charla?.id ? '💬 <b>Chat</b>: el sitio para hablar, pedir películas o series y avisar si algo no funciona.' : null,
     '',
     '📌 <b>Normas</b>: respeto ante todo, nada de spam ni enlaces ajenos, y las peticiones en el Chat.',
