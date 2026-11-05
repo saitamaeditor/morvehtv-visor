@@ -1,6 +1,6 @@
-/* Intro de la app: viaje por las estrellas, la nube se dibuja, destello y título.
-   Todo se anima con transform y opacity (lo que las teles y los móviles mueven sin esfuerzo);
-   los desenfoques solo se usan en ordenador (.calidad-alta). */
+/* Intro de la app: línea de luz, la nube entra de golpe, «MORVEHTV» sube letra a letra, latido
+   con haces de luz y la cámara se mete en la nube. Solo transform y opacity: va fluida en
+   móviles y teles (sin lienzos, filtros ni desenfoques). */
 #intro {
   /* Unidad que mira el ancho y el alto: así cabe con el móvil en horizontal y en la tele */
   --u: 3.6px;
@@ -9,157 +9,106 @@
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-  transition: opacity .7s ease;
+  transition: opacity .45s ease;
 }
-#intro.fuera { opacity: 0; pointer-events: none; }
+#intro.intro-fuera { opacity: 0; pointer-events: none; }
+#intro.intro-rapido { transition-duration: .35s; }
 /* En negro y quieta hasta que la página está lista */
-#intro.esperando *, #intro.esperando *::before, #intro.esperando *::after { animation-play-state: paused !important; }
-#intro canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
-#intro::after { /* viñeta */
-  content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0; pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.85) 100%);
-}
+#intro.intro-esperando *, #intro.intro-esperando *::before, #intro.intro-esperando *::after { animation-play-state: paused !important; }
 
-.intro-centro {
-  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center;
-  text-align: center; padding: 16px; will-change: transform, opacity;
-  transition: transform 1s cubic-bezier(.6,0,.9,.4), opacity .9s ease;
+/* 1. Línea de luz que se abre en el centro */
+.intro-linea {
+  position: absolute; left: 50%; top: 50%; width: 70vw; height: 2px; margin: -1px 0 0 -35vw; pointer-events: none;
+  background: linear-gradient(90deg, transparent, #4f8cff 25%, #fff 50%, #d6409f 75%, transparent);
+  transform: scaleX(0); opacity: 0; will-change: transform, opacity;
+  animation: intro-linea .7s .05s cubic-bezier(.2,.8,.2,1) forwards;
 }
-#intro.salto .intro-centro { transform: scale(2.6); opacity: 0; }
-/* (Sin desenfoque al salir: un filtro sobre todo el centro daba tirones en el último segundo) */
+@keyframes intro-linea { 0% { transform: scaleX(0); opacity: 1; } 55% { transform: scaleX(1); opacity: 1; } 100% { transform: scaleX(1.15); opacity: 0; } }
 
-/* Nebulosa de color al fondo, moviéndose despacio (un degradado: no cuesta nada) */
-.intro-nebulosa {
-  position: absolute; top: -20%; left: -20%; width: 140%; height: 140%; pointer-events: none; opacity: 0;
-  background:
-    radial-gradient(ellipse 38% 30% at 32% 40%, rgba(79,140,255,.22), transparent 70%),
-    radial-gradient(ellipse 34% 28% at 70% 62%, rgba(214,64,159,.18), transparent 70%),
-    radial-gradient(ellipse 30% 24% at 55% 30%, rgba(142,78,198,.16), transparent 70%);
-  animation: intro-aparece 1.4s .2s ease forwards, intro-deriva 9s linear forwards; will-change: transform;
+/* 2. El logo entra de golpe y el título sube letra a letra */
+.intro-grupo {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 16px;
+  animation: intro-latido .5s 1.55s ease-out; /* 3. latido (sin quedarse fijo: luego se aleja) */
+  transition: opacity .25s ease;
 }
-@keyframes intro-deriva { from { transform: scale(1) rotate(0deg); } to { transform: scale(1.18) rotate(8deg); } }
-
-/* ---------- Logo con su halo, destello y ondas, todo centrado en la nube ---------- */
-.intro-marca {
-  position: relative; width: 150px; width: clamp(110px, calc(var(--u) * 28), 220px);
-  display: flex; align-items: center; justify-content: center;
+@keyframes intro-latido { 0% { transform: scale(1); } 35% { transform: scale(1.05); } 100% { transform: scale(1); } }
+.intro-camara {
+  position: relative; width: 150px; width: clamp(110px, calc(var(--u) * 26), 210px);
+  /* Punto del cuerpo de la nube por el que entra la cámara al final */
+  transform-origin: 28% 63%; will-change: transform;
+  transition: transform .6s cubic-bezier(.55,0,.8,.3);
 }
-.intro-logo { position: relative; width: 100%; height: auto; overflow: visible; }
-/* Halo: un degradado fijo detrás del logo (más barato que un drop-shadow animado) */
+.intro-logo {
+  display: block; position: relative; width: 100%; height: auto; overflow: visible;
+  opacity: 0; transform: scale(.55); will-change: transform, opacity;
+  animation: intro-golpe .6s .3s cubic-bezier(.18,1.35,.4,1) forwards;
+}
+@keyframes intro-golpe { 0% { opacity: 0; transform: scale(.55); } 40% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
+.intro-logo .nube { fill: url(#intro-relleno); stroke: #fff; stroke-width: 3; stroke-linejoin: round; }
+.intro-logo .play { fill: #fff; }
+/* Resplandor de los colores del logo detrás de la nube */
 .intro-halo {
-  position: absolute; left: 50%; top: 50%; width: 170%; height: 170%; margin: -85% 0 0 -85%;
-  background: radial-gradient(circle, rgba(79,140,255,.45), rgba(142,78,198,.18) 40%, transparent 68%);
-  opacity: 0; animation: intro-aparece .8s 1.2s ease forwards; pointer-events: none;
-}
-.intro-logo .nube {
-  fill: url(#intro-relleno); fill-opacity: 0; stroke: #8fb4ff; stroke-width: 2.5; stroke-linejoin: round;
-  stroke-dasharray: 400; stroke-dashoffset: 400;
-  animation: intro-trazo 1s .4s cubic-bezier(.65,0,.35,1) forwards, intro-relleno .6s 1.25s ease forwards;
-}
-.intro-logo .play {
-  fill: #fff; transform-origin: 66px 51px; transform: scale(0);
-  animation: intro-pop .5s 1.3s cubic-bezier(.34,1.8,.64,1) forwards;
-}
-/* Brillo que recorre la nube ya rellena */
-.intro-logo .brillo { animation: intro-reflejo .9s 1.75s ease-in-out forwards; }
-@keyframes intro-reflejo { to { transform: translateX(200px); } }
-@keyframes intro-trazo { to { stroke-dashoffset: 0; } }
-@keyframes intro-relleno { to { fill-opacity: 1; stroke: #fff; } }
-@keyframes intro-pop { to { transform: scale(1); } }
-
-.intro-anillo, .intro-destello { position: absolute; left: 50%; top: 50%; pointer-events: none; border-radius: 50%; will-change: transform, opacity; }
-.intro-anillo {
-  width: 40px; height: 40px; margin: -20px 0 0 -20px; border: 2px solid rgba(143,180,255,.9); opacity: 0;
-  animation: intro-onda 1.1s 1.2s cubic-bezier(.2,.6,.3,1) forwards;
-}
-.intro-anillo.dos { animation-delay: 1.35s; border-color: rgba(214,64,159,.8); }
-.intro-destello {
-  width: 300px; height: 300px; margin: -150px 0 0 -150px; opacity: 0;
-  background: radial-gradient(circle, rgba(255,255,255,.95), rgba(79,140,255,.4) 35%, transparent 70%);
-  animation: intro-flash .7s 1.2s ease-out forwards;
-}
-/* Destello horizontal de cine que cruza el logo */
-.intro-rayo {
-  position: absolute; left: 50%; top: 50%; width: 420%; height: 3px; margin: -1.5px 0 0 -210%; pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(143,180,255,.35) 30%, #fff 50%, rgba(214,64,159,.35) 70%, transparent);
-  border-radius: 50%; opacity: 0; transform: scaleX(0); will-change: transform, opacity;
-  animation: intro-rayo 1.1s 1.18s cubic-bezier(.2,.7,.2,1) forwards;
-}
-@keyframes intro-rayo { 0% { opacity: 0; transform: scaleX(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: scaleX(1); } }
-/* Chispas: cada una sale en su ángulo (--a) hasta su distancia (--d) y se apaga */
-.intro-chispas { position: absolute; left: 50%; top: 50%; width: 100%; height: 100%; margin: -50% 0 0 -50%; pointer-events: none; }
-.intro-chispas i {
-  position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%;
-  box-shadow: 0 0 6px currentColor; opacity: 0;
-  animation: intro-chispa .9s cubic-bezier(.1,.7,.3,1) forwards;
-}
-@keyframes intro-chispa {
-  0% { opacity: 1; transform: rotate(var(--a)) translateX(0) scale(1.4); }
-  100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(.3); }
-}
-@keyframes intro-onda { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(18); } }
-@keyframes intro-flash { 0% { opacity: 0; transform: scale(.3); } 25% { opacity: 1; } 100% { opacity: 0; transform: scale(1.6); } }
-
-/* ---------- Título letra a letra con barrido de luz ---------- */
-.intro-texto { position: relative; margin-top: 20px; margin-top: calc(var(--u) * 2.6); }
-/* Resplandor detrás del título: un degradado, no un filtro por letra */
-.intro-resplandor {
-  position: absolute; left: -10%; right: -10%; top: -30%; bottom: -30%; pointer-events: none;
-  background: radial-gradient(ellipse at center, rgba(79,140,255,.28), transparent 70%);
-  opacity: 0; animation: intro-aparece 1s 1.8s ease forwards;
+  position: absolute; left: 50%; top: 50%; width: 260%; height: 260%; margin: -130% 0 0 -130%; pointer-events: none;
+  background: radial-gradient(circle, rgba(142,78,198,.42), rgba(214,64,159,.16) 38%, transparent 66%);
+  opacity: 0; animation: intro-aparece .7s .4s ease forwards; transition: opacity .2s ease;
 }
 .intro-titulo {
-  position: relative; margin: 0; display: flex; white-space: nowrap;
-  font: 900 64px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: clamp(34px, calc(var(--u) * 11.5), 112px); letter-spacing: .08em;
+  position: relative; margin: 0; margin-top: 18px; margin-top: calc(var(--u) * 2.4); display: flex; white-space: nowrap;
+  font: 900 60px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: clamp(30px, calc(var(--u) * 10), 96px); letter-spacing: .05em; color: #fff;
+  transition: opacity .2s ease;
 }
-/* Cada letra lleva dos capas recortadas al texto: el destello que la cruza y su color */
-.intro-titulo span {
-  --color: linear-gradient(180deg, #fff 30%, #a9bddc 70%, #5b6f8f);
-  display: inline-block; opacity: 0; transform: translateY(.45em) scale(1.35);
-  background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.95) 50%, transparent 65%) no-repeat, var(--color);
-  background-size: 300% 100%, 100% 100%; background-position: 150% 0, 0 0;
-  -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent;
-  animation-name: intro-letra, intro-barrido;
-  animation-duration: .7s, .5s;
-  animation-timing-function: cubic-bezier(.2,.9,.3,1.2), ease-in-out;
-  animation-fill-mode: forwards, forwards;
+/* Cada letra asoma desde debajo de una línea invisible (su caja recorta lo que sobra) */
+.intro-titulo .letra { display: inline-block; overflow: hidden; padding: 0 .01em .06em; }
+.intro-titulo .letra > span {
+  display: inline-block; transform: translateY(115%); will-change: transform;
+  animation: intro-sube .5s cubic-bezier(.2,.9,.25,1) forwards;
 }
-.intro-titulo span.tv { --color: linear-gradient(135deg, #4f8cff, #8e4ec6 50%, #d6409f); margin-left: .12em; }
-@keyframes intro-letra { to { opacity: 1; transform: none; } }
-@keyframes intro-barrido { to { background-position: -50% 0, 0 0; } }
-/* Sin desenfoques ni sombras en las letras: con el texto recortado al degradado, Chrome las
-   pintaba a veces como cajas o parpadeando. El barrido de luz solo en ordenador: repintar el texto
-   degradado en cada fotograma es lo que más cuesta a móviles y teles */
-#intro.calidad-media .intro-titulo span, #intro.calidad-baja .intro-titulo span { animation-name: intro-letra; }
-#intro.calidad-baja .intro-chispas i { box-shadow: none; }
+.intro-titulo .letra.tv { color: #e0459b; }
+.intro-titulo .letra.tv:nth-child(7) { margin-left: .08em; }
+@keyframes intro-sube { to { transform: none; } }
 
-.intro-sub {
-  margin-top: 16px; margin-top: calc(var(--u) * 2.2); color: #c9d4e8;
-  font: 600 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: clamp(10px, calc(var(--u) * 1.6), 17px);
-  letter-spacing: .42em; opacity: 0; transform: translateY(.6em); white-space: nowrap; animation: intro-sub 1s 2.2s ease-out forwards;
+/* 3. Haces de luz que cruzan por detrás en el latido */
+.intro-cintas { position: absolute; top: 0; right: 0; bottom: 0; left: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.intro-cintas i {
+  position: absolute; top: -25%; height: 150%; left: -45vw; width: 24vw; opacity: 0;
+  background: linear-gradient(90deg, transparent, var(--c) 50%, transparent);
+  transform: translateX(0) skewX(-20deg); will-change: transform, opacity;
+  animation: intro-cinta .8s cubic-bezier(.45,0,.2,1) forwards;
 }
-/* Solo opacidad y posición: animar el espaciado entre letras recalculaba el texto en cada fotograma */
-@keyframes intro-sub { to { opacity: 1; transform: none; } }
+.intro-cintas i:nth-child(1) { --c: rgba(79,140,255,.75); animation-delay: 1.48s; }
+.intro-cintas i:nth-child(2) { --c: rgba(142,78,198,.75); animation-delay: 1.56s; width: 16vw; }
+.intro-cintas i:nth-child(3) { --c: rgba(214,64,159,.75); animation-delay: 1.64s; width: 30vw; }
+@keyframes intro-cinta {
+  0% { opacity: 0; transform: translateX(0) skewX(-20deg); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(190vw) skewX(-20deg); }
+}
+
+/* 4. Final: el título y el resplandor se apagan y la cámara se mete en la nube */
+/* (con una animación propia: las de entrada se quedan fijas al acabar y no dejarían apagarlos) */
+#intro.intro-salto .intro-titulo, #intro.intro-salto .intro-halo, #intro.intro-salto .intro-saltar { animation: intro-apaga .22s ease-out forwards; }
+@keyframes intro-apaga { from { opacity: 1; } to { opacity: 0; } }
+#intro.intro-salto .intro-camara { transform: scale(60); }
+
 @keyframes intro-aparece { to { opacity: 1; transform: none; } }
 
 .intro-saltar {
   position: absolute; z-index: 2; right: 16px; bottom: 16px;
   right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom));
-  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 999px;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); color: #fff; border-radius: 4px;
   padding: 10px 18px; font: 600 14px system-ui, sans-serif; cursor: pointer;
-  opacity: 0; animation: intro-aparece .4s .8s forwards;
+  opacity: 0; animation: intro-aparece .4s .6s forwards; transition: opacity .2s ease;
 }
 .intro-saltar:hover { background: rgba(255,255,255,.18); }
 /* En la tele: aviso grande abajo en el centro (se salta con cualquier botón del mando) */
-#intro.en-tele .intro-saltar { right: auto; left: 50%; bottom: 5%; transform: translateX(-50%); font-size: 20px; padding: 12px 26px; }
-#intro.en-tele .intro-saltar { animation-name: intro-aparece-tele; }
+#intro.intro-en-tele .intro-saltar { right: auto; left: 50%; bottom: 5%; transform: translateX(-50%); font-size: 20px; padding: 12px 26px; }
+#intro.intro-en-tele .intro-saltar { animation-name: intro-aparece-tele; }
 @keyframes intro-aparece-tele { to { opacity: .85; } }
 
-/* Con «reducir movimiento» activado: solo aparece el logo y se funde */
+/* Con «reducir movimiento» activado: el logo y el título aparecen y se funden, sin zoom */
 @media (prefers-reduced-motion: reduce) {
   #intro *, #intro *::before { animation-duration: .01s !important; animation-delay: 0s !important; }
-  .intro-centro { transition: opacity .5s ease; }
-  #intro.salto .intro-centro { transform: none; filter: none; }
+  .intro-cintas, .intro-linea { display: none; }
+  #intro.intro-salto .intro-camara { transform: none; }
 }
