@@ -442,7 +442,7 @@
     .anuncio-propio .texto b { font-size: 15px; } .anuncio-propio .texto span { font-size: 13px; }
     .anuncio-previo .pie { justify-content: stretch; } .anuncio-previo .pie .boton { flex: 1; }
   }
-  /* Premium: insignia junto al nombre y bloque del plan en «Mi cuenta» */
+  /* VIP: insignia junto al nombre y bloque del plan en «Mi cuenta» */
   #mi-cuenta .insignia { margin-left: 6px; font-size: 10px; font-weight: 800; letter-spacing: .06em; color: #1a1300; background: #ffb224; border-radius: 999px; padding: 2px 7px; }
   @media (max-width: 600px) { #mi-cuenta .insignia { display: none; } .premium #mi-cuenta .inicial { box-shadow: 0 0 0 2px #ffb224; } }
   .acepto-premium { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--suave); line-height: 1.45; cursor: pointer; }
@@ -450,7 +450,9 @@
   .cuenta-bloque .acepto-premium input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; accent-color: var(--acento); }
   .acepto-premium a, .cuenta-legal a { color: var(--acento); }
   .acepto-premium b { color: var(--texto); }
-  /* Premium con USDC: opciones, pantalla de pago y guía */
+  /* VIP con USDC: opciones, pantalla de pago y guía */
+  .pago-metamask { display: flex; flex-direction: column; gap: 6px; }
+  .boton-metamask { font-size: 16px; padding: 12px 18px; }
   .opciones-usdc { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; width: 100%; }
   .opcion-usdc { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border-radius: 10px; cursor: pointer;
     background: var(--panel2); border: 2px solid var(--borde); color: var(--texto); font: inherit; text-align: left; }
@@ -487,7 +489,7 @@
   @media (max-width: 420px) { .pago-importe b { font-size: 26px; } .pago-qr { width: 130px; height: 130px; } }
   .cuenta-legal { margin: 14px 0 0; font-size: 13px; color: var(--suave); text-align: center; }
   .tele .acepto-premium { font-size: 18px; } .tele .acepto-premium input { width: 28px; height: 28px; }
-  .cuenta-bloque.plan-premium h3::after { content: ' ⭐ Premium'; color: #ffb224; }
+  .cuenta-bloque.plan-premium h3::after { content: ' ⭐ VIP'; color: #ffb224; }
   .cuenta-bloque.plan-basico .boton-acento { background: linear-gradient(90deg, #4f8cff, #7b5cff); border-color: transparent; }
   /* Botón para salir (solo en la app de Android) */
   #salir-app { flex: none; margin-left: auto; padding: 6px 12px; display: inline-flex; align-items: center; gap: 6px; }

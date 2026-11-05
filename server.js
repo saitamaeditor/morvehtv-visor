@@ -798,6 +798,12 @@ http
       if (ext === '.html') {
         let html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
         if (url.pathname === '/legal.html') html = await legal(html, req);
+        // La oferta VIP del registro, solo con los pagos activados (y con su precio)
+        if (url.pathname === '/entrar.html') {
+          html = pagos.activo
+            ? html.replace(/<!--\/?PAGOS-->/g, '').replace(/\{\{PRECIO\}\}/g, escHtml((await pagos.precioTexto().catch(() => null)) || 'un pago único'))
+            : html.replace(/<!--PAGOS-->[\s\S]*?<!--\/PAGOS-->/g, '');
+        }
         return enviar(res, 200, { 'content-type': tipos[ext], 'cache-control': 'no-store' }, html);
       }
       const cuerpo = ext === '.js' ? await js(fichero) : await readFile(fichero);

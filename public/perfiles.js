@@ -28,6 +28,7 @@ async function empezar() {
   pintarBotonCuenta();
   cargar();
   vueltaDelPago();
+  ofertaVipAlEntrar();
 }
 
 const inicial = (c) => (c.nombre || c.usuario || '?').trim().charAt(0).toUpperCase();
@@ -45,7 +46,7 @@ function pintarBotonCuenta() {
   b.hidden = !yo;
   b.innerHTML = '';
   if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
-  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'PREMIUM'));
+  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'VIP'));
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -103,7 +104,7 @@ function abrirCuenta() {
   cab.append(el('div', 'inicial grande', inicial(yo)), datos, x);
   caja.append(cab);
 
-  // Plan: Básico o Premium
+  // Plan: Básico o VIP
   const bp = typeof bloquePlan === 'function' ? bloquePlan() : null;
   if (bp) caja.append(bp);
 
@@ -158,7 +159,7 @@ function abrirCuenta() {
   const borrar = el('button', 'boton boton-peligro', 'Borrar mi cuenta');
   borrar.onclick = () => accion(borrar, bb.msg, async () => {
     if (!cb.i.value) throw new Error('Escribe tu contraseña');
-    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.' + (planInfo && planInfo.plan === 'premium' && !planInfo.admin ? ' Perderás el tiempo de Premium que te quede.' : ''))) return;
+    if (!confirm('¿Seguro que quieres borrar tu cuenta? No se puede deshacer.' + (planInfo && planInfo.plan === 'premium' && !planInfo.admin ? ' Perderás el tiempo de VIP que te quede.' : ''))) return;
     await enviar('/api/cuenta-borrar', { actual: cb.i.value });
     location.replace('/entrar.html#registro');
   });
@@ -314,31 +315,31 @@ function tarjetaPerfil(f, alPulsar, carpeta, ancha) {
   return t;
 }
 
-// ---------- Planes: Básico (con anuncios) y Premium (sin anuncios) ----------
+// ---------- Planes: Básico (con anuncios) y VIP (sin anuncios) ----------
 // El servidor dice el plan de la cuenta, el precio y, solo al plan Básico, qué anuncios poner.
-// Se paga con USDC (red Base); en cuanto llega el pago, Premium se activa al momento y el servidor avisa a todas las
+// Se paga con USDC (red Base); en cuanto llega el pago, VIP se activa al momento y el servidor avisa a todas las
 // pestañas y aparatos abiertos de la cuenta (evento «plan») para quitar los anuncios ya.
 let planInfo = null; // { activo, plan, hasta, cancelado, precio, anuncios }
 const enApp = () => !!window.MorvehApp;
 
 async function cargarPlan() {
   try { planInfo = await api('/api/pago/info'); } catch (e) { planInfo = null; }
-  // Sin pagos no hay planes: nadie lleva la marca de Premium
+  // Sin pagos no hay planes: nadie lleva la marca de VIP
   document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.activo && planInfo.plan === 'premium'));
   pintarBotonCuenta();
   avisoRenovar();
   return planInfo;
 }
-// Recordatorio de renovación (una vez al día por aparato): en el último mes de Premium y cuando
+// Recordatorio de renovación (una vez al día por aparato): en el último mes de VIP y cuando
 // ya ha terminado
 function avisoRenovar() {
   if (!planInfo || !planInfo.activo || planInfo.admin) return;
   let t = null;
   if (planInfo.plan === 'premium' && planInfo.puedeRenovar) {
     const dias = Math.ceil((planInfo.hasta - Date.now()) / 864e5);
-    t = `⭐ Tu Premium termina en ${dias} ${dias === 1 ? 'día' : 'días'}. Renuévalo en «Mi cuenta» para seguir sin anuncios.`;
+    t = `⭐ Tu VIP termina en ${dias} ${dias === 1 ? 'día' : 'días'}. Renuévalo en «Mi cuenta» para seguir sin anuncios.`;
   } else if (planInfo.plan !== 'premium' && planInfo.vencio) {
-    t = '⭐ Tu Premium ha terminado. Renuévalo en «Mi cuenta» para volver a verlo todo sin anuncios.';
+    t = '⭐ Tu VIP ha terminado. Renuévalo en «Mi cuenta» para volver a verlo todo sin anuncios.';
   }
   if (!t) return;
   const hoy = new Date().toISOString().slice(0, 10);
@@ -354,14 +355,14 @@ async function planCambiado(avisar) {
   const ahora = planInfo && planInfo.plan;
   if (antes === ahora && !avisar) return;
   document.querySelectorAll('.anuncio, .anuncio-previo').forEach((x) => { if (ahora === 'premium') x.remove(); });
-  if (ahora === 'premium' && antes !== 'premium') aviso('⭐ ¡Ya eres Premium! Sin anuncios en la web y la app', 5000);
+  if (ahora === 'premium' && antes !== 'premium') aviso('⭐ ¡Ya eres VIP! Sin anuncios en la web y la app', 5000);
   if (document.documentElement.classList.contains('con-cuenta')) abrirCuenta();
   if (actual < 0) cargar();
 }
 // Al volver a la app (estaba en segundo plano mientras se pagaba) se mira el plan otra vez
 document.addEventListener('visibilitychange', () => { if (!document.hidden && yo) planCambiado(false); });
 
-// (Premium con USDC no sale de la web: no hay vuelta de ninguna página de pago)
+// (VIP con USDC no sale de la web: no hay vuelta de ninguna página de pago)
 function vueltaDelPago() {}
 
 const azar = (lista) => lista[Math.floor(Math.random() * lista.length)];
@@ -381,11 +382,11 @@ function tarjetaAnuncio(x) {
   c.append(t);
   return c;
 }
-function promoPremium(conBoton) {
+function promoVIP(conBoton) {
   if (!planInfo.activo) return null;
   const c = el('div', 'anuncio-propio promo');
   const t = el('div', 'texto');
-  t.append(el('b', null, '⭐ MorvehTV Premium'), el('span', null, 'Todo sin anuncios en la web y la app' + (planInfo.precio ? ' por ' + planInfo.precio : '') + '.'));
+  t.append(el('b', null, '⭐ MorvehTV VIP'), el('span', null, 'Todo sin anuncios en la web y la app' + (planInfo.precio ? ' por ' + planInfo.precio : '') + '.'));
   c.append(t);
   if (conBoton) {
     const b = el('button', 'boton boton-acento', 'Quitar anuncios');
@@ -578,9 +579,9 @@ function anuncioVideo(x) {
   });
 }
 
-// Un anuncio con imagen (o, sin «x», el aviso de Premium) durante 5 s
+// Un anuncio con imagen (o, sin «x», el aviso de VIP) durante 5 s
 function anuncioImagen(x) {
-  const contenido = x ? tarjetaAnuncio(x) : promoPremium(false);
+  const contenido = x ? tarjetaAnuncio(x) : promoVIP(false);
   if (!contenido) return Promise.resolve();
   return new Promise((listo) => {
     const c = capaAnuncio();
@@ -785,7 +786,7 @@ function anunciosDelReproductor(caja) {
       setTimeout(() => {
         if (enAnuncio || !v.paused || v.ended || v.seeking || tarjetaPausa || !caja.isConnected || v.currentTime < 2) return;
         const conImagen = (a.propios || []).filter((x) => !x.video && (x.imagen || x.titulo));
-        const contenido = conImagen.length ? tarjetaAnuncio(azar(conImagen)) : promoPremium(true);
+        const contenido = conImagen.length ? tarjetaAnuncio(azar(conImagen)) : promoVIP(true);
         if (!contenido) return;
         tarjetaPausa = el('aside', 'anuncio-pausa');
         const cab = el('div', 'anuncio-pausa-cab');
@@ -801,9 +802,9 @@ function anunciosDelReproductor(caja) {
   }
 }
 
-// ---------- Premium con USDC (red Base) ----------
+// ---------- VIP con USDC (red Base) ----------
 // Se paga una sola vez por un tiempo (sin suscripción): se elige cuánto, se envía el importe
-// exacto a la dirección y el servidor lo ve en la blockchain y activa Premium solo.
+// exacto a la dirección y el servidor lo ve en la blockchain y activa VIP solo.
 function fechaLarga(ms) { return new Date(ms).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }); }
 function copiar(texto, boton) {
   const listo = () => { const t = boton.textContent; boton.textContent = '✓ Copiado'; setTimeout(() => { boton.textContent = t; }, 1600); };
@@ -859,7 +860,7 @@ let vigiaPago = null;
 function pantallaPago(b, d) {
   clearInterval(vigiaPago);
   const caja = el('div', 'pago-usdc');
-  const titulo = el('p', 'pago-paso', `Para ${d.meses} ${d.meses === 1 ? 'mes' : 'meses'} de Premium, envía exactamente:`);
+  const titulo = el('p', 'pago-paso', `Para ${d.meses} ${d.meses === 1 ? 'mes' : 'meses'} de VIP, envía exactamente:`);
   const importe = el('div', 'pago-importe');
   importe.append(el('b', null, d.importeTexto), el('span', null, ' USDC'));
   const cImporte = el('button', 'boton', 'Copiar importe'); cImporte.onclick = () => copiar(d.importeExacto, cImporte);
@@ -874,10 +875,10 @@ function pantallaPago(b, d) {
   const comprueba = el('small', 'suave', `Comprueba al pegarla que empieza por ${d.direccion.slice(0, 6)} y acaba por ${d.direccion.slice(-4)}.`);
   const qr = el('div', 'pago-qr');
   qr.innerHTML = d.qr;
-  const enCartera = el('a', 'boton boton-acento', 'Abrir en mi cartera');
+  const enCartera = el('a', 'boton', 'Abrir en otra cartera');
   enCartera.href = d.enlace;
   const qrTexto = el('small', 'suave', 'Escanéalo con MetaMask, Coinbase Wallet o tu cartera: el importe, la moneda y la red ya van puestos.');
-  const lado = el('div', 'pago-qr-texto'); lado.append(qrTexto, enCartera);
+  const lado = el('div', 'pago-qr-texto'); lado.append(qrTexto, botonMetaMask(d), enCartera);
   const qrFila = el('div', 'pago-qr-fila'); qrFila.append(qr, lado);
   const estado = el('div', 'pago-estado');
   const cancelar = el('button', 'boton', 'Cancelar este pago');
@@ -905,29 +906,94 @@ function pantallaPago(b, d) {
       if (r.estado === 'pagado') {
         clearInterval(vigiaPago);
         estado.className = 'pago-estado hecho';
-        estado.innerHTML = '✅ <b>¡Pago recibido!</b> Premium activado. ' + (r.tx ? `<a href="https://basescan.org/tx/${r.tx}" target="_blank" rel="noopener">Ver el pago en basescan.org ↗</a>` : '');
+        estado.innerHTML = '✅ <b>¡Pago recibido!</b> VIP activado. ' + (r.tx ? `<a href="https://basescan.org/tx/${r.tx}" target="_blank" rel="noopener">Ver el pago en basescan.org ↗</a>` : '');
         await planCambiado(true);
       }
     } catch (e) {}
   }, 1000);
 }
 
+// «Pagar con MetaMask»: en el ordenador (extensión) o dentro del navegador de MetaMask, prepara el
+// envío de USDC por Base con todo puesto (red, moneda, dirección e importe exacto) y solo hay que
+// confirmarlo en MetaMask. En el móvil sin extensión abre la app de MetaMask con el pago ya
+// preparado; en la app de MorvehTV, el enlace «ethereum:» que abre MetaMask directamente.
+const BASE_HEX = '0x2105'; // 8453
+function botonMetaMask(d) {
+  const b = el('button', 'boton boton-acento boton-metamask', '🦊 Pagar con MetaMask');
+  b.type = 'button';
+  const msg = el('small', 'suave');
+  const caja = el('div', 'pago-metamask'); caja.append(b, msg);
+  b.onclick = async () => {
+    const eth = window.ethereum;
+    if (!eth) {
+      if (enApp()) { location.href = d.enlace; return; }
+      // Móvil o navegador sin la extensión: la app de MetaMask con el pago preparado
+      const enlace = `https://metamask.app.link/send/${d.contrato}@8453/transfer?address=${d.direccion}&uint256=${d.importe}`;
+      if (/Android|iPhone|iPad/i.test(navigator.userAgent)) { window.open(enlace, '_blank', 'noopener'); return; }
+      msg.innerHTML = 'No encuentro MetaMask en este navegador. Instala la extensión desde <a href="https://metamask.io/download/" target="_blank" rel="noopener">metamask.io</a> o escanea el QR con la app del móvil.';
+      return;
+    }
+    b.disabled = true;
+    try {
+      msg.textContent = 'Abre MetaMask y conecta tu cartera…';
+      const [cuenta] = await eth.request({ method: 'eth_requestAccounts' });
+      if (!cuenta) throw new Error('Sin cartera');
+      // La red Base (si no la tiene, se le propone añadirla)
+      if ((await eth.request({ method: 'eth_chainId' })) !== BASE_HEX) {
+        msg.textContent = 'Cambia a la red Base en MetaMask…';
+        try {
+          await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_HEX }] });
+        } catch (e) {
+          if (e && (e.code === 4902 || (e.data && e.data.originalError && e.data.originalError.code === 4902))) {
+            await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: BASE_HEX, chainName: 'Base', rpcUrls: ['https://mainnet.base.org'],
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 }, blockExplorerUrls: ['https://basescan.org'] }] });
+          } else throw e;
+        }
+      }
+      // transfer(dirección, importe) del contrato de USDC: el importe exacto con sus céntimos
+      const datos = '0xa9059cbb' + d.direccion.replace(/^0x/, '').toLowerCase().padStart(64, '0')
+        + BigInt(d.importe).toString(16).padStart(64, '0');
+      msg.textContent = `Confirma en MetaMask el envío de ${d.importeTexto} USDC…`;
+      const tx = await eth.request({ method: 'eth_sendTransaction', params: [{ from: cuenta, to: d.contrato, data: datos, value: '0x0' }] });
+      msg.innerHTML = `✅ Enviado. En unos segundos se activa VIP solo. <a href="https://basescan.org/tx/${encodeURIComponent(tx)}" target="_blank" rel="noopener">Ver el envío ↗</a>`;
+    } catch (e) {
+      b.disabled = false;
+      msg.textContent = e && e.code === 4001 ? 'Has cancelado el pago en MetaMask. Puedes volver a intentarlo.'
+        : /insufficient|fondos/i.test((e && e.message) || '') ? 'No tienes USDC o ETH suficiente en la red Base (hace falta un poco de ETH en Base para la comisión).'
+          : 'No se pudo preparar el pago en MetaMask: ' + ((e && e.message) || 'error desconocido');
+    }
+  };
+  return caja;
+}
+
+// Al crear la cuenta pulsando «Hazte VIP» se llega con ?vip=1: se abre «Mi cuenta» en el plan
+function ofertaVipAlEntrar() {
+  if (!/[?&]vip=1\b/.test(location.search)) return;
+  try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
+  if (!planInfo || !planInfo.activo || planInfo.plan === 'premium') return;
+  abrirCuenta();
+  setTimeout(() => {
+    const plan = document.querySelector('.cuenta-bloque.plan-basico, .cuenta-bloque[class*="plan"]');
+    if (plan) plan.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, 150);
+}
+
 function bloquePlan() {
   if (!planInfo) return null;
   clearInterval(vigiaPago);
   const premium = planInfo.plan === 'premium';
-  // Pagos apagados: no se habla de planes (salvo a quien aún tiene Premium pagado)
+  // Pagos apagados: no se habla de planes (salvo a quien aún tiene VIP pagado)
   if (!planInfo.activo && (!premium || planInfo.admin)) return null;
   let texto;
-  if (premium && planInfo.admin) texto = 'Premium de por vida (administrador): sin anuncios y sin pagar nunca.';
-  else if (premium && !planInfo.activo) texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app.`;
+  if (premium && planInfo.admin) texto = 'VIP de por vida (administrador): sin anuncios y sin pagar nunca.';
+  else if (premium && !planInfo.activo) texto = `VIP hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app.`;
   else if (premium) {
     const dias = Math.ceil((planInfo.hasta - Date.now()) / 864e5);
-    texto = `Premium hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. Es un pago de 12 meses que no se renueva solo: `
+    texto = `VIP hasta el ${fechaLarga(planInfo.hasta)}: sin anuncios en la web y la app. Es un pago de 12 meses que no se renueva solo: `
       + (planInfo.puedeRenovar ? `termina en ${dias} ${dias === 1 ? 'día' : 'días'}, ya puedes renovarlo (el año nuevo empieza cuando acabe este).` : 'podrás renovarlo en su último mes.');
   }
-  else texto = (planInfo.vencio ? `Tu Premium terminó el ${fechaLarga(planInfo.vencio)}: renuévalo para volver a verlo todo sin anuncios. ` : '')
-    + 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con Premium lo ves todo sin anuncios, en la web y la app, durante 12 meses. Se paga una vez con USDC (un dólar digital) y no se renueva solo: al terminar, tú decides si renovarlo.' : '');
+  else texto = (planInfo.vencio ? `Tu VIP terminó el ${fechaLarga(planInfo.vencio)}: renuévalo para volver a verlo todo sin anuncios. ` : '')
+    + 'Básico: gratis, con anuncios.' + (planInfo.activo ? ' Con VIP lo ves todo sin anuncios, en la web y la app, durante 12 meses. Se paga una vez con USDC (un dólar digital) y no se renueva solo: al terminar, tú decides si renovarlo.' : '');
   const b = bloque('Plan', texto);
   b.s.classList.add(premium ? 'plan-premium' : 'plan-basico');
 
@@ -950,9 +1016,9 @@ function bloquePlan() {
     const acepto = el('label', 'acepto-premium');
     const casilla = el('input'); casilla.type = 'checkbox';
     const txt = el('span');
-    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> y pido que Premium empiece <b>en cuanto llegue el pago</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
+    txt.innerHTML = 'Acepto las <a href="/legal.html#condiciones" target="_blank">condiciones</a> y pido que VIP empiece <b>en cuanto llegue el pago</b>, por lo que <b>pierdo el derecho de desistimiento</b> de 14 días.';
     acepto.append(casilla, txt);
-    const seguir = el('button', 'boton boton-acento', premium || planInfo.vencio ? '⭐ Renovar Premium con USDC' : '⭐ Hazte Premium con USDC');
+    const seguir = el('button', 'boton boton-acento', premium || planInfo.vencio ? '⭐ Renovar VIP con USDC' : '⭐ Hazte VIP con USDC');
     seguir.onclick = () => accion(seguir, b.msg, async () => {
       if (!casilla.checked) { casilla.focus(); throw new Error('Marca la casilla de las condiciones para continuar'); }
       const d = await enviar('/api/pago/usdc/pedido', { opcion: elegida, acepta: true });
@@ -960,7 +1026,7 @@ function bloquePlan() {
       pantallaPago(b, d);
     });
     const unica = planInfo.opciones.length === 1;
-    b.s.append(el('p', 'pago-paso', premium || planInfo.vencio ? 'Renovar 12 meses más:' : (unica ? 'Un año de Premium, en un solo pago:' : 'Elige cuánto tiempo:')), opciones, acepto, seguir);
+    b.s.append(el('p', 'pago-paso', premium || planInfo.vencio ? 'Renovar 12 meses más:' : (unica ? 'Un año de VIP, en un solo pago:' : 'Elige cuánto tiempo:')), opciones, acepto, seguir);
   }
   // Últimos pagos, con su enlace público
   if (planInfo.pagos && planInfo.pagos.length) {

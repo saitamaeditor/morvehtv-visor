@@ -361,9 +361,9 @@ export async function atender(ruta, req, res, json, cuenta) {
   // Nuevo pedido: elige cuántos meses; devuelve el importe exacto y cómo pagarlo
   if (ruta === '/api/pago/usdc/pedido') {
     const plan = await p.planDe(cuenta);
-    if (plan.admin) throw error(409, 'Los administradores ya tienen Premium de por vida');
+    if (plan.admin) throw error(409, 'Los administradores ya son VIP de por vida');
     if (!puedeRenovar(cuenta.plan)) {
-      throw error(409, `Ya tienes Premium hasta el ${new Date(cuenta.plan.hasta).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}. Podrás renovarlo en su último mes.`);
+      throw error(409, `Ya eres VIP hasta el ${new Date(cuenta.plan.hasta).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}. Podrás renovarlo en su último mes.`);
     }
     if (datos.acepta !== true) throw error(400, 'Tienes que aceptar las condiciones y el inicio inmediato del servicio');
     const o = OPCIONES.find((x) => x.id === String(datos.opcion));

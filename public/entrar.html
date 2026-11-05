@@ -43,6 +43,11 @@
   .pestana:focus { outline: none; box-shadow: 0 0 0 2px #00a4dc; }
   .error { min-height: 20px; margin: 12px 0 0; color: #ff6b6b; font-size: 14px; text-align: center; }
   .pie { margin-top: 16px; text-align: center; color: #7d8492; font-size: 13px; }
+  .vip { margin-top: 14px; padding: 14px; border-radius: 12px; border: 1px solid rgba(255,178,36,.45);
+    background: linear-gradient(110deg, rgba(79,140,255,.16), rgba(255,178,36,.14)); display: flex; flex-direction: column; gap: 6px; }
+  .vip b { color: #ffb224; font-size: 16px; }
+  .vip span { color: #c9ced8; font-size: 13.5px; line-height: 1.45; }
+  .vip .vip-boton { margin-top: 6px; background: #ffb224; color: #111; }
   .enlace { background: none; border: 0; padding: 0; color: #00a4dc; font: inherit; font-weight: 600; cursor: pointer; }
   .enlace:focus { outline: 2px solid #00a4dc; outline-offset: 2px; border-radius: 4px; }
   [hidden] { display: none !important; }
@@ -103,6 +108,11 @@
       </label>
       <label class="acepto"><input type="checkbox" id="r-acepta"> <span>Tengo al menos 14 años y acepto las <a href="/legal.html#condiciones" target="_blank">condiciones de uso</a> y la <a href="/legal.html#privacidad" target="_blank">política de privacidad</a>.</span></label>
       <button class="enviar" type="submit">Crear cuenta</button>
+      <!--PAGOS--><div class="vip" id="r-vip">
+        <b>⭐ Hazte VIP y evita los anuncios</b>
+        <span>Todo sin anuncios en la web y la app por {{PRECIO}}. Pago único con cripto (USDC) desde MetaMask, sin suscripción.</span>
+        <button class="enviar vip-boton" type="button" id="r-vip-boton">⭐ Crear cuenta y hacerme VIP</button>
+      </div><!--/PAGOS-->
       <p class="error" id="r-error" role="alert"></p>
       <p class="pie">Guarda bien tu contraseña: no se puede recuperar por correo.</p>
     </form>
@@ -189,6 +199,11 @@
       enviar('/api/login', { usuario: u, clave: c }, $('e-error'), this.querySelector('.enviar'));
     };
 
+    // «Crear cuenta y hacerme VIP»: lo mismo, y al entrar se abre el pago
+    var vip = $('r-vip-boton');
+    var destinoNormal = destino;
+    $('f-registro').querySelector('button[type=submit]').onclick = function () { destino = destinoNormal; };
+    if (vip) vip.onclick = function () { destino = '/?vip=1'; $('f-registro').requestSubmit ? $('f-registro').requestSubmit() : $('f-registro').onsubmit(new Event('submit')); };
     $('f-registro').onsubmit = function (e) {
       e.preventDefault();
       var err = $('r-error');
