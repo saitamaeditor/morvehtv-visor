@@ -837,7 +837,7 @@ http
         return enviar(res, 200, { 'content-type': tipos[ext], 'cache-control': 'no-store' }, html);
       }
       const conVersion = url.searchParams.get('v') === VERSION;
-      const cache = conVersion ? 'public, max-age=31536000, immutable'
+      const cache = conVersion ? 'private, max-age=31536000, immutable'
         : ['.png', '.svg', '.webmanifest'].includes(ext) ? 'public, max-age=604800' : 'no-cache';
       return await servirFijo(req, res, fichero, tipos[ext] ?? 'application/octet-stream', cache);
     } catch (err) {
