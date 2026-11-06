@@ -1028,67 +1028,117 @@
   .tele .rejilla.anchas .item .meta { font-size: 2.3vh; }
   @media (max-width: 600px) { .rejilla.anchas, .rejilla.anchas.con-episodios { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } }
 
-  /* ---------- Reproductor estilo plataforma de streaming ----------
-     Arriba, la barra de progreso a lo ancho (fina, con lo visto en color y el tiempo a la
-     derecha); debajo, iconos grandes sin recuadro: ▶ ⟲10 10⟳ 🔊 a la izquierda y capítulos,
-     idioma y pantalla completa a la derecha. A pantalla completa todo flota sobre la imagen con
-     un degradado oscuro y se esconde solo. */
-  .controles { flex-wrap: wrap; gap: 4px 6px; padding: 10px 14px 12px; }
-  .controles .fila-progreso { order: -1; flex: 1 1 100%; display: flex; align-items: center; gap: 14px; min-width: 0; }
+  /* ---------- Reproductor MorvehTV ----------
+     Un panel de cristal que flota sobre la imagen, la barra de progreso con degradado rosa →
+     violeta que brilla, botones redondos que se encienden con el degradado al elegirlos (con el
+     ratón o el mando) y el idioma bien a la vista con su etiqueta de color (ES, LAT, EN…). */
+  .repro { --g1: #ff3d9a; --g2: #8b5cff; --deg: linear-gradient(90deg, var(--g1), var(--g2)); }
+  .controles { flex-wrap: wrap; gap: 8px 10px; padding: 12px 14px; align-items: center; }
+  .controles .fila-progreso { order: -1; flex: 1 1 100%; display: flex; align-items: center; gap: 12px; min-width: 0; }
   .controles .fila-progreso input[type=range] { order: 0; flex: 1 1 auto; min-width: 0; margin: 0; }
-  .controles .fila-progreso .tiempo { order: 0; flex: none; font-size: 14px; text-align: right; margin: 0; }
-  .controles .grupo { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  .controles .fila-progreso .tiempo { order: 0; flex: none; margin: 0; font-size: 13px; font-weight: 700; color: #fff; padding: 4px 10px;
+    border-radius: 999px; background: rgba(255,255,255,.1); font-variant-numeric: tabular-nums; text-align: right; }
+  .controles .grupo { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .controles .grupo.der { margin-left: auto; }
-  .controles .grupo .boton { background: transparent; border-color: transparent; color: #fff; border-radius: 999px; padding: 8px 10px; min-width: 0;
-    display: inline-flex; align-items: center; gap: 6px; transition: transform .15s, background .15s; }
-  .controles .grupo .boton .icono { width: 26px; height: 26px; }
-  .controles .grupo .boton span { font-size: 13px; font-weight: 700; }
-  .controles .grupo .boton:hover, .controles .grupo .boton:focus { background: rgba(255,255,255,.14); transform: scale(1.12); outline: none; }
-  .controles .grupo .boton:focus-visible, .usa-mando .controles .grupo .boton:focus, .tele .controles .grupo .boton:focus { box-shadow: 0 0 0 2px #fff; }
-  .controles .grupo .boton.audio span, .controles .grupo .boton.con-texto span { font-size: 14px; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* La barra de progreso: fina, con lo recorrido en el color de la web; crece al pasar por ella */
-  .controles input[type=range] { -webkit-appearance: none; appearance: none; height: 18px; background: transparent; cursor: pointer; }
-  .controles input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; transition: height .15s;
-    background: linear-gradient(to right, var(--acento) var(--pct, 0%), rgba(255,255,255,.3) var(--pct, 0%)); }
-  .controles input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255,255,255,.3); }
-  .controles input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--acento); }
-  .controles input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
-    background: var(--acento); border: 0; box-shadow: 0 0 0 3px rgba(224,69,155,.25); transform: scale(.9); transition: transform .15s; }
-  .controles input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--acento); border: 0; }
-  .controles input[type=range]:hover::-webkit-slider-runnable-track { height: 6px; }
-  .controles input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.25); margin-top: -4px; }
-  /* A pantalla completa: sin fondo de panel, solo el degradado sobre la imagen */
-  #visor.cine .controles { background: linear-gradient(transparent, rgba(0,0,0,.55) 40%, rgba(0,0,0,.9)); padding-top: 70px; gap: 6px 8px; }
-  #visor.cine .controles .grupo .boton { background: transparent; border-color: transparent; }
-  #visor.cine .controles .grupo .boton:hover, #visor.cine .controles .grupo .boton:focus { background: rgba(255,255,255,.14); }
-  #visor.cine .controles .grupo .boton .icono { width: 30px; height: 30px; }
-  #visor.cine .controles .fila-progreso .tiempo { color: #fff; font-size: 15px; }
-  #visor.cine .barra { background: linear-gradient(rgba(0,0,0,.75), transparent); padding-bottom: 50px; }
-  #visor.cine #salircine { background: transparent; border-color: transparent; font-size: 18px; font-weight: 700; }
-  #visor.cine #vtitulo { font-size: 18px; font-weight: 700; }
-  /* La lista de idiomas sale encima del botón, a la derecha */
-  .menu-audio { left: auto; right: 10px; }
-  #visor.cine .menu-audio { right: max(16px, env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom)); }
-  /* ▶ grande del centro (en pausa): limpio, sin borde de color */
-  #visor.cine .gran-play { background: rgba(0,0,0,.45); border-color: rgba(255,255,255,.9); }
-  #visor.cine .gran-play:hover, #visor.cine .gran-play:focus { background: rgba(255,255,255,.22); }
-  /* Tele: iconos grandes para verlos desde el sofá */
-  .tele .controles .grupo .boton { padding: 1.2vh 1.1vw; font-size: 2.4vh; }
-  .tele .controles .grupo .boton .icono, .tele #visor.cine .controles .grupo .boton .icono { width: 4.6vh; height: 4.6vh; }
-  .tele .controles .grupo .boton span { font-size: 2.4vh; }
-  .tele .controles .fila-progreso .tiempo { font-size: 2.6vh; }
-  .tele .controles input[type=range]::-webkit-slider-runnable-track { height: 6px; }
-  .tele #visor.cine .controles { padding: 12vh 4vw 4vh; }
-  .tele #visor.cine #vtitulo { font-size: 3.2vh; }
-  /* Móvil: iconos algo menores y, en muy estrecho, sin los textos (solo iconos) */
+  .controles .grupo .boton { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 44px; height: 44px; padding: 0 12px;
+    border-radius: 999px; color: #fff; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); transition: transform .15s, background .2s, box-shadow .2s; }
+  .controles .grupo .boton .icono { width: 22px; height: 22px; }
+  .controles .grupo .boton span { font-size: 12px; font-weight: 800; }
+  .controles .grupo .boton:hover, .controles .grupo .boton:focus { outline: none; background: var(--deg); border-color: transparent; transform: scale(1.08); box-shadow: 0 6px 24px rgba(255,61,154,.45); }
+  .usa-mando .controles .grupo .boton:focus, .tele .controles .grupo .boton:focus { box-shadow: 0 0 0 3px #fff, 0 8px 30px rgba(255,61,154,.6); }
+  /* ▶ es el principal: siempre con el degradado y más grande */
+  .controles .grupo.izq .boton:first-child { width: 52px; min-width: 52px; height: 52px; padding: 0; background: var(--deg); border-color: transparent; box-shadow: 0 6px 22px rgba(255,61,154,.4); }
+  .controles .grupo.izq .boton:first-child .icono { width: 28px; height: 28px; }
+  /* El idioma: una píldora con su etiqueta de color */
+  .controles .boton.audio { padding: 0 14px 0 6px; gap: 8px; max-width: 260px; }
+  .sigla { display: inline-grid; place-items: center; flex: none; min-width: 32px; height: 26px; padding: 0 7px; border-radius: 8px; font-size: 12px; font-weight: 900;
+    letter-spacing: .04em; color: #fff; background: linear-gradient(90deg, #ff3d9a, #8b5cff); box-shadow: 0 2px 10px rgba(139,92,255,.35); }
+  .controles .boton.audio .nombre-idioma { font-size: 14px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .controles .boton.audio:hover .sigla, .controles .boton.audio:focus .sigla { background: #fff; color: #b0267a; }
+  /* La barra de progreso: lo visto con el degradado y un punto blanco que brilla */
+  .controles input[type=range] { -webkit-appearance: none; appearance: none; height: 22px; background: transparent; cursor: pointer; }
+  .controles input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; transition: height .15s;
+    background: linear-gradient(90deg, var(--g1) 0%, var(--g2) var(--pct, 0%), rgba(255,255,255,.22) var(--pct, 0%)); }
+  .controles input[type=range]::-moz-range-track { height: 6px; border-radius: 6px; background: rgba(255,255,255,.22); }
+  .controles input[type=range]::-moz-range-progress { height: 6px; border-radius: 6px; background: linear-gradient(90deg, #ff3d9a, #8b5cff); }
+  .controles input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: #fff; border: 0;
+    box-shadow: 0 0 0 4px rgba(255,61,154,.55), 0 0 18px rgba(255,61,154,.8); transform: none; transition: transform .15s; }
+  .controles input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 0; box-shadow: 0 0 0 4px rgba(255,61,154,.55); }
+  .controles input[type=range]:hover::-webkit-slider-runnable-track { height: 8px; }
+  .controles input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); margin-top: -5px; }
+  /* A pantalla completa: el panel de cristal flota abajo, centrado y con margen */
+  #visor.cine .controles { left: 50%; right: auto; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(1180px, calc(100% - 28px));
+    padding: 14px 18px; border-radius: 22px; background: rgba(14,14,22,.58); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+    border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08); gap: 10px 12px; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { #visor.cine .controles { background: rgba(14,14,22,.9); } }
+  #visor.cine .controles .grupo .boton { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); }
+  #visor.cine .controles .grupo.izq .boton:first-child { background: var(--deg); border-color: transparent; }
+  #visor.cine .controles .grupo .boton:hover, #visor.cine .controles .grupo .boton:focus { background: var(--deg); border-color: transparent; }
+  #visor.cine .controles .grupo .boton .icono { width: 24px; height: 24px; }
+  #visor.cine .controles .grupo.izq .boton:first-child .icono { width: 30px; height: 30px; }
+  #visor.cine .controles .fila-progreso .tiempo { color: #fff; }
+  /* Arriba: «Volver» en píldora de cristal y el título grande */
+  #visor.cine .barra { background: linear-gradient(rgba(0,0,0,.72), transparent); padding-bottom: 46px; align-items: center; }
+  #visor.cine #salircine { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 8px 18px; font-weight: 800; font-size: 15px; color: #fff; }
+  #visor.cine #salircine:hover, #visor.cine #salircine:focus { background: linear-gradient(90deg, #ff3d9a, #8b5cff); border-color: transparent; outline: none; }
+  #visor.cine #vtitulo { font-size: 20px; font-weight: 800; letter-spacing: .01em; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+  /* ▶ grande del centro (en pausa): con el degradado y un latido suave */
+  .gran-play, #visor.cine .gran-play { width: 92px; height: 92px; border: 0; background: linear-gradient(135deg, #ff3d9a, #8b5cff); animation: latido-play 2.4s ease-in-out infinite; }
+  .gran-play:hover, .gran-play:focus, #visor.cine .gran-play:hover, #visor.cine .gran-play:focus { background: linear-gradient(135deg, #ff5aad, #9d76ff); transform: translate(-50%, -50%) scale(1.08); }
+  @keyframes latido-play { 0%, 100% { box-shadow: 0 10px 40px rgba(255,61,154,.5), 0 0 0 0 rgba(255,61,154,.4); } 50% { box-shadow: 0 10px 40px rgba(255,61,154,.6), 0 0 0 18px rgba(255,61,154,0); } }
+  @media (prefers-reduced-motion: reduce) { .gran-play, #visor.cine .gran-play { animation: none; } }
+  /* La lista de idiomas: cristal, con la etiqueta de cada uno; el elegido con ✓ */
+  .menu-audio { left: auto; right: 12px; bottom: 76px; min-width: 280px; padding: 10px; gap: 6px; border-radius: 18px; background: rgba(16,16,26,.84);
+    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+  #visor.cine .menu-audio { right: max(26px, calc((100% - 1180px) / 2 + 26px)); bottom: calc(132px + env(safe-area-inset-bottom)); }
+  .menu-audio h4 { margin: 4px 8px 6px; font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .02em; }
+  .menu-audio button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 15px; font-weight: 600; }
+  .menu-audio button::before { content: none; display: none; }
+  .menu-audio button small { margin-left: auto; color: var(--suave); font-size: 12px; font-weight: 700; }
+  .menu-audio button.activo { background: rgba(255,255,255,.1); }
+  .menu-audio button.activo::after { content: '✓'; margin-left: 8px; color: #ff7cc0; font-weight: 900; }
+  .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(90deg, rgba(255,61,154,.92), rgba(139,92,255,.92)); color: #fff; }
+  .menu-audio button:hover small, .menu-audio button:focus small, .menu-audio button.activo:focus::after { color: #fff; }
+  .menu-audio button:hover .sigla, .menu-audio button:focus .sigla { background: #fff; color: #b0267a; }
+  .menu-audio .editar-audios { margin-top: 4px; justify-content: center; font-size: 13px; color: var(--suave); border: 1px dashed rgba(255,255,255,.22); }
+  .menu-audio .pista-a-mano { flex-wrap: wrap; row-gap: 4px; }
+  .menu-audio .pista-a-mano small { margin: 0; flex-basis: 100%; }
+  .menu-audio .pista-a-mano.carpeta { font-size: 13px; color: var(--suave); }
+  .menu-audio .guardar-audios { justify-content: center; font-weight: 800; background: linear-gradient(90deg, #ff3d9a, #8b5cff); color: #fff; }
+  .menu-audio .msg-audios { margin: 2px 8px; font-size: 12px; color: var(--suave); min-height: 1em; }
+  /* Las tarjetas que salen encima del panel («Siguiente episodio», anuncio en pausa), más arriba */
+  #visor.cine .siguiente { bottom: calc(150px + env(safe-area-inset-bottom)); }
+  #visor.cine .anuncio-pausa { bottom: calc(150px + env(safe-area-inset-bottom)); }
+  /* Tele: todo más grande, para verlo desde el sofá */
+  .tele .controles .grupo .boton { height: 6.4vh; min-width: 6.4vh; padding: 0 1.4vw; }
+  .tele .controles .grupo .boton .icono, .tele #visor.cine .controles .grupo .boton .icono { width: 3.6vh; height: 3.6vh; }
+  .tele .controles .grupo.izq .boton:first-child, .tele #visor.cine .controles .grupo.izq .boton:first-child { width: 8vh; min-width: 8vh; height: 8vh; }
+  .tele .controles .grupo.izq .boton:first-child .icono, .tele #visor.cine .controles .grupo.izq .boton:first-child .icono { width: 4.4vh; height: 4.4vh; }
+  .tele .controles .grupo .boton span { font-size: 2vh; }
+  .tele .sigla { height: 3.6vh; min-width: 4.6vh; font-size: 1.8vh; border-radius: 1vh; }
+  .tele .controles .boton.audio .nombre-idioma { font-size: 2.4vh; }
+  .tele .controles .fila-progreso .tiempo { font-size: 2.2vh; padding: .6vh 1.2vw; }
+  .tele .controles input[type=range]::-webkit-slider-runnable-track { height: 1vh; }
+  .tele #visor.cine .controles { padding: 2.4vh 2vw; bottom: 3vh; border-radius: 3vh; }
+  .tele #visor.cine #vtitulo { font-size: 3.4vh; }
+  .tele .menu-audio { min-width: 32vw; } .tele .menu-audio h4 { font-size: 2.2vh; } .tele .menu-audio button { font-size: 2.6vh; padding: 1.4vh 1.4vw; }
+  .tele #visor.cine .menu-audio { bottom: 22vh; }
+  .tele #visor.cine .siguiente { bottom: 24vh; }
+  .tele .gran-play, .tele #visor.cine .gran-play { width: 13vh; height: 13vh; }
+  /* Móvil: botones algo menores; en muy estrecho, solo iconos y la etiqueta del idioma */
   @media (max-width: 700px) {
-    .controles .grupo .boton { padding: 6px 7px; }
-    .controles .grupo .boton .icono, #visor.cine .controles .grupo .boton .icono { width: 24px; height: 24px; }
-    .controles .fila-progreso .tiempo { font-size: 12px; }
+    .controles .grupo { gap: 6px; }
+    .controles .grupo .boton { min-width: 38px; height: 38px; padding: 0 8px; }
+    .controles .grupo .boton .icono, #visor.cine .controles .grupo .boton .icono { width: 20px; height: 20px; }
+    .controles .grupo.izq .boton:first-child, #visor.cine .controles .grupo.izq .boton:first-child { width: 44px; min-width: 44px; height: 44px; }
+    #visor.cine .controles { width: calc(100% - 16px); bottom: max(8px, env(safe-area-inset-bottom)); padding: 10px 12px; border-radius: 16px; }
+    .controles .fila-progreso .tiempo { font-size: 11px; padding: 3px 8px; }
+    #visor.cine .menu-audio { right: 12px; bottom: calc(120px + env(safe-area-inset-bottom)); }
   }
   @media (max-width: 480px) {
-    .controles .grupo .boton span { display: none; }
-    .controles .grupo .boton.audio span { display: none; }
+    .controles .grupo .boton span:not(.nombre-idioma) { display: none; }
+    .controles .boton.audio .nombre-idioma { display: none; }
+    .controles .boton.audio { padding: 0 6px; }
   }
 </style>
 <link rel="stylesheet" href="intro.css">

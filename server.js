@@ -351,6 +351,52 @@ async function enlace(key) {
 // lo convierte al vuelo en HLS (el formato de streaming que entienden iPhone, Android y las
 // teles), copiando el vídeo H.264 y pasando el audio a AAC.
 const AUDIO_NATIVO = ['aac', 'mp3', 'opus', 'vorbis', 'flac'];
+
+// Idioma y nombre de una pista, mire donde mire cada formato: en MKV van en «language» y
+// «title»; en MP4 el nombre va en «handler_name» (que a menudo es solo «SoundHandler»); hay
+// archivos con las etiquetas en mayúsculas
+const NOMBRE_GENERICO = /^(sound ?handler|audio ?handler|core media audio|iso media|gpac|mainconcept|apple|l-smash|stereo|mono|surround|audio|track ?\d*|pista ?\d*|\d+(\.\d)?( ?ch)?)$/i;
+function etiquetasPista(tags = {}) {
+  const t = Object.fromEntries(Object.entries(tags).map(([k, v]) => [k.toLowerCase(), String(v ?? '').trim()]));
+  const idioma = t.language || t.lang || '';
+  const titulo = [t.title, t.handler_name, t.name].find((x) => x && !NOMBRE_GENERICO.test(x)) || '';
+  return { idioma: idioma === 'und' ? '' : idioma, titulo };
+}
+
+// Nombres de los audios puestos a mano por un administrador, para los archivos que no dicen su
+// idioma: por archivo o para toda una carpeta (una temporada o una serie suelen venir con el
+// mismo orden de pistas). Se guardan en el archivo de cuentas, clave «audios».
+async function nombresAudioDe(key) {
+  const todos = (await perfiles.leerAjuste('audios').catch(() => null)) || {};
+  if (todos[key]) return todos[key];
+  // La carpeta más cercana que tenga nombres (la temporada antes que la serie)
+  const partes = key.split('/');
+  for (let i = partes.length - 1; i > 0; i--) {
+    const c = `${partes.slice(0, i).join('/')}/`;
+    if (todos[c]) return todos[c];
+  }
+  return null;
+}
+const IDIOMAS_PERMITIDOS = /^[\p{L} .·()0-9-]{1,30}$/u;
+async function guardarNombresAudio(req, quien) {
+  if (req.method !== 'POST') throw Object.assign(new Error('Método no permitido'), { status: 405 });
+  if (!quien.admin) throw Object.assign(new Error('Solo la administración puede poner nombre a los audios'), { status: 403 });
+  let texto = '';
+  for await (const trozo of req) { texto += trozo; if (texto.length > 20000) throw Object.assign(new Error('Demasiado grande'), { status: 413 }); }
+  const d = JSON.parse(texto || '{}');
+  const key = String(d.key ?? '');
+  if (!key || prohibido(key) || key.split('/').length < 2) throw Object.assign(new Error('Falta el archivo'), { status: 400 });
+  const nombres = Array.isArray(d.nombres) ? d.nombres.slice(0, 16).map((x) => String(x ?? '').trim()) : [];
+  if (nombres.some((x) => x && !IDIOMAS_PERMITIDOS.test(x))) throw Object.assign(new Error('Nombre de idioma no válido'), { status: 400 });
+  // Toda la carpeta del archivo (la temporada) o solo este archivo
+  const clave = d.carpeta ? key.replace(/[^/]+$/, '') : key;
+  const todos = (await perfiles.leerAjuste('audios').catch(() => null)) || {};
+  if (nombres.some(Boolean)) todos[clave] = nombres; else delete todos[clave];
+  // Al guardarlo para la carpeta, lo puesto antes archivo por archivo dentro de ella deja de valer
+  if (d.carpeta) for (const k of Object.keys(todos)) if (k !== clave && k.startsWith(clave)) delete todos[k];
+  await perfiles.guardarAjuste('audios', todos);
+  return { ok: true, clave, nombres: todos[clave] ?? null };
+}
 const VIDEO_NATIVO = ['h264'];
 const medios = new Map();
 
@@ -361,7 +407,7 @@ function medio(key) {
         new Promise((ok, mal) =>
           execFile(
             'ffprobe',
-            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height,channels:stream_tags=language,title', '-of', 'json', url],
+            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height,channels:stream_tags', '-of', 'json', url],
             { timeout: 60000 },
             (err, salida) => {
               if (err) return mal(new Error(`ffprobe no pudo leer el vídeo: ${err.message}`));
@@ -386,7 +432,7 @@ function medio(key) {
                   .map((s) => ({ codec: s.codec_name, idioma: s.tags?.language ?? '', titulo: s.tags?.title ?? '' })),
                 audios: pistas
                   .filter((s) => s.codec_type === 'audio')
-                  .map((s) => ({ codec: s.codec_name, canales: Number(s.channels) || 0, idioma: s.tags?.language ?? '', titulo: s.tags?.title ?? '' })),
+                  .map((s) => ({ codec: s.codec_name, canales: Number(s.channels) || 0, ...etiquetasPista(s.tags) })),
               });
             },
           ),
@@ -677,7 +723,8 @@ const rutas = {
   '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
   '/api/hls': (p, req, quien) => { defensa.permitirVideo(quien.cuenta, quien.ip, p.get('key'), quien.admin); return hlsIniciar(p, quien); },
   '/api/hls-parar': (p) => hlsParar(p.get('id')),
-  '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),
+  '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), nombresAudio: await nombresAudioDe(p.get('key') ?? ''), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),
+  '/api/audio-nombres': (p, req, quien) => guardarNombresAudio(req, quien),
   '/api/info': () => ({ bucket: E2_BUCKET }),
   '/api/listar': (p) => listar(p.get('prefijo') ?? '', p.get('token')),
   '/api/buscar': (p) => buscar(p.get('prefijo') ?? '', p.get('q') ?? '', Math.min(50, Number(p.get('azar')) || 0)),

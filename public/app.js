@@ -776,7 +776,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     if (medio) {
       fila('Duración', medio.duracion && hms(medio.duracion));
       fila('Vídeo', [medio.resolucion, medio.video].filter(Boolean).join(' · '));
-      const nombres = nombresAudio(medio.audios, archivo.key);
+      const nombres = nombresAudio(medio.audios, archivo.key, medio.nombresAudio);
       fila('Audio', medio.audios.map((p, n) => [nombres[n], p.codec && p.codec.toUpperCase()].filter(Boolean).join(' · ')).join(' | '));
       fila('Subtítulos', medio.subtitulos?.map(pista).join(' | '));
     }
@@ -1065,7 +1065,13 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   // (no un desplegable del sistema: en Android TV / Google TV el mando no lo abría)
   let selAudio = null; // { value: número de pista (texto) }
   let bAudio = null;
-  const nombresPistas = nombresAudio(m.audios, key);
+  let nombresPistas = nombresAudio(m.audios, key, m.nombresAudio);
+  // Etiqueta de color con las siglas del idioma (ES, LAT, EN…) y el nombre
+  const etiquetaIdioma = (n) => {
+    const f = document.createDocumentFragment();
+    f.append(el('b', 'sigla', siglaDe(nombresPistas[n], n)), el('span', 'nombre-idioma', nombresPistas[n]));
+    return f;
+  };
   // En todos los vídeos con sonido (aunque tengan una sola pista: así se ve cuál es)
   if (m.audios.length >= 1) {
     selAudio = { value: '0' };
@@ -1080,7 +1086,7 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     if (n < 0) n = nombresPistas.findIndex((x) => x.startsWith('Latino'));
     selAudio.value = String(Math.max(0, n));
     bAudio = boton('boton audio', '', 'Idioma del audio');
-    const pintarAudio = () => { bAudio.innerHTML = icono('idioma'); bAudio.append(el('span', null, nombresPistas[Number(selAudio.value)])); };
+    const pintarAudio = () => { bAudio.innerHTML = ''; bAudio.append(etiquetaIdioma(Number(selAudio.value))); };
     pintarAudio();
     bAudio.onclick = () => menuAudio();
     bAudio.pintar = pintarAudio;
@@ -1091,18 +1097,82 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     if (viejo) return cerrarMenuAudio();
     const menu = el('div', 'menu-audio');
     menu.setAttribute('role', 'menu');
-    menu.append(el('h4', null, 'Idioma del audio'));
-    m.audios.forEach((a, n) => {
-      const b = el('button', String(n) === selAudio.value ? 'activo' : '', nombresPistas[n]);
-      b.type = 'button'; b.setAttribute('role', 'menuitemradio');
-      b.onclick = () => { cerrarMenuAudio(); if (String(n) !== selAudio.value) cambiarAudio(n); };
-      menu.append(b);
-    });
     caja.append(menu);
-    (menu.querySelector('.activo') || menu.querySelector('button')).focus();
+    pintarListaAudio(menu);
     // Con ratón o dedo, pulsar fuera la cierra
     fueraAudio = (e) => { if (!menu.contains(e.target) && !bAudio.contains(e.target)) cerrarMenuAudio(); };
     document.addEventListener('pointerdown', fueraAudio, true);
+  }
+  // La lista: cada idioma con su etiqueta; debajo, para la administración, poner los nombres
+  function pintarListaAudio(menu) {
+    menu.innerHTML = '';
+    menu.classList.remove('editando');
+    menu.append(el('h4', null, '🎧 Idioma del audio'));
+    m.audios.forEach((a, n) => {
+      const b = el('button', String(n) === selAudio.value ? 'activo' : '');
+      b.type = 'button'; b.setAttribute('role', 'menuitemradio');
+      b.append(etiquetaIdioma(n));
+      if (a.canales > 2) b.append(el('small', null, a.canales === 6 ? '5.1' : a.canales === 8 ? '7.1' : `${a.canales} canales`));
+      b.onclick = () => { cerrarMenuAudio(); if (String(n) !== selAudio.value) cambiarAudio(n); };
+      menu.append(b);
+    });
+    if (typeof yo !== 'undefined' && yo && yo.admin) {
+      const sinNombre = nombresPistas.some((x) => /^Audio/.test(x));
+      const ed = el('button', 'editar-audios', sinNombre ? '✎ Poner el idioma de cada audio' : '✎ Cambiar los nombres');
+      ed.type = 'button';
+      ed.onclick = () => editarNombresAudio(menu);
+      menu.append(ed);
+    }
+    (menu.querySelector('.activo') || menu.querySelector('button')).focus();
+  }
+  // (solo administración) El idioma de cada pista, a mano: cada botón pasa al siguiente idioma
+  // al pulsarlo (con el mando, OK); se guarda para este capítulo o para toda la temporada
+  function editarNombresAudio(menu) {
+    menu.innerHTML = '';
+    menu.classList.add('editando');
+    menu.append(el('h4', null, '✎ ¿Qué idioma es cada audio?'));
+    const elegidos = nombresPistas.map((x) => { const i = IDIOMAS_A_MANO.findIndex((y) => x.startsWith(y)); return i; });
+    m.audios.forEach((a, n) => {
+      const b = el('button', 'pista-a-mano');
+      b.type = 'button';
+      const pintar = () => {
+        b.innerHTML = '';
+        const idioma = elegidos[n] >= 0 ? IDIOMAS_A_MANO[elegidos[n]] : 'Sin decir';
+        b.append(el('small', null, `Audio ${n + 1}${a.codec ? ` · ${a.codec.toUpperCase()}` : ''}${a.canales > 2 ? ` ${a.canales === 6 ? '5.1' : `${a.canales}ch`}` : ''}`),
+          el('b', 'sigla', elegidos[n] >= 0 ? SIGLAS[idioma] : '?'), el('span', 'nombre-idioma', `${idioma} ›`));
+      };
+      b.onclick = () => { elegidos[n] = elegidos[n] + 1 >= IDIOMAS_A_MANO.length ? -1 : elegidos[n] + 1; pintar(); };
+      pintar();
+      menu.append(b);
+    });
+    // Para toda la carpeta (los capítulos de la temporada suelen tener las pistas en el mismo orden)
+    let carpeta = key.split('/').length > 2;
+    const bc = el('button', 'pista-a-mano carpeta');
+    bc.type = 'button';
+    const pintarCarpeta = () => { bc.textContent = carpeta ? '☑ Para toda esta carpeta (todos sus capítulos)' : '☐ Solo para este vídeo'; };
+    bc.onclick = () => { carpeta = !carpeta; pintarCarpeta(); };
+    pintarCarpeta();
+    const msg = el('p', 'msg-audios');
+    const guardar = el('button', 'guardar-audios', 'Guardar');
+    guardar.type = 'button';
+    guardar.onclick = async () => {
+      guardar.disabled = true; msg.textContent = 'Guardando…';
+      try {
+        const nombres = elegidos.map((i) => (i >= 0 ? IDIOMAS_A_MANO[i] : ''));
+        const r = await fetch('/api/audio-nombres', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, nombres, carpeta }) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'No se pudo guardar');
+        m.nombresAudio = d.nombres;
+        nombresPistas = nombresAudio(m.audios, key, m.nombresAudio);
+        bAudio.pintar();
+        pintarListaAudio(menu);
+      } catch (e) { guardar.disabled = false; msg.textContent = e.message; }
+    };
+    const volver = el('button', 'pista-a-mano', '‹ Volver');
+    volver.type = 'button';
+    volver.onclick = () => pintarListaAudio(menu);
+    menu.append(bc, guardar, volver, msg);
+    menu.querySelector('.pista-a-mano').focus();
   }
   let fueraAudio = null;
   function cerrarMenuAudio() {
@@ -1389,7 +1459,18 @@ const PALABRAS_IDIOMA = [
   ['Turco', /turco|turkish/i], ['Gallego', /gallego|galician/i], ['Euskera', /euskera|basque/i],
 ];
 function idiomaDeTexto(t) { for (const [nombre, re] of PALABRAS_IDIOMA) if (re.test(t)) return nombre; return null; }
-function nombresAudio(audios, key) {
+// Siglas para la etiqueta de color del idioma
+const SIGLAS = { Castellano: 'ES', Latino: 'LAT', Inglés: 'EN', Francés: 'FR', Italiano: 'IT', Alemán: 'DE', Portugués: 'PT', Japonés: 'JA', Coreano: 'KO',
+  Catalán: 'CA', Turco: 'TR', Gallego: 'GL', Euskera: 'EU', Ruso: 'RU', Chino: 'ZH', Árabe: 'AR', Hindi: 'HI', Polaco: 'PL', Neerlandés: 'NL' };
+const siglaDe = (nombre, n) => SIGLAS[String(nombre).split(/[ ·]/)[0]] || (/^Audio/.test(nombre) ? String(n + 1) : String(nombre).slice(0, 2).toUpperCase());
+// Los que se pueden elegir al poner nombre a mano (en este orden)
+const IDIOMAS_A_MANO = ['Castellano', 'Latino', 'Inglés', 'Francés', 'Italiano', 'Alemán', 'Portugués', 'Japonés', 'Coreano', 'Catalán', 'Turco'];
+// «manual»: los nombres que puso la administración a mano (mandan sobre todo lo demás)
+function nombresAudio(audios, key, manual) {
+  if (Array.isArray(manual) && manual.some(Boolean)) {
+    const auto = nombresAudio(audios, key);
+    return audios.map((a, n) => manual[n] || auto[n]);
+  }
   // Del nombre del archivo, los idiomas en el orden en que salen («Dual Latino-Inglés»)
   const enNombre = [];
   const nombreArchivo = String(key || '').split('/').pop().replace(/\.[^.]+$/, '');
