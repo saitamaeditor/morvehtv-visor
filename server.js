@@ -407,7 +407,7 @@ function medio(key) {
         new Promise((ok, mal) =>
           execFile(
             'ffprobe',
-            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height,channels:stream_tags', '-of', 'json', url],
+            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height,channels,color_transfer:stream_tags', '-of', 'json', url],
             { timeout: 60000 },
             (err, salida) => {
               if (err) return mal(new Error(`ffprobe no pudo leer el vídeo: ${err.message}`));
@@ -427,6 +427,11 @@ function medio(key) {
                 // (el reproductor lo usa para saber si el aparato abre ese HEVC: 8 o 10 bits)
                 pix: pix || null,
                 resolucion: video?.width ? `${video.width}×${video.height}` : null,
+                ancho: Number(video?.width) || 0,
+                alto: Number(video?.height) || 0,
+                // HDR10 / HDR10+ (smpte2084) o HLG (arib-std-b67): al pasarlo a H.264 normal hay que
+                // convertir los colores, o se ve todo apagado y grisáceo
+                hdr: { smpte2084: 'pq', 'arib-std-b67': 'hlg' }[video?.color_transfer] || null,
                 subtitulos: pistas
                   .filter((s) => s.codec_type === 'subtitle')
                   .map((s) => ({ codec: s.codec_name, idioma: s.tags?.language ?? '', titulo: s.tags?.title ?? '' })),
@@ -453,6 +458,52 @@ const DIR_HLS = path.join(os.tmpdir(), 'morvehtv-hls');
 const ayudaFfmpeg = await new Promise((ok) => execFile('ffmpeg', ['-hide_banner', '-h', 'full'], { maxBuffer: 1e8 }, (e, out) => ok(out || '')));
 const RAFAGA = ayudaFfmpeg.includes('readrate_initial_burst') ? ['-readrate_initial_burst', '30'] : [];
 const sesionesHls = new Map(); // id → { ff, carpeta, ultimo, errores }
+
+// ---- 4K y HDR ----
+// Convertir un 4K a H.264 en 4K, en tiempo real, no lo aguanta ninguna VPS normal (iba a
+// tirones). Se convierte a 1080p como mucho (VISOR_MAX_ALTO) y, si es HDR, se pasan los colores
+// a normales (SDR) para que no se vea grisáceo en aparatos sin HDR. Si el vídeo no se convierte
+// (H.264 normal), va tal cual en su resolución.
+const filtrosFfmpeg = await new Promise((ok) => execFile('ffmpeg', ['-hide_banner', '-filters'], { maxBuffer: 1e7 }, (e, out) => ok(out || '')));
+let HAY_TONEMAP = /\szscale\s/.test(filtrosFfmpeg) && /\stonemap\s/.test(filtrosFfmpeg);
+// Al arrancar, prueba la cadena completa con 2 s de imagen 4K HDR inventada: si falla, se
+// convierte sin pasar los colores (mejor algo grisáceo que no verlo) y mide a cuántas imágenes
+// por segundo lo hace este servidor (sale en /api/salud; por debajo de ~30 iría a tirones)
+const pruebaVideo = { estado: 'probando' };
+setTimeout(() => {
+  const prueba = (hdr) => new Promise((ok) => {
+    const t0 = Date.now();
+    const { filtro } = filtroVideo({ ancho: 3840, alto: 2160, hdr: hdr ? 'pq' : null });
+    execFile('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=3840x2160:rate=24:duration=2', '-vf', `format=yuv420p10le,${filtro}`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-f', 'null', '-'], { timeout: 120000 },
+    (e, _o, err) => ok(e ? { error: String(err || e.message).trim().split('\n').pop() } : { fps: Math.round(48000 / (Date.now() - t0)) }));
+  });
+  (async () => {
+    if (HAY_TONEMAP) {
+      const r = await prueba(true);
+      if (r.error) { HAY_TONEMAP = false; console.error(`4K HDR: la conversión de colores falla (${r.error}); se convierte sin ella`); }
+      else pruebaVideo.hdr = r.fps;
+    }
+    const r = await prueba(false);
+    Object.assign(pruebaVideo, { estado: r.error ? 'error' : 'ok', '4k': r.fps ?? null, ...(r.error && { error: r.error }) });
+  })();
+}, 20000).unref?.();
+const MAX_ALTO = Math.min(2160, Math.max(480, Number(process.env.VISOR_MAX_ALTO) || 1080));
+const MAX_ANCHO = Math.round((MAX_ALTO * 16) / 9);
+function filtroVideo(info) {
+  const f = [];
+  const grande = info.ancho > MAX_ANCHO || info.alto > MAX_ALTO;
+  // (se reduce antes de convertir los colores: así esa parte trabaja con 4 veces menos píxeles)
+  // (bilinear: casi igual de nítido al reducir y bastante más rápido que bicubic)
+  if (grande) f.push(`scale=w=${MAX_ANCHO}:h=${MAX_ALTO}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=bilinear`);
+  if (info.hdr && HAY_TONEMAP) {
+    const tin = info.hdr === 'hlg' ? 'arib-std-b67' : 'smpte2084';
+    f.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:rin=tv:t=linear:npl=100`, 'format=gbrpf32le', 'zscale=p=bt709',
+      'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
+  }
+  f.push('format=yuv420p');
+  return { filtro: f.join(','), pesado: grande || !!info.hdr };
+}
 await rm(DIR_HLS, { recursive: true, force: true });
 
 // Cada vídeo preparado es un ffmpeg en marcha: con tope en total y por cuenta, para que nadie
@@ -467,7 +518,8 @@ async function hlsIniciar(p, quien) {
     while (suyos.length >= MAX_FFMPEG_CUENTA) hlsParar(suyos.shift()[0]);
   }
   if (sesionesHls.size >= MAX_FFMPEG) throw Object.assign(new Error('El servidor está ocupado preparando otros vídeos. Prueba en un minuto.'), { status: 503 });
-  const desde = Math.max(0, Math.floor(Number(p.get('desde')) || 0));
+  let desde = Math.max(0, Math.floor(Number(p.get('desde')) || 0));
+  let margen = Math.min(30, Math.max(0, Number(p.get('margen')) || 0));
   const info = await medio(key);
   // Sin pista de imagen (p. ej. solo el audio de un vídeo, o un archivo incompleto) no hay nada que
   // preparar: se dice claro en vez de mostrar el error de ffmpeg
@@ -484,6 +536,10 @@ async function hlsIniciar(p, quien) {
   // VISOR_HEVC_COPIA=1 en el servidor; si no, el HEVC se convierte a H.264 como siempre.
   const copiaHevc = process.env.VISOR_HEVC_COPIA === '1' && info.video === 'hevc' && p.get('hevc') === '1';
   const copiaVideo = VIDEO_NATIVO.includes(info.video) || copiaHevc;
+  const { filtro, pesado } = filtroVideo(info);
+  // Un 4K/HDR tarda más en convertirse: en vez de esperar 20 s de margen hacia atrás antes de
+  // arrancar, se empieza 4 s antes del punto pedido (arranca mucho antes)
+  if (!copiaVideo && pesado && margen > 4) { desde += margen - 4; margen = 4; }
   const args = [
     // -multiple_requests reutiliza la conexión con e2 al buscar el minuto (salta el doble de rápido)
     // -reconnect…: si e2 corta la conexión a mitad de película, ffmpeg la retoma donde iba
@@ -494,7 +550,10 @@ async function hlsIniciar(p, quien) {
     '-map', '0:v:0', ...(info.audios.length ? ['-map', `0:a:${audio}?`] : []),
     ...(copiaVideo
       ? ['-c:v', 'copy', ...(copiaHevc ? ['-tag:v', 'hvc1'] : [])]
-      : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-g', '96']),
+      // Fotograma clave justo cada 4 s (cada trozo empieza en uno: saltar es más fino) y tope de
+      // caudal, para que una escena con mucho movimiento no pida de golpe más de lo que da la wifi
+      : ['-vf', filtro, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '10M', '-bufsize', '20M',
+        '-profile:v', 'high', '-force_key_frames', 'expr:gte(t,n_forced*4)']),
     // El AAC estéreo se copia; el 5.1/7.1 (aunque sea AAC) se pasa a estéreo: muchas teles
     // Android no lo decodifican y se queda sin sonido
     ...(info.audios[audio]?.codec === 'aac' && (info.audios[audio]?.canales || 2) <= 2 ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']),
@@ -517,7 +576,6 @@ async function hlsIniciar(p, quien) {
 
   // Espera a que la lista cubra los segundos pedidos («margen»: el cliente empieza un poco
   // antes del punto elegido para poder retroceder sin volver a preparar)
-  const margen = Math.min(30, Math.max(0, Number(p.get('margen')) || 0));
   for (let i = 0; i < 150; i++) {
     const lista = await readFile(path.join(carpeta, 'index.m3u8'), 'utf8').catch(() => '');
     const preparado = [...lista.matchAll(/#EXTINF:([\d.]+)/g)].reduce((s, m) => s + Number(m[1]), 0);
@@ -911,7 +969,7 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
