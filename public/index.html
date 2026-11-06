@@ -880,8 +880,8 @@
   .tele .biblioteca h1 { font-size: 4.6vh; } .tele .biblioteca-cuenta { font-size: 2.2vh; }
   /* Episodios en lista (también en ordenador y tablet): imagen a la izquierda, texto a la derecha */
   @media (min-width: 601px) {
-    .rejilla.con-episodios { grid-template-columns: repeat(auto-fill, minmax(min(100%, 620px), 1fr)); gap: clamp(12px, 1.4vw, 22px); }
-    .rejilla .item.episodio { display: grid; grid-template-columns: clamp(180px, 34%, 300px) minmax(0, 1fr); grid-auto-rows: min-content; column-gap: 16px;
+    .rejilla.con-episodios { grid-template-columns: minmax(0, 1fr); gap: clamp(10px, 1.2vw, 18px); }
+    .rejilla .item.episodio { display: grid; grid-template-columns: clamp(180px, 26%, 380px) minmax(0, 1fr); grid-auto-rows: min-content; column-gap: 16px;
       align-content: start; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.03); }
     .rejilla .item.episodio:hover, .rejilla .item.episodio:focus { background: rgba(255,255,255,.07); }
     .rejilla .item.episodio .mini { grid-row: 1 / span 3; grid-column: 1; align-self: start; }
@@ -890,7 +890,10 @@
     .rejilla .item.episodio .resumen { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; margin: 6px 0 0; }
     .rejilla .item.episodio .estrella { right: auto; left: 16px; top: 16px; }
   }
-  .tele .rejilla.con-episodios { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Los episodios, uno debajo de otro (en lista): con el mando ↑ ↓ pasan de uno al siguiente */
+  .tele .rejilla.con-episodios { grid-template-columns: minmax(0, 1fr); }
+  .tele .rejilla .item.episodio .nombre { font-size: 3vh; }
+  .tele .rejilla .item.episodio .meta, .tele .rejilla .item.episodio .resumen { font-size: 2.3vh; }
   /* Tele y móvil: el destacado se adapta */
   .tele .destacado { min-height: 58vh; }
   .tele .destacado h1 { font-size: 6.4vh; } .tele .destacado-sinopsis { font-size: 2.4vh; } .tele .destacado .boton { font-size: 2.4vh; padding: 1.2vh 2.4vw; }
