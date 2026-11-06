@@ -1019,7 +1019,8 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   // (no un desplegable del sistema: en Android TV / Google TV el mando no lo abría)
   let selAudio = null; // { value: número de pista (texto) }
   let bAudio = null;
-  if (m.audios.length > 1) {
+  // En todos los vídeos con sonido (aunque tengan una sola pista: así se ve cuál es)
+  if (m.audios.length >= 1) {
     selAudio = { value: '0' };
     // Sin idioma elegido antes: el español, si lo hay (si no, la primera pista)
     // (se guarda «idioma|título»: Castellano y Latino son los dos «spa»; los guardados antes,
