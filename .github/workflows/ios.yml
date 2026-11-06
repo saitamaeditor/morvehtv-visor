@@ -1,0 +1,82 @@
+# Compila la app de MorvehTV para iPhone e iPad en un Mac de GitHub (no hace falta tener Mac).
+#  · Siempre: comprueba que compila (para el simulador, sin firmar).
+#  · Con la cuenta de desarrollador de Apple en los secretos del repositorio, además la firma y la
+#    sube a App Store Connect → TestFlight. Secretos (Settings → Secrets and variables → Actions):
+#      APPLE_TEAM_ID       el «Team ID» de la cuenta (10 letras y números)
+#      ASC_KEY_ID          el «Key ID» de la clave de la API de App Store Connect (rol Admin)
+#      ASC_ISSUER_ID       el «Issuer ID» que sale encima de la lista de claves
+#      ASC_KEY_P8          el contenido entero del archivo AuthKey_XXXX.p8 que se descarga
+#    La firma (certificado y perfil) la crea y la guarda Apple sola con esa clave.
+name: iOS
+
+on:
+  push:
+    branches: [main]
+    paths: ['ios/**', 'public/icono-512.png', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar el proyecto
+        run: |
+          brew install xcodegen
+          # El icono: el de la web a 1024×1024 y sin transparencia (Apple no la admite)
+          ICONO=ios/MorvehTV/Assets.xcassets/AppIcon.appiconset/icono.png
+          sips -z 1024 1024 public/icono-512.png --out "$RUNNER_TEMP/icono-grande.png" >/dev/null
+          sips -s format jpeg -s formatOptions best "$RUNNER_TEMP/icono-grande.png" --out "$RUNNER_TEMP/icono.jpg" >/dev/null
+          sips -s format png "$RUNNER_TEMP/icono.jpg" --out "$ICONO" >/dev/null
+          sips -g pixelWidth -g pixelHeight -g hasAlpha "$ICONO"
+          cd ios && xcodegen generate
+          xcodebuild -version
+
+      - name: Comprobar que compila
+        run: |
+          fallo() { echo "::error::Falló: $1"; grep -E "error:" -A4 "$RUNNER_TEMP/$1.log" | head -n 120; tail -n 40 "$RUNNER_TEMP/$1.log"; exit 1; }
+          cd ios
+          xcodebuild build -project MorvehTV.xcodeproj -scheme MorvehTV -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO > "$RUNNER_TEMP/compilar.log" 2>&1 || fallo compilar
+          tail -n 3 "$RUNNER_TEMP/compilar.log"
+
+      - name: Firmar y subir a TestFlight
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          NUMERO: ${{ github.run_number }}
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$ASC_KEY_P8" ]; then
+            echo "::notice::Sin la cuenta de Apple en los secretos: la app compila, pero no se firma ni se sube a TestFlight."
+            exit 0
+          fi
+          fallo() { echo "::error::Falló: $1"; grep -E "error:" -A4 "$RUNNER_TEMP/$1.log" | head -n 120; tail -n 40 "$RUNNER_TEMP/$1.log"; rm -f "$CLAVE"; exit 1; }
+          CLAVE="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$CLAVE"
+          AUTENTICACION=(-allowProvisioningUpdates -authenticationKeyPath "$CLAVE" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          cd ios
+          xcodebuild archive -project MorvehTV.xcodeproj -scheme MorvehTV -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/MorvehTV.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$NUMERO" \
+            "${AUTENTICACION[@]}" > "$RUNNER_TEMP/archivar.log" 2>&1 || fallo archivar
+          cat > "$RUNNER_TEMP/exportar.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/MorvehTV.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/exportar.plist" -exportPath "$RUNNER_TEMP/exportado" \
+            "${AUTENTICACION[@]}" > "$RUNNER_TEMP/subir.log" 2>&1 || fallo subir
+          tail -n 5 "$RUNNER_TEMP/subir.log"
+          rm -f "$CLAVE"
+          echo "::notice::Compilación $NUMERO subida a App Store Connect: en unos minutos aparece en TestFlight."
