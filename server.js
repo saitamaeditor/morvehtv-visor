@@ -824,6 +824,10 @@ http
       if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       const cuenta = PUBLICO.includes(url.pathname) ? null : await perfiles.sesion(req);
       if (!PUBLICO.includes(url.pathname) && !cuenta) {
+        // Para ver qué piden las apps externas que no aciertan con las direcciones de Xtream (solo la
+        // ruta, sin la parte «?…» que puede llevar la contraseña, y sin IP); los navegadores no
+        const ua = String(req.headers['user-agent'] ?? '');
+        if (!/Mozilla|bot|crawl|spider/i.test(ua)) console.log(`Sin sesión: ${req.method} ${url.pathname.slice(0, 80)} · app ${ua.slice(0, 80) || '¿?'}`);
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Inicia sesión' });
         res.writeHead(302, { location: '/entrar.html', 'cache-control': 'no-store' });
         return res.end();

@@ -20,7 +20,8 @@ export function iniciar(opciones) {
   permitido = opciones.permitido ?? permitido;
 }
 
-export const esRuta = (ruta) => ['/player_api.php', '/get.php', '/xmltv.php'].includes(ruta)
+// (panel_api.php es el nombre antiguo de player_api.php: algunas apps aún entran por ahí)
+export const esRuta = (ruta) => ['/player_api.php', '/panel_api.php', '/get.php', '/xmltv.php'].includes(ruta)
   || /^\/(movie|series)\/[^/]+\/[^/]+\/\d+(\.\w+)?$/.test(ruta);
 
 // Números fijos para cada cosa (estas apps quieren ids numéricos): salen del nombre, así que no
