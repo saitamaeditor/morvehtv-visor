@@ -1015,18 +1015,57 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   const tiempo = el('span', 'tiempo', `0:00 / ${hms(total())}`);
   const bSonido = el('button', 'boton sonido', '🔊');
   const bPantalla = boton('boton', icono('pantalla'), 'Pantalla completa');
-  // El idioma del audio va el primero, a la izquierda
-  let selAudio = null;
+  // El idioma del audio va el primero, a la izquierda. Es un botón que abre una lista de botones
+  // (no un desplegable del sistema: en Android TV / Google TV el mando no lo abría)
+  let selAudio = null; // { value: número de pista (texto) }
+  let bAudio = null;
   if (m.audios.length > 1) {
-    selAudio = el('select', 'audio');
-    selAudio.title = 'Idioma del audio';
-    m.audios.forEach((a, n) => selAudio.append(new Option(`🗣 ${(a.titulo || a.idioma || `Pista ${n + 1}`).toUpperCase()}`, n)));
-    // El idioma elegido en un capítulo se mantiene en el siguiente
+    selAudio = { value: '0' };
+    // Sin idioma elegido antes: el español, si lo hay (si no, la primera pista)
+    // (se guarda «idioma|título»: Castellano y Latino son los dos «spa»; los guardados antes,
+    // solo con el idioma, también valen)
     const pref = leerIdioma();
-    const n = pref ? m.audios.findIndex((a) => (a.idioma || a.titulo || '').toLowerCase() === pref) : -1;
-    if (n >= 0) selAudio.value = String(n);
-    barra.append(selAudio);
+    const [prefIdioma] = pref.split('|');
+    let n = pref ? m.audios.findIndex((a) => claveAudio(a) === pref) : -1;
+    if (n < 0 && pref) n = m.audios.findIndex((a) => (a.idioma || a.titulo || '').toLowerCase() === prefIdioma);
+    if (n < 0) n = m.audios.findIndex((a) => /^(spa|es|esp|cas)$/i.test(a.idioma) || /espa[ñn]ol|castellano|latino|spanish/i.test(a.titulo));
+    selAudio.value = String(Math.max(0, n));
+    bAudio = boton('boton audio', '', 'Idioma del audio');
+    const pintarAudio = () => { bAudio.textContent = `🗣 ${nombreAudio(m.audios[Number(selAudio.value)], Number(selAudio.value))} ▾`; };
+    pintarAudio();
+    bAudio.onclick = () => menuAudio();
+    bAudio.pintar = pintarAudio;
+    barra.append(bAudio);
   }
+  // La lista de idiomas, encima de los controles; el foco va al que suena
+  function menuAudio() {
+    const viejo = caja.querySelector('.menu-audio');
+    if (viejo) return cerrarMenuAudio();
+    const menu = el('div', 'menu-audio');
+    menu.setAttribute('role', 'menu');
+    menu.append(el('h4', null, 'Idioma del audio'));
+    m.audios.forEach((a, n) => {
+      const b = el('button', String(n) === selAudio.value ? 'activo' : '', nombreAudio(a, n));
+      b.type = 'button'; b.setAttribute('role', 'menuitemradio');
+      b.onclick = () => { cerrarMenuAudio(); if (String(n) !== selAudio.value) cambiarAudio(n); };
+      menu.append(b);
+    });
+    caja.append(menu);
+    (menu.querySelector('.activo') || menu.querySelector('button')).focus();
+    // Con ratón o dedo, pulsar fuera la cierra
+    fueraAudio = (e) => { if (!menu.contains(e.target) && !bAudio.contains(e.target)) cerrarMenuAudio(); };
+    document.addEventListener('pointerdown', fueraAudio, true);
+  }
+  let fueraAudio = null;
+  function cerrarMenuAudio() {
+    const menu = caja.querySelector('.menu-audio');
+    if (fueraAudio) { document.removeEventListener('pointerdown', fueraAudio, true); fueraAudio = null; }
+    if (!menu) return false;
+    menu.remove();
+    if (bAudio) bAudio.focus();
+    return true;
+  }
+  caja.cerrarMenuAudio = cerrarMenuAudio;
   // Todos los botones a la izquierda y, detrás, la barra de progreso con el tiempo
   barra.append(bPlay, bAtras, bAdelante, bSonido, bPantalla, rango, tiempo);
   // Sin avisos de carga («Preparando vídeo…», «Cargando…»): solo se usa para errores reales
@@ -1210,11 +1249,13 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   bAdelante.onclick = () => ir(ahora() + 10);
   rango.oninput = () => { arrastrando = true; pintarTiempo(Number(rango.value)); };
   rango.onchange = () => { arrastrando = false; ir(Number(rango.value)); };
-  if (selAudio) selAudio.onchange = () => {
-    const a = m.audios[Number(selAudio.value)];
-    guardarIdioma(a && (a.idioma || a.titulo));
+  // Otro idioma: el servidor prepara el vídeo con esa pista desde el mismo segundo
+  function cambiarAudio(n) {
+    selAudio.value = String(n);
+    bAudio.pintar();
+    guardarIdioma(claveAudio(m.audios[n]));
     const t = ahora(); parar(sesion); sesion = null; ir(t);
-  };
+  }
   bSonido.onclick = () => { v.muted = !v.muted; bSonido.textContent = v.muted ? '🔇' : '🔊'; };
   bPantalla.onclick = () => ($('#visor').classList.contains('cine') ? salirCine() : entrarCine());
   caja.irA = ir;
@@ -1235,6 +1276,19 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   } else ir(inicio, solo);
   return caja;
 }
+
+// Nombre de una pista de audio para la lista: su título o su idioma en claro, y «5.1» si lo es
+const IDIOMAS = { spa: 'Español', es: 'Español', esp: 'Español', cas: 'Castellano', lat: 'Latino', eng: 'Inglés', en: 'Inglés', fre: 'Francés', fra: 'Francés', fr: 'Francés',
+  ger: 'Alemán', deu: 'Alemán', de: 'Alemán', ita: 'Italiano', it: 'Italiano', por: 'Portugués', pt: 'Portugués', jpn: 'Japonés', ja: 'Japonés', kor: 'Coreano', ko: 'Coreano',
+  tur: 'Turco', tr: 'Turco', cat: 'Catalán', ca: 'Catalán', rus: 'Ruso', chi: 'Chino', zho: 'Chino', ara: 'Árabe', und: '' };
+function nombreAudio(a, n) {
+  if (!a) return `Pista ${n + 1}`;
+  const idioma = IDIOMAS[String(a.idioma || '').toLowerCase()] ?? String(a.idioma || '').toUpperCase();
+  const base = a.titulo && !/^(stereo|surround|5\.1|2\.0|audio)$/i.test(a.titulo.trim()) ? a.titulo : idioma || a.titulo || `Pista ${n + 1}`;
+  return `${base}${a.canales > 2 ? ` · ${a.canales === 6 ? '5.1' : a.canales === 8 ? '7.1' : `${a.canales} canales`}` : ''}`;
+}
+
+const claveAudio = (a) => (a ? `${a.idioma || ''}|${a.titulo || ''}`.toLowerCase() : '');
 
 // Idioma de audio elegido (se recuerda en este aparato)
 function leerIdioma() { try { return localStorage.getItem('morvehtv-idioma') || ''; } catch (e) { return ''; } }
@@ -1296,8 +1350,10 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       c.innerHTML = '';
       // Directo de e2 solo si cualquier dispositivo lo abre: MP4/MOV con H.264 y un único
       // audio compatible. Lo demás (.mkv, .ts, AC3, varios idiomas…) pasa por el servidor.
+      // En la tele, un audio de más de 2 canales (5.1, 7.1) también pasa por el servidor, que lo
+      // deja en estéreo: muchas Android TV / Google TV lo reproducen sin sonido
       const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
-        && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec));
+        && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec) && !(esTele && a.canales > 2));
       // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
       // Anuncio en vídeo (VAST de una red externa) antes de empezar, si están activados
       if (typeof anuncioPrevio === 'function') await anuncioPrevio();
@@ -1666,7 +1722,8 @@ function moverFoco(dir) {
   const enCuenta = document.documentElement.classList.contains('con-cuenta');
   const enVisor = !enCuenta && actual >= 0;
   // Con un anuncio en pantalla, el foco no sale de él (ni va a los controles del vídeo de detrás)
-  const capaAnuncio = enVisor && document.querySelector('.anuncio-previo');
+  // (lo mismo con la lista de idiomas del audio abierta: las flechas van de un idioma a otro)
+  const capaAnuncio = enVisor && (document.querySelector('.anuncio-previo') || document.querySelector('.menu-audio'));
   const cands = candidatosMando(enCuenta, enVisor, capaAnuncio);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
@@ -1835,6 +1892,9 @@ function enfocarVisor() {
 function atras() {
   if (window.morvehSaltarIntro && window.morvehSaltarIntro()) return true;
   if (document.documentElement.classList.contains('con-cuenta')) { cerrarCuenta(); return true; }
+  // Con la lista de idiomas del audio abierta, Atrás solo la cierra
+  const menuAudio = document.querySelector('.menu-audio');
+  if (menuAudio) { const r = menuAudio.closest('.repro'); if (r && r.cerrarMenuAudio) r.cerrarMenuAudio(); else menuAudio.remove(); return true; }
   if ($('#visor').classList.contains('cine')) { salirCine(); return true; }
   if (actual >= 0) { cerrar(); return true; }
   if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }

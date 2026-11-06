@@ -361,7 +361,7 @@ function medio(key) {
         new Promise((ok, mal) =>
           execFile(
             'ffprobe',
-            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height:stream_tags=language,title', '-of', 'json', url],
+            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height,channels:stream_tags=language,title', '-of', 'json', url],
             { timeout: 60000 },
             (err, salida) => {
               if (err) return mal(new Error(`ffprobe no pudo leer el vídeo: ${err.message}`));
@@ -384,7 +384,7 @@ function medio(key) {
                   .map((s) => ({ codec: s.codec_name, idioma: s.tags?.language ?? '', titulo: s.tags?.title ?? '' })),
                 audios: pistas
                   .filter((s) => s.codec_type === 'audio')
-                  .map((s) => ({ codec: s.codec_name, idioma: s.tags?.language ?? '', titulo: s.tags?.title ?? '' })),
+                  .map((s) => ({ codec: s.codec_name, canales: Number(s.channels) || 0, idioma: s.tags?.language ?? '', titulo: s.tags?.title ?? '' })),
               });
             },
           ),
@@ -440,7 +440,9 @@ async function hlsIniciar(p, quien) {
     ...(VIDEO_NATIVO.includes(info.video)
       ? ['-c:v', 'copy']
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-g', '96']),
-    ...(info.audios[audio]?.codec === 'aac' ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']),
+    // El AAC estéreo se copia; el 5.1/7.1 (aunque sea AAC) se pasa a estéreo: muchas teles
+    // Android no lo decodifican y se queda sin sonido
+    ...(info.audios[audio]?.codec === 'aac' && (info.audios[audio]?.canales || 2) <= 2 ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']),
     '-sn',
     '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0', '-hls_playlist_type', 'event',
     '-hls_segment_filename', path.join(carpeta, 's%05d.ts'), path.join(carpeta, 'index.m3u8'),

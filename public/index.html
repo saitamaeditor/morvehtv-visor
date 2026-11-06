@@ -147,6 +147,17 @@
   .controles input[type=range] { flex: 1; min-width: 140px; accent-color: var(--acento); }
   .controles .tiempo { color: var(--suave); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .controles select { background: var(--panel2); border: 1px solid var(--borde); border-radius: 8px; padding: 6px; }
+  /* Idioma del audio: botón y su lista (encima de los controles; se maneja con el mando) */
+  .controles .boton.audio { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .menu-audio { position: absolute; left: 10px; bottom: 64px; z-index: 6; min-width: 220px; max-width: calc(100% - 20px); max-height: 60%; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 12px; background: rgba(16,17,24,.97); border: 1px solid var(--borde); box-shadow: 0 12px 40px rgba(0,0,0,.6); }
+  .menu-audio h4 { margin: 4px 10px 6px; font-size: 13px; font-weight: 600; color: var(--suave); }
+  .menu-audio button { text-align: left; padding: 10px 14px; border: 0; border-radius: 8px; background: none; color: var(--texto); font: inherit; font-size: 15px; cursor: pointer; }
+  .menu-audio button::before { content: ''; display: inline-block; width: 1.4em; }
+  .menu-audio button.activo::before { content: '✓'; }
+  .menu-audio button:hover, .menu-audio button:focus { background: var(--acento); color: #fff; outline: none; }
+  #visor.cine .menu-audio { bottom: 90px; z-index: 30; }
+  .tele .menu-audio { min-width: 30vw; } .tele .menu-audio h4 { font-size: 2.2vh; } .tele .menu-audio button { font-size: 2.8vh; padding: 1.3vh 1.6vw; }
   /* ---------- Modo cine: el vídeo ocupa toda la pantalla ---------- */
   #salircine { display: none; }
   #visor.cine { background: #000; }
