@@ -333,10 +333,23 @@ export function paginaBanner() {
 <script>atOptions = ${opciones};
 function avisar(m) { try { parent.postMessage(m, '*'); } catch (e) {} }
 function sinAnuncio() { avisar('morvehtv-previo-vacio'); }
-// En cuanto la red pinta algo, se avisa a la web (si no llega el aviso, la web no espera)
-var mirar = setInterval(function () { if (document.querySelector('iframe, img, ins, a')) { clearInterval(mirar); avisar('morvehtv-previo-listo'); } }, 250);
-setTimeout(function () { clearInterval(mirar); if (!document.querySelector('iframe, img, ins, a')) sinAnuncio(); }, 5000);</script>
-<script src="${fuente}" onerror="sinAnuncio()"></script>
+// En cuanto la red pinta algo de verdad, se avisa a la web (si no llega el aviso, la web no
+// espera). Solo cuenta lo que se ve con tamaño de anuncio: sin anuncio que dar, la red mete a
+// veces un píxel de seguimiento o un marco invisible, y eso dejaba un hueco negro.
+function pintado() {
+  var l = document.querySelectorAll('iframe, img, ins, a, video, canvas');
+  for (var i = 0; i < l.length; i++) {
+    var r = l[i].getBoundingClientRect();
+    var s = getComputedStyle(l[i]);
+    if (r.width >= 120 && r.height >= 60 && s.visibility !== 'hidden' && s.display !== 'none' && Number(s.opacity) > 0.1) return true;
+  }
+  return false;
+}
+var mirar = setInterval(function () { if (pintado()) { clearInterval(mirar); clearTimeout(limite); avisar('morvehtv-previo-listo'); } }, 200);
+var limite = setTimeout(function () { clearInterval(mirar); sinAnuncio(); }, 3500);
+// Si el código de la red llega vacío (no tiene anuncio), no se espera a que pase el tiempo
+function cargado() { setTimeout(function () { if (!pintado() && !document.querySelector('iframe, ins')) { clearInterval(mirar); clearTimeout(limite); sinAnuncio(); } }, 800); }</script>
+<script src="${fuente}" onload="cargado()" onerror="sinAnuncio()"></script>
 </body></html>`;
 }
 

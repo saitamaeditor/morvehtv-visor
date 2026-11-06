@@ -600,7 +600,14 @@ function anuncioBannerPrevio(b) {
     fr.width = b.ancho; fr.height = b.alto;
     fr.style.setProperty('--ancho', b.ancho + 'px'); fr.style.setProperty('--alto', b.alto + 'px');
     fr.src = '/marco-previo.html';
-    c.escena.insertBefore(fr, c.saltar);
+    // Detrás del marco, el aviso de VIP: si la red tarda o pinta un anuncio en blanco, se ve
+    // eso en vez de un hueco negro (el marco es transparente hasta que la red pinta encima)
+    const hueco = el('div', 'hueco-banner');
+    hueco.style.setProperty('--ancho', b.ancho + 'px'); hueco.style.setProperty('--alto', b.alto + 'px');
+    const fondo = promoVIP(false);
+    if (fondo) { fondo.classList.add('fondo-banner'); hueco.append(fondo); }
+    hueco.append(fr);
+    c.escena.insertBefore(hueco, c.saltar);
     let hecho = false;
     let vacio = false;
     let listoBanner = false;
@@ -610,6 +617,7 @@ function anuncioBannerPrevio(b) {
       if (e.data === 'morvehtv-previo-vacio') { vacio = true; terminar(); }
     };
     // Si un bloqueador quita el marco o la red no pinta nada en 4 s, no se espera más
+    // (el marco ya avisa antes, a los 3,5 s o en cuanto el código de la red llega vacío)
     const sinRespuesta = setTimeout(() => { if (!listoBanner) { vacio = true; terminar(); } }, 4000);
     window.addEventListener('message', alMensaje);
     const parar = cuentaAtras(c, () => terminar(), planInfo.anuncios.saltarEn || SALTAR_EN);
