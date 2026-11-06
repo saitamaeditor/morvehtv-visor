@@ -72,6 +72,24 @@ export async function iniciar(opciones) {
   }
 }
 
+// Enlace de invitación al grupo para la portada de la web («Únete a nuestro Telegram»). Se puede
+// fijar con TELEGRAM_INVITACION; si no, el bot crea uno (una sola vez, se guarda) llamado
+// «Web MorvehTV». Nunca hace esperar a la página: si aún no está, devuelve null y lo prepara.
+let creandoInvitacion = null;
+export function invitacion() {
+  const fijo = String(process.env.TELEGRAM_INVITACION ?? '').trim();
+  if (/^https:\/\/t\.me\//.test(fijo)) return fijo;
+  if (!activo || !datos?.chat) return null;
+  if (datos.invitacion) return datos.invitacion;
+  if (!creandoInvitacion) {
+    creandoInvitacion = llamar('createChatInviteLink', { chat_id: datos.chat, name: 'Web MorvehTV' })
+      .then(async (r) => { datos.invitacion = r.invite_link; await guardarDatos(); })
+      .catch((e) => console.error(`Telegram: no se pudo crear el enlace de invitación (${e.message}); el bot necesita el permiso «Invitar usuarios»`))
+      .finally(() => { setTimeout(() => { creandoInvitacion = null; }, 600000); });
+  }
+  return null;
+}
+
 // Busca el grupo con temas en los mensajes recientes del bot
 async function buscarGrupo() {
   const updates = await llamar('getUpdates', { allowed_updates: ['message', 'my_chat_member'] });

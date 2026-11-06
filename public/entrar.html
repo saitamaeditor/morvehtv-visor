@@ -3,149 +3,367 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>MorvehTV · Entrar</title>
-<meta name="theme-color" content="#101114">
+<title>MorvehTV · Películas y series en todas tus pantallas</title>
+<meta name="description" content="MorvehTV: películas y series en HD en la web, el móvil, la tele y el iPhone, con tu propia lista de «Seguir viendo» y favoritos.">
+<meta name="theme-color" content="#0b0b10">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icono-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MorvehTV">
 <style>
+  :root { --acento: #e0459b; --acento2: #8b5cf6; --azul: #19b6ec; --fondo: #0b0b10; --panel: rgba(20,21,30,.86);
+    --borde: rgba(255,255,255,.09); --texto: #f1f2f4; --suave: #a3a9b4; --tenue: #7d8492; }
   * { box-sizing: border-box; }
-  html { -webkit-tap-highlight-color: transparent; }
-  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px;
-    background: #101114; background-image: radial-gradient(ellipse at 50% -10%, rgba(224,69,155,.22), rgba(16,17,20,0) 60%);
-    color: #f1f2f4; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .caja { width: 100%; max-width: 400px; }
-  .marca { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 22px; font-size: 28px; font-weight: 800; letter-spacing: .01em; }
-  .marca img { width: 44px; height: 44px; }
-  .marca span { color: #e0459b; }
-  .tarjeta { background: #1a1c21; border: 1px solid #2e323a; border-radius: 16px; padding: 26px 24px 22px; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
-  .pestanas { display: flex; background: #101114; border-radius: 10px; padding: 4px; margin-bottom: 22px; }
-  .pestana { flex: 1; padding: 10px 8px; border: 0; border-radius: 8px; background: transparent; color: #a3a9b4; font: 600 15px system-ui, sans-serif; cursor: pointer; }
-  .pestana.activa { background: #2a2e36; color: #fff; }
-  h1 { margin: 0 0 4px; font-size: 22px; }
-  .sub { margin: 0 0 18px; color: #a3a9b4; font-size: 14px; }
+  html { -webkit-tap-highlight-color: transparent; background: var(--fondo); }
+  body { margin: 0; min-height: 100vh; background: var(--fondo); color: var(--texto); overflow-x: hidden;
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Fondo: un muro de carátulas de colores, inclinado y desenfocado ---------- */
+  .muro { position: fixed; inset: -20vh -20vw; z-index: 0; display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px;
+    transform: rotate(-12deg); opacity: .8; filter: blur(1px) saturate(1.15); pointer-events: none; }
+  .muro i { display: block; aspect-ratio: 2 / 3; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .velo { position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    background: radial-gradient(ellipse at 75% 20%, rgba(224,69,155,.22), transparent 55%),
+      radial-gradient(ellipse at 15% 85%, rgba(139,92,246,.18), transparent 55%),
+      linear-gradient(90deg, rgba(11,11,16,.96) 0%, rgba(11,11,16,.8) 45%, rgba(11,11,16,.55) 100%),
+      linear-gradient(0deg, rgba(11,11,16,1) 0%, rgba(11,11,16,0) 30%); }
+  .pagina { position: relative; z-index: 2; max-width: 1240px; margin: 0 auto;
+    padding: max(18px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); }
+
+  /* ---------- Cabecera ---------- */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0 18px; }
+  .marca { display: flex; align-items: center; gap: 10px; font-size: 24px; font-weight: 800; letter-spacing: .01em; color: #fff; text-decoration: none; }
+  .marca img { width: 38px; height: 38px; }
+  .marca span { color: var(--acento); }
+  .boton-vip { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer;
+    background: linear-gradient(135deg, var(--acento), #b8327c); color: #fff; font: 700 15px system-ui, sans-serif; text-decoration: none;
+    box-shadow: 0 8px 24px rgba(224,69,155,.35); }
+  .boton-vip:hover, .boton-vip:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.45), 0 8px 24px rgba(224,69,155,.45); }
+
+  /* ---------- Portada: texto a la izquierda, tarjeta a la derecha ---------- */
+  .portada { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 56px; align-items: center; min-height: calc(100vh - 170px); }
+  .insignia { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase; color: #ff8cc6; border: 1px solid rgba(224,69,155,.45); background: rgba(224,69,155,.1); }
+  .insignia::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--acento); box-shadow: 0 0 0 0 rgba(224,69,155,.7); animation: latido 2s infinite; }
+  @keyframes latido { 70% { box-shadow: 0 0 0 8px rgba(224,69,155,0); } 100% { box-shadow: 0 0 0 0 rgba(224,69,155,0); } }
+  h1.titulo { margin: 18px 0 2px; font-size: clamp(46px, 7vw, 84px); line-height: 1; font-weight: 900; letter-spacing: -.03em; }
+  h1.titulo span { color: var(--acento); }
+  .lema { margin: 8px 0 18px; font-size: clamp(22px, 2.6vw, 34px); font-weight: 800; line-height: 1.15;
+    background: linear-gradient(90deg, #ff6fb5, var(--acento2) 60%, var(--azul)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .intro { margin: 0 0 30px; max-width: 600px; font-size: 18px; color: #c9ced8; }
+  .intro b { color: #fff; }
+  .ventajas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px; max-width: 760px; }
+  .ventaja { display: flex; gap: 12px; align-items: flex-start; }
+  .ventaja .ico { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--borde); background: rgba(255,255,255,.04); color: #ff8cc6; }
+  .ventaja svg { width: 20px; height: 20px; }
+  .ventaja b { display: block; font-size: 15px; line-height: 1.2; margin: 2px 0 4px; }
+  .ventaja span { display: block; color: var(--tenue); font-size: 13px; line-height: 1.35; }
+
+  /* ---------- Tarjeta: entrar / crear cuenta ---------- */
+  .tarjeta { background: var(--panel); border: 1px solid var(--borde); border-radius: 22px; padding: 28px 26px 24px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.55); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+  .tarjeta h2 { margin: 0 0 4px; font-size: 26px; font-weight: 800; }
+  .tarjeta .sub { margin: 0 0 18px; color: var(--suave); font-size: 15px; }
+  .pestanas { display: flex; background: rgba(0,0,0,.35); border-radius: 12px; padding: 4px; margin-bottom: 18px; }
+  .pestana { flex: 1; padding: 10px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--suave); font: 600 15px system-ui, sans-serif; cursor: pointer; }
+  .pestana.activa { background: #2a2e3a; color: #fff; }
+  .pestana:focus { outline: none; box-shadow: 0 0 0 2px var(--acento); }
   label { display: block; margin: 0 0 14px; font-size: 14px; color: #c9ced6; font-weight: 600; }
-  .opcional { color: #7d8492; font-weight: 400; }
+  .opcional { color: var(--tenue); font-weight: 400; }
   .campo { position: relative; margin-top: 6px; }
-  input { width: 100%; padding: 12px 14px; font: 16px system-ui, sans-serif; color: #fff; background: #101114; border: 1px solid #353a44; border-radius: 10px; }
-  input:focus { border-color: #e0459b; outline: none; box-shadow: 0 0 0 3px rgba(224,69,155,.25); }
+  input { width: 100%; padding: 12px 14px; font: 16px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.4); border: 1px solid #353a46; border-radius: 11px; }
+  input:focus { border-color: var(--acento); outline: none; box-shadow: 0 0 0 3px rgba(224,69,155,.25); }
   input.con-ojo { padding-right: 76px; }
-  .ojo { position: absolute; right: 6px; top: 50%; margin-top: -16px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: #a3a9b4; font: 600 13px system-ui, sans-serif; cursor: pointer; }
-  .ojo:hover, .ojo:focus { color: #fff; background: #2a2e36; outline: none; }
-  .ayuda { margin-top: 6px; font-size: 12.5px; color: #7d8492; font-weight: 400; }
-  .fuerza { height: 4px; border-radius: 2px; background: #2a2e36; margin-top: 8px; overflow: hidden; }
+  .ojo { position: absolute; right: 6px; top: 50%; margin-top: -16px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--suave); font: 600 13px system-ui, sans-serif; cursor: pointer; }
+  .ojo:hover, .ojo:focus { color: #fff; background: #2a2e3a; outline: none; }
+  .ayuda { margin-top: 6px; font-size: 12.5px; color: var(--tenue); font-weight: 400; }
+  .fuerza { height: 4px; border-radius: 2px; background: #2a2e3a; margin-top: 8px; overflow: hidden; }
   .fuerza i { display: block; height: 100%; width: 0; background: #e5484d; transition: width .2s, background .2s; }
-  .enviar { width: 100%; margin-top: 6px; padding: 13px; border: 0; border-radius: 10px; background: #e0459b; color: #fff; font: 700 16px system-ui, sans-serif; cursor: pointer; }
-  .enviar:hover, .enviar:focus { background: #19b6ec; outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.35); }
+  .enviar { width: 100%; margin-top: 6px; padding: 13px; border: 0; border-radius: 11px; background: var(--acento); color: #fff; font: 700 16px system-ui, sans-serif; cursor: pointer; }
+  .enviar:hover, .enviar:focus { background: #f05aab; outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.4); }
   .enviar[disabled] { opacity: .6; cursor: default; }
-  .pestana:focus { outline: none; box-shadow: 0 0 0 2px #e0459b; }
   .error { min-height: 20px; margin: 12px 0 0; color: #ff6b6b; font-size: 14px; text-align: center; }
-  .pie { margin-top: 16px; text-align: center; color: #7d8492; font-size: 13px; }
-  .vip { margin-top: 14px; padding: 14px; border-radius: 12px; border: 1px solid rgba(255,178,36,.45);
-    background: linear-gradient(110deg, rgba(79,140,255,.16), rgba(255,178,36,.14)); display: flex; flex-direction: column; gap: 6px; }
+  .pie-tarjeta { margin: 12px 0 0; text-align: center; color: var(--tenue); font-size: 13px; }
+  .vip { margin-top: 14px; padding: 14px; border-radius: 13px; border: 1px solid rgba(255,178,36,.45);
+    background: linear-gradient(110deg, rgba(139,92,246,.16), rgba(255,178,36,.14)); display: flex; flex-direction: column; gap: 6px; }
   .vip b { color: #ffb224; font-size: 16px; }
   .vip span { color: #c9ced8; font-size: 13.5px; line-height: 1.45; }
   .vip .vip-boton { margin-top: 6px; background: #ffb224; color: #111; }
-  .enlace { background: none; border: 0; padding: 0; color: #e0459b; font: inherit; font-weight: 600; cursor: pointer; }
-  .enlace:focus { outline: 2px solid #e0459b; outline-offset: 2px; border-radius: 4px; }
-  [hidden] { display: none !important; }
-  .acepto { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: #a3a9b4; font-size: 13.5px; line-height: 1.45; margin: 4px 0 14px; cursor: pointer; }
-  .acepto input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; accent-color: #e0459b; }
-  .tele .acepto { font-size: 18px; } .tele .acepto input { width: 28px; height: 28px; }
-  /* Tele: todo más grande */
-  .tele .caja { max-width: 560px; }
+  .enlace { background: none; border: 0; padding: 0; color: #ff8cc6; font: inherit; font-weight: 600; cursor: pointer; }
+  .enlace:focus { outline: 2px solid var(--acento); outline-offset: 2px; border-radius: 4px; }
+  .acepto { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--suave); font-size: 13.5px; line-height: 1.45; margin: 4px 0 14px; cursor: pointer; }
+  .acepto input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; accent-color: var(--acento); }
+
+  /* ---------- Llévalo contigo: las apps ---------- */
+  .apps { margin-top: 56px; }
+  .apps h3 { margin: 0 0 4px; font-size: 24px; font-weight: 800; }
+  .apps > p { margin: 0 0 18px; color: var(--suave); }
+  .plataformas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  .plataforma { position: relative; display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 16px; text-decoration: none; color: inherit;
+    border: 1px solid var(--borde); background: var(--panel); cursor: pointer; font: inherit; text-align: left; transition: transform .15s, border-color .15s, box-shadow .15s; }
+  .plataforma:hover, .plataforma:focus { outline: none; transform: translateY(-2px); border-color: var(--color, var(--acento)); box-shadow: 0 0 0 2px var(--color, var(--acento)), 0 14px 30px rgba(0,0,0,.4); }
+  .plataforma .ico { flex: none; width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center; color: #fff;
+    background: color-mix(in srgb, var(--color, var(--acento)) 30%, transparent); border: 1px solid color-mix(in srgb, var(--color, var(--acento)) 55%, transparent); }
+  .plataforma .ico svg { width: 22px; height: 22px; }
+  .plataforma b { display: block; font-size: 16px; }
+  .plataforma small { display: block; color: var(--tenue); font-size: 13px; line-height: 1.35; margin-top: 2px; }
+  .plataforma .flecha { margin-left: auto; color: var(--suave); }
+  .plataforma .flecha svg { width: 18px; height: 18px; }
+  .p-android { --color: #30a46c; } .p-tele { --color: var(--acento2); } .p-iphone { --color: #8e9bb0; } .p-telegram { --color: #2aabee; }
+
+  .barra-telegram { display: flex; align-items: center; justify-content: center; gap: 12px; width: min(680px, 100%); margin: 44px auto 0; padding: 15px 22px;
+    border-radius: 999px; background: linear-gradient(90deg, #2aabee, #2563eb); color: #fff; font-weight: 700; text-decoration: none; box-shadow: 0 14px 34px rgba(42,171,238,.3); }
+  .barra-telegram:hover, .barra-telegram:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.5), 0 14px 34px rgba(42,171,238,.4); }
+  .barra-telegram svg { width: 22px; height: 22px; }
+  footer { margin-top: 36px; text-align: center; color: var(--tenue); font-size: 13px; }
+
+  /* ---------- Ventana: cómo instalar en iPhone / en la tele ---------- */
+  .dialogo { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.7); }
+  .dialogo .caja { width: min(440px, 100%); background: #171822; border: 1px solid var(--borde); border-radius: 20px; padding: 24px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .dialogo h4 { margin: 0 0 12px; font-size: 20px; }
+  .dialogo ol { margin: 0 0 18px; padding-left: 22px; color: #c9ced8; }
+  .dialogo li { margin: 8px 0; }
+  .dialogo code { padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.08); color: #fff; font-size: 15px; }
+
+  /* ---------- Tamaños ---------- */
+  @media (max-width: 1080px) { .ventajas { grid-template-columns: repeat(2, minmax(0, 1fr)); } .plataformas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 1080px) and (min-width: 901px) { .portada { gap: 36px; } }
+  @media (max-width: 900px) {
+    .portada { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-top: 6px; }
+    .intro { font-size: 16.5px; margin-bottom: 22px; }
+    .muro { grid-template-columns: repeat(6, 1fr); opacity: .35; }
+    .velo { background: radial-gradient(ellipse at 70% 0%, rgba(224,69,155,.25), transparent 60%), linear-gradient(0deg, rgba(11,11,16,1) 35%, rgba(11,11,16,.82) 100%); }
+  }
+  @media (max-width: 560px) {
+    .marca { font-size: 21px; } .marca img { width: 32px; height: 32px; }
+    .boton-vip { padding: 9px 14px; font-size: 14px; }
+    .tarjeta { padding: 22px 18px 18px; border-radius: 18px; }
+    .ventajas { gap: 14px; }
+    .ventaja .ico { width: 38px; height: 38px; }
+    .plataformas { grid-template-columns: minmax(0, 1fr); }
+    .barra-telegram { border-radius: 16px; font-size: 15px; }
+  }
+  /* Tele: todo más grande y sin el muro (las teles flojas van mejor sin él) */
+  .tele .muro { display: none; }
   .tele body, .tele input, .tele .enviar { font-size: 22px; }
   .tele .pestana { font-size: 20px; }
-  @media (max-width: 420px) { .tarjeta { padding: 22px 18px 18px; } .marca { font-size: 24px; } }
+  .tele .acepto { font-size: 18px; } .tele .acepto input { width: 28px; height: 28px; }
+  @media (prefers-reduced-motion: reduce) { .insignia::before { animation: none; } .plataforma { transition: none; } }
 </style>
 </head>
 <body>
-<div class="caja">
-  <div class="marca"><img src="/icono.svg" alt=""><b>Morveh<span>TV</span></b></div>
-  <div class="tarjeta">
-    <div class="pestanas" role="tablist">
-      <button type="button" class="pestana activa" id="p-entrar" role="tab">Iniciar sesión</button>
-      <button type="button" class="pestana" id="p-registro" role="tab">Crear cuenta</button>
+<div class="muro" id="muro" aria-hidden="true"></div>
+<div class="velo" aria-hidden="true"></div>
+
+<div class="pagina">
+  <header>
+    <a class="marca" href="/entrar.html"><img src="/icono.svg" alt=""><b>Morveh<span>TV</span></b></a>
+    <!--PAGOS--><button type="button" class="boton-vip" id="cabecera-vip">⭐ Acceso VIP</button><!--/PAGOS-->
+  </header>
+
+  <main class="portada">
+    <section>
+      <!--CONVERSION--><span class="insignia">App Android {{VERSION_APK}} · disponible ahora</span><!--/CONVERSION-->
+      <h1 class="titulo">Morveh<span>TV</span></h1>
+      <p class="lema">Tu cine y tus series, en todas tus pantallas</p>
+      <p class="intro">Películas y series en <b>HD</b>, con tu propia lista de <b>«Seguir viendo»</b> y tus <b>favoritos</b>: empiezas en el móvil y sigues en la tele justo donde lo dejaste.</p>
+      <div class="ventajas">
+        <div class="ventaja"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+          <div><b>Alta calidad</b><span>HD y Full HD, en la web, el móvil y la tele.</span></div></div>
+        <div class="ventaja"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></span>
+          <div><b>Todos tus aparatos</b><span>Web, Android, Android TV e iPhone.</span></div></div>
+        <!--PAGOS--><div class="ventaja"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6.5 7 .9-5.1 4.8 1.3 7L12 17.8 5.8 21.2l1.3-7L2 9.4l7-.9z"/></svg></span>
+          <div><b>VIP sin anuncios</b><span>Opcional: quita todos los anuncios.</span></div></div><!--/PAGOS-->        <div class="ventaja"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg></span>
+          <div><b>Siempre al día</b><span>Lo nuevo aparece solo en la portada.</span></div></div>
+      </div>
+    </section>
+
+    <section class="tarjeta" id="tarjeta">
+      <h2 id="t-titulo">Comienza ahora</h2>
+      <p class="sub" id="t-sub">Entra o crea tu cuenta gratis en un momento.</p>
+      <div class="pestanas" role="tablist">
+        <button type="button" class="pestana activa" id="p-entrar" role="tab">Iniciar sesión</button>
+        <button type="button" class="pestana" id="p-registro" role="tab">Crear cuenta</button>
+      </div>
+
+      <form id="f-entrar" autocomplete="on" novalidate>
+        <label>Usuario
+          <div class="campo"><input id="e-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20"></div>
+        </label>
+        <label>Contraseña
+          <div class="campo"><input id="e-clave" class="con-ojo" type="password" name="password" autocomplete="current-password" maxlength="200">
+            <button type="button" class="ojo" data-para="e-clave">Mostrar</button></div>
+        </label>
+        <button class="enviar" type="submit">Entrar</button>
+        <p class="error" id="e-error" role="alert"></p>
+        <p class="pie-tarjeta" id="cambiar-txt">¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate gratis</button></p>
+      </form>
+
+      <form id="f-registro" autocomplete="on" novalidate hidden>
+        <label>Nombre <span class="opcional">(opcional)</span>
+          <div class="campo"><input id="r-nombre" name="name" autocomplete="nickname" maxlength="30"></div>
+        </label>
+        <label>Usuario
+          <div class="campo"><input id="r-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20"></div>
+          <div class="ayuda">De 3 a 20 caracteres: letras, números, punto, guion o guion bajo.</div>
+        </label>
+        <label>Contraseña
+          <div class="campo"><input id="r-clave" class="con-ojo" type="password" name="new-password" autocomplete="new-password" maxlength="200">
+            <button type="button" class="ojo" data-para="r-clave">Mostrar</button></div>
+          <div class="fuerza"><i id="r-fuerza"></i></div>
+          <div class="ayuda" id="r-fuerza-txt">Al menos 8 caracteres.</div>
+        </label>
+        <label>Repite la contraseña
+          <div class="campo"><input id="r-clave2" class="con-ojo" type="password" autocomplete="new-password" maxlength="200">
+            <button type="button" class="ojo" data-para="r-clave2">Mostrar</button></div>
+        </label>
+        <label class="acepto"><input type="checkbox" id="r-acepta"> <span>Tengo al menos 14 años.</span></label>
+        <button class="enviar" type="submit">Crear cuenta</button>
+        <!--PAGOS--><div class="vip" id="r-vip">
+          <b>⭐ Hazte VIP y evita los anuncios</b>
+          <span>Todo sin anuncios en la web y la app: {{PRECIO}}. Pago único (tarjeta o PayPal), sin suscripción.</span>
+          <button class="enviar vip-boton" type="button" id="r-vip-boton">⭐ Crear cuenta y hacerme VIP</button>
+        </div><!--/PAGOS-->
+        <p class="error" id="r-error" role="alert"></p>
+        <p class="pie-tarjeta">Guarda bien tu contraseña: no se puede recuperar por correo. ¿Ya tienes cuenta? <button type="button" class="enlace" id="ir-entrar">Inicia sesión</button></p>
+      </form>
+    </section>
+  </main>
+
+  <section class="apps" id="apps">
+    <h3>Llévalo contigo</h3>
+    <p>La misma cuenta en todos tus aparatos: tus favoritos y por dónde ibas te siguen a todas partes.</p>
+    <div class="plataformas">
+      <a class="plataforma p-android" id="a-android" href="/apk">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg></span>
+        <span><b>Android móvil</b><small>Descarga la app<!--CONVERSION--> {{VERSION_APK}}<!--/CONVERSION--> (APK)</small></span>
+        <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></span>
+      </a>
+      <button type="button" class="plataforma p-tele" id="a-tele">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="13" rx="2"/><path d="M8 21h8M8 2l4 3 4-3"/></svg></span>
+        <span><b>Android TV</b><small>Smart TV, box y Fire TV</small></span>
+        <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+      </button>
+      <button type="button" class="plataforma p-iphone" id="a-iphone">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M12 6v8M8.5 9.5 12 6l3.5 3.5"/></svg></span>
+        <span><b>iPhone / iPad</b><small>Añádela a tu pantalla de inicio</small></span>
+        <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg></span>
+      </button>
+      <!--TELEGRAM--><a class="plataforma p-telegram" href="{{TELEGRAM}}" target="_blank" rel="noopener">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 2 11l7 2.5L19 7l-7.5 8.5L18 21z"/></svg></span>
+        <span><b>Telegram</b><small>Avisos de todo lo nuevo</small></span>
+        <span class="flecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></span>
+      </a><!--/TELEGRAM-->
     </div>
+    <!--TELEGRAM--><a class="barra-telegram" href="{{TELEGRAM}}" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 2 11l7 2.5L19 7l-7.5 8.5L18 21z"/></svg>
+      Únete a nuestro Telegram y entérate de cada estreno
+    </a><!--/TELEGRAM-->
+  </section>
 
-    <form id="f-entrar" autocomplete="on" novalidate>
-      <h1>Bienvenido de nuevo</h1>
-      <p class="sub">Entra con tu usuario para seguir viendo donde lo dejaste.</p>
-      <label>Usuario
-        <div class="campo"><input id="e-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20"></div>
-      </label>
-      <label>Contraseña
-        <div class="campo"><input id="e-clave" class="con-ojo" type="password" name="password" autocomplete="current-password" maxlength="200">
-          <button type="button" class="ojo" data-para="e-clave">Mostrar</button></div>
-      </label>
-      <button class="enviar" type="submit">Entrar</button>
-      <p class="error" id="e-error" role="alert"></p>
-    </form>
-
-    <form id="f-registro" autocomplete="on" novalidate hidden>
-      <h1>Crea tu cuenta</h1>
-      <p class="sub">Tendrás tu propio «Seguir viendo» y tus favoritos en todos tus aparatos.</p>
-      <label>Nombre <span class="opcional">(opcional)</span>
-        <div class="campo"><input id="r-nombre" name="name" autocomplete="nickname" maxlength="30"></div>
-      </label>
-      <label>Usuario
-        <div class="campo"><input id="r-usuario" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20"></div>
-        <div class="ayuda">De 3 a 20 caracteres: letras, números, punto, guion o guion bajo.</div>
-      </label>
-      <label>Contraseña
-        <div class="campo"><input id="r-clave" class="con-ojo" type="password" name="new-password" autocomplete="new-password" maxlength="200">
-          <button type="button" class="ojo" data-para="r-clave">Mostrar</button></div>
-        <div class="fuerza"><i id="r-fuerza"></i></div>
-        <div class="ayuda" id="r-fuerza-txt">Al menos 8 caracteres.</div>
-      </label>
-      <label>Repite la contraseña
-        <div class="campo"><input id="r-clave2" class="con-ojo" type="password" autocomplete="new-password" maxlength="200">
-          <button type="button" class="ojo" data-para="r-clave2">Mostrar</button></div>
-      </label>
-      <label class="acepto"><input type="checkbox" id="r-acepta"> <span>Tengo al menos 14 años.</span></label>
-      <button class="enviar" type="submit">Crear cuenta</button>
-      <!--PAGOS--><div class="vip" id="r-vip">
-        <b>⭐ Hazte VIP y evita los anuncios</b>
-        <span>Todo sin anuncios en la web y la app: {{PRECIO}}. Pago único (tarjeta o PayPal), sin suscripción.</span>
-        <button class="enviar vip-boton" type="button" id="r-vip-boton">⭐ Crear cuenta y hacerme VIP</button>
-      </div><!--/PAGOS-->
-      <p class="error" id="r-error" role="alert"></p>
-      <p class="pie">Guarda bien tu contraseña: no se puede recuperar por correo.</p>
-    </form>
-  </div>
-  <p class="pie" id="cambiar-txt">¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate</button></p>
+  <footer>© MorvehTV</footer>
 </div>
+
+<div class="dialogo" id="d-iphone" hidden role="dialog" aria-modal="true" aria-labelledby="d-iphone-t">
+  <div class="caja">
+    <h4 id="d-iphone-t">MorvehTV en tu iPhone o iPad</h4>
+    <ol>
+      <li>Abre <b>morvehtv.com</b> en <b>Safari</b> (en otros navegadores no sale la opción).</li>
+      <li>Toca el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).</li>
+      <li>Elige <b>«Añadir a pantalla de inicio»</b> y pulsa <b>Añadir</b>.</li>
+    </ol>
+    <p class="sub" style="margin:0 0 16px;color:var(--suave)">Tendrás el icono de MorvehTV como una app más: se abre a pantalla completa y se actualiza sola.</p>
+    <button type="button" class="enviar" data-cerrar>Entendido</button>
+  </div>
+</div>
+
+<div class="dialogo" id="d-tele" hidden role="dialog" aria-modal="true" aria-labelledby="d-tele-t">
+  <div class="caja">
+    <h4 id="d-tele-t">MorvehTV en tu tele</h4>
+    <ol>
+      <li>En la tienda de la tele instala la app gratuita <b>Downloader</b>.</li>
+      <li>Ábrela y escribe esta dirección: <code>morvehtv.com/apk</code></li>
+      <li>Pulsa <b>Instalar</b> (si lo pide, permite instalar apps de Downloader).</li>
+    </ol>
+    <p class="sub" style="margin:0 0 16px;color:var(--suave)">Funciona en teles con Android TV o Google TV, en los box Android y en el Fire TV. Se maneja con el mando y se actualiza sola.</p>
+    <button type="button" class="enviar" data-cerrar>Entendido</button>
+  </div>
+</div>
+
 <script>
   // Escrito sin sintaxis moderna: tiene que funcionar en teles antiguas
   (function () {
     function $(id) { return document.getElementById(id); }
-    if (/Android TV|AFT|BRAVIA|SMART-TV|SmartTV|Tizen|Web0S|webOS|HbbTV|GoogleTV/i.test(navigator.userAgent)) document.documentElement.className += ' tele';
+    var ua = navigator.userAgent;
+    if (/Android TV|AFT|BRAVIA|SMART-TV|SmartTV|Tizen|Web0S|webOS|HbbTV|GoogleTV/i.test(ua)) document.documentElement.className += ' tele';
+    // Dentro de la app (Android) o ya instalada en el iPhone no se ofrece descargarla otra vez
+    var enApp = /MorvehTVApp/.test(ua) || !!window.MorvehApp;
+    var instalada = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (enApp) { $('a-android').hidden = true; $('a-tele').hidden = true; }
+    if (enApp || instalada) $('a-iphone').hidden = true;
+
+    // El muro de fondo: carátulas de mentira con los colores de la marca (no se enseña el catálogo
+    // a quien no ha entrado)
+    var muro = $('muro');
+    if (muro && window.getComputedStyle(muro).display !== 'none') {
+      var tonos = [[224, 69, 155], [139, 92, 246], [25, 182, 236], [255, 178, 36], [48, 164, 108], [229, 72, 77]];
+      var trozos = '';
+      for (var n = 0; n < 96; n++) {
+        var a = tonos[(n * 7) % tonos.length], b = tonos[(n * 3 + 1) % tonos.length], g = (n * 37) % 360;
+        trozos += '<i style="background:linear-gradient(' + g + 'deg,rgba(' + a + ',.55),rgba(' + b + ',.18) 60%,rgba(16,17,24,.9))"></i>';
+      }
+      muro.innerHTML = trozos;
+    }
 
     // Al entrar se vuelve a donde se quería ir (p. ej. la sección de un aviso de Telegram)
-    var destino = '/' + (location.hash && location.hash !== '#registro' ? location.hash : '');
+    var destino = '/' + (location.hash && location.hash !== '#registro' && location.hash !== '#vip' ? location.hash : '');
     // Si ya hay sesión, directo a la app
     fetch('/api/sesion', { credentials: 'same-origin' }).then(function (r) { if (r.ok) location.replace(destino); }).catch(function () {});
 
     var modo = 'entrar';
-    function cambiar(nuevo) {
+    function cambiar(nuevo, sinFoco) {
       modo = nuevo;
       $('f-entrar').hidden = modo !== 'entrar';
       $('f-registro').hidden = modo !== 'registro';
       $('p-entrar').className = 'pestana' + (modo === 'entrar' ? ' activa' : '');
       $('p-registro').className = 'pestana' + (modo === 'registro' ? ' activa' : '');
-      $('cambiar-txt').innerHTML = modo === 'entrar'
-        ? '¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate</button>'
-        : '¿Ya tienes cuenta? <button type="button" class="enlace" id="ir-entrar">Inicia sesión</button>';
-      var b = $('ir-registro') || $('ir-entrar');
-      b.onclick = function () { cambiar(modo === 'entrar' ? 'registro' : 'entrar'); };
-      $(modo === 'entrar' ? 'e-usuario' : 'r-nombre').focus();
+      $('t-sub').textContent = modo === 'entrar' ? 'Entra para seguir viendo donde lo dejaste.' : 'Crea tu cuenta gratis: tendrás tu «Seguir viendo» y tus favoritos en todos tus aparatos.';
+      if (!sinFoco) $(modo === 'entrar' ? 'e-usuario' : 'r-nombre').focus();
     }
     $('p-entrar').onclick = function () { cambiar('entrar'); };
     $('p-registro').onclick = function () { cambiar('registro'); };
     $('ir-registro').onclick = function () { cambiar('registro'); };
-    if (location.hash === '#registro') cambiar('registro'); else $('e-usuario').focus();
+    $('ir-entrar').onclick = function () { cambiar('entrar'); };
+    // En el móvil no se abre el teclado nada más llegar (taparía la portada)
+    var tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !/\btele\b/.test(document.documentElement.className);
+    if (location.hash === '#registro' || location.hash === '#vip') cambiar('registro', tactil); else if (!tactil) $('e-usuario').focus();
+
+    // «Acceso VIP» arriba: a crear cuenta, con la oferta VIP a la vista
+    function irVip() {
+      cambiar('registro', true);
+      var t = $('tarjeta');
+      if (t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(function () { ($('r-vip-boton') || $('r-nombre')).focus(); }, 350);
+    }
+    if ($('cabecera-vip')) $('cabecera-vip').onclick = irVip;
+    if (location.hash === '#vip') setTimeout(irVip, 50);
+
+    // Ventanas de ayuda (iPhone y tele)
+    var abierto = null, antes = null;
+    function abrir(id) {
+      antes = document.activeElement; abierto = $(id); abierto.hidden = false;
+      abierto.querySelector('[data-cerrar]').focus();
+    }
+    function cerrarDialogo() { if (!abierto) return; abierto.hidden = true; abierto = null; if (antes && antes.focus) antes.focus(); }
+    $('a-iphone').onclick = function () { abrir('d-iphone'); };
+    $('a-tele').onclick = function () { abrir('d-tele'); };
+    var cierres = document.querySelectorAll('[data-cerrar]');
+    for (var c = 0; c < cierres.length; c++) cierres[c].onclick = cerrarDialogo;
+    var dialogos = document.querySelectorAll('.dialogo');
+    for (var d = 0; d < dialogos.length; d++) dialogos[d].onclick = function (e) { if (e.target === this) cerrarDialogo(); };
 
     // Mostrar u ocultar la contraseña
     var ojos = document.querySelectorAll('.ojo');
@@ -212,9 +430,12 @@
       enviar('/api/registro', { nombre: $('r-nombre').value.trim(), usuario: u, clave: c, acepta: true }, err, this.querySelector('.enviar'));
     };
 
-    // Mando de la tele: ↑ ↓ pasan de un campo a otro; ← → cambian de pestaña arriba
+    // Mando de la tele y teclado: ↑ ↓ pasan de un elemento a otro (también a las apps de abajo);
+    // ← → cambian de pestaña arriba; Atrás / Esc cierra las ventanas de ayuda
     document.addEventListener('keydown', function (e) {
       var k = e.key || '', c = e.keyCode;
+      if (abierto && (k === 'Escape' || k === 'Backspace' || k === 'GoBack' || c === 27 || c === 8 || c === 10009 || c === 461)) { e.preventDefault(); cerrarDialogo(); return; }
+      if (abierto) return;
       var arriba = k === 'ArrowUp' || c === 38, abajo = k === 'ArrowDown' || c === 40;
       var a = document.activeElement;
       if ((k === 'ArrowLeft' || c === 37 || k === 'ArrowRight' || c === 39) && a && /pestana/.test(a.className)) {
@@ -225,15 +446,14 @@
       // OK del mando sobre la casilla de las condiciones: la marca o desmarca
       if ((k === 'Enter' || c === 13) && a && a.type === 'checkbox') { e.preventDefault(); a.checked = !a.checked; return; }
       if (!arriba && !abajo) return;
-      var todos = document.querySelectorAll('input, .ojo, .enviar, .enlace');
+      var todos = document.querySelectorAll('.boton-vip, .pestana, input, .ojo, .enviar, .enlace, .plataforma, .barra-telegram');
       var lista = [];
       for (var i = 0; i < todos.length; i++) if (todos[i].offsetParent) lista.push(todos[i]);
       var pos = lista.indexOf(a);
-      var destino;
-      // Desde las pestañas, abajo va al primer campo; desde el primer campo, arriba a la pestaña
-      if (pos < 0) destino = abajo ? lista[0] : null;
-      else destino = lista[pos + (abajo ? 1 : -1)] || (arriba ? $(modo === 'entrar' ? 'p-entrar' : 'p-registro') : null);
-      if (destino) { e.preventDefault(); destino.focus(); }
+      var siguiente = pos < 0 ? (abajo ? lista[0] : null) : lista[pos + (abajo ? 1 : -1)];
+      // Las dos pestañas van juntas: de una se salta a lo de debajo o de encima de las dos
+      if (siguiente && /pestana/.test(siguiente.className) && a && /pestana/.test(a.className)) siguiente = lista[pos + (abajo ? 2 : -2)];
+      if (siguiente) { e.preventDefault(); siguiente.focus(); if (siguiente.scrollIntoView) siguiente.scrollIntoView({ block: 'nearest' }); }
     });
   })();
 </script>

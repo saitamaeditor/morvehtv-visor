@@ -781,6 +781,21 @@ const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').re
 
 const json = (res, status, datos) => enviar(res, status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }, JSON.stringify(datos));
 
+// La app de Android: dónde se descarga y qué versión es la última (la publica GitHub Actions en
+// version.json). Se mira cada hora en segundo plano: la portada nunca espera por ello.
+const APK_URL = process.env.VISOR_APK_URL || 'https://github.com/saitamaeditor/morvehtv-visor/releases/latest/download/MorvehTV.apk';
+const apk = { version: null, hasta: 0 };
+function versionApk() {
+  if (Date.now() > apk.hasta) {
+    apk.hasta = Date.now() + 3600000;
+    fetch(APK_URL.replace(/MorvehTV\.apk$/, 'version.json'), { signal: AbortSignal.timeout(8000) })
+      .then((r) => r.json()).then((d) => { if (/^[\w.-]{1,20}$/.test(String(d.versionName ?? ''))) apk.version = String(d.versionName); })
+      .catch(() => { apk.hasta = Date.now() + 300000; });
+  }
+  return apk.version;
+}
+versionApk();
+
 // Lo que se puede abrir sin haber entrado: la pantalla de entrada y los iconos
 const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/icono-512.png', '/icono.svg'];
 
@@ -800,6 +815,11 @@ http
         if (!t) return json(res, 404, { error: 'Sin ads.txt' });
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(t);
+      }
+      // Dirección corta para instalar la app en la tele (en «Downloader» se escribe morvehtv.com/apk)
+      if (url.pathname === '/apk') {
+        res.writeHead(302, { location: APK_URL, 'cache-control': 'no-store' });
+        return res.end();
       }
       // Aviso de pago de Ko-fi (lo manda Ko-fi, sin sesión: se comprueba con su token)
       if (url.pathname === '/api/kofi/webhook') return await pagos.webhookKofi(req, res, json);
@@ -858,6 +878,11 @@ http
           html = pagos.activo
             ? html.replace(/<!--\/?PAGOS-->/g, '').replace(/\{\{PRECIO\}\}/g, escHtml((await pagos.precioTexto().catch(() => null)) || 'un pago único'))
             : html.replace(/<!--PAGOS-->[\s\S]*?<!--\/PAGOS-->/g, '');
+          // La portada con los datos de verdad: versión de la app de Android y grupo de Telegram
+          const version = versionApk();
+          html = version ? html.replace(/<!--\/?CONVERSION-->/g, '').replace(/\{\{VERSION_APK\}\}/g, escHtml(version)) : html.replace(/<!--CONVERSION-->[\s\S]*?<!--\/CONVERSION-->/g, '');
+          const grupo = telegram.invitacion();
+          html = grupo ? html.replace(/<!--\/?TELEGRAM-->/g, '').replace(/\{\{TELEGRAM\}\}/g, escHtml(grupo)) : html.replace(/<!--TELEGRAM-->[\s\S]*?<!--\/TELEGRAM-->/g, '');
         }
         return enviar(res, 200, { 'content-type': tipos[ext], 'cache-control': 'no-store' }, html);
       }
