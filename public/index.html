@@ -545,6 +545,16 @@
   .cuenta-bloque input:focus { border-color: var(--acento); outline: none; box-shadow: 0 0 0 3px rgba(224,69,155,.25); }
   .cuenta-bloque .boton:focus, .cuenta-cerrar:focus { outline: none; box-shadow: 0 0 0 3px var(--acento); }
   .cuenta-botones { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* Apps IPTV (Xtream Codes): servidor, usuario y contraseña, cada uno con su «Copiar» */
+  .xtream-dato { width: 100%; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; border-radius: 9px; background: var(--fondo); border: 1px solid var(--borde); }
+  .xtream-etiqueta { color: var(--suave); font-size: 13px; min-width: 88px; }
+  .xtream-dato code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 15px; color: var(--texto); }
+  .xtream-dato .boton { padding: 6px 12px; font-size: 13px; }
+  .xtream-nota { flex: 1; color: var(--texto); font-size: 14px; }
+  .xtream-m3u { width: 100%; }
+  .xtream-m3u summary { cursor: pointer; color: var(--suave); font-size: 13.5px; padding: 4px 0; }
+  .xtream-m3u > :not(summary) { margin-top: 10px; }
+  .tele .xtream-dato code, .tele .xtream-nota { font-size: 20px; } .tele .xtream-etiqueta, .tele .xtream-m3u summary { font-size: 17px; }
   .boton-acento { background: var(--acento); border-color: var(--acento); color: #fff; font-weight: 700; }
   .boton-peligro { color: #ff6b6b; border-color: rgba(255,107,107,.5); background: transparent; }
   .boton-peligro:hover, .boton-peligro:focus { background: #e5484d; border-color: #e5484d; color: #fff; }
