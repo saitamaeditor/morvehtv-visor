@@ -809,6 +809,15 @@ http
       const ip = acceso.ipDe(req);
       // Límite de peticiones por conexión (Render lo comprueba en /api/salud: esa no cuenta)
       if (url.pathname !== '/api/salud') { defensa.limitar(ip, url.pathname); ultimaVisita = Date.now(); }
+      // Bots: el enlace trampa los bloquea; las herramientas de extracción no pasan de aquí
+      // (salvo lo que tienen que leer programas: comprobaciones, ads.txt, Ko-fi y los reproductores)
+      if (url.pathname === defensa.TRAMPA) { defensa.atrapar(ip, 'enlace oculto'); return json(res, 404, { error: 'No existe' }); }
+      if (url.pathname === '/robots.txt') {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
+        return res.end(`User-agent: *\nAllow: /entrar.html\nAllow: /ads.txt\nDisallow: /\nDisallow: ${defensa.TRAMPA}\n`);
+      }
+      const paraProgramas = ['/api/salud', '/ads.txt', '/apk', '/api/kofi/webhook'].includes(url.pathname) || xtream.esRuta(url.pathname);
+      if (!paraProgramas && defensa.esBot(req)) return json(res, 403, { error: 'Acceso automático no permitido' });
       // ads.txt de la red de anuncios (público: lo lee su rastreador)
       if (url.pathname === '/ads.txt') {
         const t = pagos.adsTxt();
@@ -886,6 +895,10 @@ http
           // La portada con los datos de verdad: versión de la app de Android y grupo de Telegram
           const version = versionApk();
           html = version ? html.replace(/<!--\/?CONVERSION-->/g, '').replace(/\{\{VERSION_APK\}\}/g, escHtml(version)) : html.replace(/<!--CONVERSION-->[\s\S]*?<!--\/CONVERSION-->/g, '');
+          // Turnstile de Cloudflare en el registro, solo si está configurado
+          html = defensa.TURNSTILE_SITEKEY
+            ? html.replace(/<!--\/?TURNSTILE-->/g, '').replace(/\{\{TURNSTILE\}\}/g, escHtml(defensa.TURNSTILE_SITEKEY))
+            : html.replace(/<!--TURNSTILE-->[\s\S]*?<!--\/TURNSTILE-->/g, '');
           const grupo = telegram.invitacion();
           html = grupo ? html.replace(/<!--\/?TELEGRAM-->/g, '').replace(/\{\{TELEGRAM\}\}/g, escHtml(grupo)) : html.replace(/<!--TELEGRAM-->[\s\S]*?<!--\/TELEGRAM-->/g, '');
         }

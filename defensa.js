@@ -96,6 +96,55 @@ export function permitirVideo(cuenta, ip, key, admin) {
   if (!u.videos.has(key)) u.videos.set(key, ahora);
 }
 
+// ---------- Bots ----------
+// Ninguna IP se escribe en disco ni en los registros: los bloqueos viven solo en memoria.
+const HORAS_TRAMPA = num(process.env.VISOR_HORAS_TRAMPA, 12);
+
+// Herramientas de extracción y navegadores automatizados que se presentan como tales. Los
+// reproductores de vídeo (okhttp, Dart, VLC, Kodi…) no están: usan las rutas Xtream.
+const UA_BOT = /HeadlessChrome|PhantomJS|Selenium|webdriver|Puppeteer|Playwright|python-requests|python-urllib|python-httpx|aiohttp|Scrapy|curl\/|Wget|libwww-perl|Goutte|Guzzle|HTTrack|colly|node-fetch|axios\/|MJ12bot|AhrefsBot|SemrushBot|DotBot|PetalBot|Bytespider|GPTBot|ClaudeBot|CCBot|DataForSeoBot|ImagesiftBot/i;
+export const esBot = (req) => UA_BOT.test(String(req.headers['user-agent'] ?? '')) || !req.headers['user-agent'];
+
+// Enlace trampa: está en las páginas pero oculto y fuera del mando; robots.txt lo prohíbe, así
+// que solo lo pisa un programa que recorre todos los enlaces sin mirar nada
+export const TRAMPA = '/acceso-socios';
+export function atrapar(ip, motivo) {
+  if (!ip) return;
+  bloqueadas.set(ip, Date.now() + HORAS_TRAMPA * 3600000);
+  console.warn(`Defensa: un bot ha caído en la trampa (${motivo}); bloqueado ${HORAS_TRAMPA} h`);
+}
+
+// Turnstile de Cloudflare (opcional: con TURNSTILE_SITEKEY y TURNSTILE_SECRET en el entorno)
+export const TURNSTILE_SITEKEY = /^[\w-]{10,100}$/.test(process.env.TURNSTILE_SITEKEY ?? '') ? process.env.TURNSTILE_SITEKEY : '';
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET ?? '';
+async function turnstileValido(token) {
+  if (!TURNSTILE_SITEKEY || !TURNSTILE_SECRET) return true;
+  if (typeof token !== 'string' || !token || token.length > 4096) return false;
+  try {
+    const r = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST', body: new URLSearchParams({ secret: TURNSTILE_SECRET, response: token }), signal: AbortSignal.timeout(8000),
+    });
+    return (await r.json()).success === true;
+  } catch (e) {
+    // Si Cloudflare no contesta no se deja a nadie sin poder registrarse
+    console.error(`Turnstile: no se pudo comprobar (${e.message})`);
+    return true;
+  }
+}
+
+// Comprobaciones de entrar y registrarse desde entrar.html. La página manda «humano»: el
+// campo trampa (vacío para una persona), si el navegador está automatizado, cuánto tardó y el
+// pase de Turnstile. Un programa que llama a la API a pelo no lo trae.
+export async function comprobarHumano(datos, ip, registro) {
+  const h = datos?.humano;
+  if (!h || typeof h !== 'object') throw error(400, 'Recarga la página y vuelve a intentarlo');
+  if (h.cebo) { atrapar(ip, 'rellenó el campo oculto'); throw error(400, 'No se pudo completar'); }
+  if (h.auto) { atrapar(ip, 'navegador automatizado'); throw error(400, 'No se pudo completar'); }
+  // Nadie rellena el registro entero en menos de 3 segundos
+  if (registro && !(Number(h.ms) >= 3000)) throw error(400, 'Espera un momento y vuelve a intentarlo');
+  if (registro && !(await turnstileValido(h.pase))) throw error(400, 'No se pudo comprobar que eres una persona. Espera unos segundos y vuelve a intentarlo.');
+}
+
 // Limpieza de lo viejo cada 10 minutos
 setInterval(() => {
   const ahora = Date.now();

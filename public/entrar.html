@@ -169,10 +169,15 @@
   .tele body, .tele input, .tele .enviar { font-size: 22px; }
   .tele .pestana { font-size: 20px; }
   .tele .acepto { font-size: 18px; } .tele .acepto input { width: 28px; height: 28px; }
+  /* Trampas para bots: fuera de la pantalla, del mando y de los lectores de pantalla */
+  .cebo { position: absolute !important; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+  .cf-turnstile { margin: 0 0 12px; }
   @media (prefers-reduced-motion: reduce) { .insignia::before { animation: none; } .plataforma { transition: none; } }
 </style>
+<!--TURNSTILE--><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><!--/TURNSTILE-->
 </head>
 <body>
+<a class="cebo" href="/acceso-socios" rel="nofollow" tabindex="-1" aria-hidden="true">Acceso socios</a>
 <div class="muro" id="muro" aria-hidden="true"></div>
 <div class="velo" aria-hidden="true"></div>
 
@@ -216,6 +221,7 @@
           <div class="campo"><input id="e-clave" class="con-ojo" type="password" name="password" autocomplete="current-password" maxlength="200">
             <button type="button" class="ojo" data-para="e-clave">Mostrar</button></div>
         </label>
+        <div class="cebo" aria-hidden="true"><label>Código de invitación <input id="e-cebo" name="codigo_invitacion" tabindex="-1" autocomplete="off"></label></div>
         <button class="enviar" type="submit">Entrar</button>
         <p class="error" id="e-error" role="alert"></p>
         <p class="pie-tarjeta" id="cambiar-txt">¿No tienes cuenta? <button type="button" class="enlace" id="ir-registro">Regístrate gratis</button></p>
@@ -240,6 +246,8 @@
             <button type="button" class="ojo" data-para="r-clave2">Mostrar</button></div>
         </label>
         <label class="acepto"><input type="checkbox" id="r-acepta"> <span>Tengo al menos 14 años.</span></label>
+        <div class="cebo" aria-hidden="true"><label>Código de invitación <input id="r-cebo" name="codigo_invitacion" tabindex="-1" autocomplete="off"></label></div>
+        <!--TURNSTILE--><div class="cf-turnstile" id="r-turnstile" data-sitekey="{{TURNSTILE}}" data-appearance="interaction-only" data-theme="dark" data-language="es"></div><!--/TURNSTILE-->
         <button class="enviar" type="submit">Crear cuenta</button>
         <!--PAGOS--><div class="vip" id="r-vip">
           <b>⭐ Hazte VIP y evita los anuncios</b>
@@ -462,6 +470,22 @@
       $('r-fuerza-txt').textContent = niveles[n][1];
     };
 
+    // Señales para el servidor de que quien escribe es una persona con un navegador normal: el
+    // campo oculto (vacío), si el navegador lo maneja un programa, cuánto se tardó y el pase de
+    // Turnstile (si está activado)
+    var cargada = Date.now();
+    function humano(cebo) {
+      var auto = false;
+      try {
+        auto = navigator.webdriver === true || /HeadlessChrome/.test(navigator.userAgent) ||
+          !!(window.callPhantom || window._phantom || window.__nightmare || window.domAutomation || window.domAutomationController) ||
+          document.documentElement.getAttribute('webdriver') !== null;
+        for (var k in document) if (/^\$?cdc_|^\$wdc_/.test(k)) auto = true;
+      } catch (x) {}
+      var pase = document.querySelector('#f-registro [name="cf-turnstile-response"]');
+      return { cebo: $(cebo).value, auto: auto, ms: Date.now() - cargada, pase: pase ? pase.value : '' };
+    }
+
     function enviar(ruta, datos, error, boton) {
       error.textContent = '';
       boton.disabled = true;
@@ -473,6 +497,8 @@
           if (r.ok) return location.replace(destino);
           boton.disabled = false;
           error.textContent = d.error || 'No se pudo completar';
+          // El pase de Turnstile solo vale una vez: se pide otro para el siguiente intento
+          try { if (window.turnstile && $('r-turnstile')) window.turnstile.reset('#r-turnstile'); } catch (x) {}
         });
       }).catch(function () {
         boton.disabled = false;
@@ -484,7 +510,7 @@
       e.preventDefault();
       var u = $('e-usuario').value.trim(), c = $('e-clave').value;
       if (!u || !c) { $('e-error').textContent = 'Escribe tu usuario y tu contraseña'; return; }
-      enviar('/api/login', { usuario: u, clave: c }, $('e-error'), this.querySelector('.enviar'));
+      enviar('/api/login', { usuario: u, clave: c, humano: humano('e-cebo') }, $('e-error'), this.querySelector('.enviar'));
     };
 
     // «Crear cuenta y hacerme VIP»: lo mismo, y al entrar se abre el pago
@@ -500,7 +526,8 @@
       if (c.length < 8) { err.textContent = 'La contraseña debe tener al menos 8 caracteres'; return; }
       if (c !== $('r-clave2').value) { err.textContent = 'Las contraseñas no coinciden'; return; }
       if (!$('r-acepta').checked) { err.textContent = 'Para crear la cuenta tienes que confirmar que tienes al menos 14 años'; return; }
-      enviar('/api/registro', { nombre: $('r-nombre').value.trim(), usuario: u, clave: c, acepta: true }, err, this.querySelector('.enviar'));
+      if ($('r-turnstile') && !humano('r-cebo').pase) { err.textContent = 'Comprobando que eres una persona… vuelve a pulsar en unos segundos'; return; }
+      enviar('/api/registro', { nombre: $('r-nombre').value.trim(), usuario: u, clave: c, acepta: true, humano: humano('r-cebo') }, err, this.querySelector('.enviar'));
     };
 
     // Mando de la tele y teclado: ↑ ↓ pasan de un elemento a otro (también a las apps de abajo);
@@ -532,7 +559,7 @@
       if (!arriba && !abajo) return;
       var todos = document.querySelectorAll('.boton-vip, .pestana, input, .ojo, .enviar, .enlace, .plataforma, .barra-telegram');
       var lista = [];
-      for (var i = 0; i < todos.length; i++) if (todos[i].offsetParent) lista.push(todos[i]);
+      for (var i = 0; i < todos.length; i++) if (todos[i].offsetParent && todos[i].tabIndex >= 0) lista.push(todos[i]);
       var pos = lista.indexOf(a);
       var siguiente = pos < 0 ? (abajo ? lista[0] : null) : lista[pos + (abajo ? 1 : -1)];
       // Las dos pestañas van juntas: de una se salta a lo de debajo o de encima de las dos

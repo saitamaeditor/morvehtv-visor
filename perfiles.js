@@ -6,6 +6,7 @@ import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'no
 import { promisify } from 'node:util';
 import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as pagos from './pagos.js';
+import { comprobarHumano } from './defensa.js';
 
 const ARCHIVO = '_morvehtv/usuarios.json';
 
@@ -299,6 +300,7 @@ export async function atender(ruta, req, res, json, ip) {
     claveNueva(clave);
     if (datos.acepta !== true) throw error(400, 'Tienes que confirmar que tienes al menos 14 años');
     const anotar = frenar(`registro:${ip}`, 5, 60);
+    await comprobarHumano(datos, ip, true);
     const sal = randomBytes(16).toString('hex');
     const hash = await hashClave(clave, sal);
     const r = await cambiar((d) => {
@@ -321,6 +323,7 @@ export async function atender(ruta, req, res, json, ip) {
     const usuario = normalizar(datos.usuario);
     const anotarIp = frenar(`login:${ip}`, 10, 10);
     const anotarUsuario = frenar(`usuario:${usuario}`, 10, 10);
+    await comprobarHumano(datos, ip, false);
     const d = await leer();
     const c = (d.cuentas || []).find((x) => x.usuario === usuario);
     // Con un usuario que no existe también se calcula un hash: así no se nota por el tiempo
