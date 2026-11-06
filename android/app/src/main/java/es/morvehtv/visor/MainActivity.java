@@ -349,7 +349,46 @@ public class MainActivity extends Activity {
             if (e.getAction() == KeyEvent.ACTION_UP) onBackPressed();
             return true;
         }
+        // Teclas multimedia del mando (▶❚❚, ⏩, ⏪, ⏭, ⏮, canal ±): según la tele, Android se las
+        // queda para el sistema y la web nunca las recibe. Se le pasan a la web tal cual, con el
+        // mismo nombre que usaría un navegador, y la web hace lo de siempre (pausar, avanzar…)
+        String nombre = teclaMultimedia(e.getKeyCode());
+        if (nombre != null && cargada) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                web.evaluateJavascript("document.dispatchEvent(new KeyboardEvent('keydown',{key:'" + nombre + "',bubbles:true,cancelable:true,repeat:"
+                        + (e.getRepeatCount() > 0) + "}))", null);
+            }
+            return true;
+        }
+        // El botón central de algunos mandos (y el «A» de los mandos de juegos) es OK
+        if (e.getKeyCode() == KeyEvent.KEYCODE_BUTTON_A || e.getKeyCode() == KeyEvent.KEYCODE_NUMPAD_ENTER) {
+            return super.dispatchKeyEvent(new KeyEvent(e.getDownTime(), e.getEventTime(), e.getAction(), KeyEvent.KEYCODE_ENTER,
+                    e.getRepeatCount(), e.getMetaState(), e.getDeviceId(), e.getScanCode(), e.getFlags(), e.getSource()));
+        }
+        // «Atrás» de los mandos de juegos
+        if (e.getKeyCode() == KeyEvent.KEYCODE_BUTTON_B) {
+            if (e.getAction() == KeyEvent.ACTION_UP) onBackPressed();
+            return true;
+        }
         return super.dispatchKeyEvent(e);
+    }
+
+    private static String teclaMultimedia(int codigo) {
+        switch (codigo) {
+            case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
+            case KeyEvent.KEYCODE_HEADSETHOOK: return "MediaPlayPause";
+            case KeyEvent.KEYCODE_MEDIA_PLAY: return "MediaPlay";
+            case KeyEvent.KEYCODE_MEDIA_PAUSE: return "MediaPause";
+            case KeyEvent.KEYCODE_MEDIA_FAST_FORWARD: return "MediaFastForward";
+            case KeyEvent.KEYCODE_MEDIA_REWIND: return "MediaRewind";
+            case KeyEvent.KEYCODE_MEDIA_NEXT:
+            case KeyEvent.KEYCODE_MEDIA_SKIP_FORWARD: return "MediaTrackNext";
+            case KeyEvent.KEYCODE_MEDIA_PREVIOUS:
+            case KeyEvent.KEYCODE_MEDIA_SKIP_BACKWARD: return "MediaTrackPrevious";
+            case KeyEvent.KEYCODE_CHANNEL_UP: return "ChannelUp";
+            case KeyEvent.KEYCODE_CHANNEL_DOWN: return "ChannelDown";
+            default: return null;
+        }
     }
 
     @Override

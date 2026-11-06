@@ -1561,9 +1561,18 @@ function cerrar() {
     if (recargarAlCerrar) return location.reload();
     if (!estado.prefijo) pintar();
     document.querySelectorAll('#items .item[data-key]').forEach(barraVisto);
-    // Con el mando, el foco vuelve a la tarjeta del archivo que se estaba viendo
-    const t = [...document.querySelectorAll('#items .item')].find((x) => x.dataset.key === actualKey);
-    if (t) t.focus();
+    // Con el mando, el foco vuelve a la tarjeta del archivo que se estaba viendo (la portada se
+    // acaba de repintar y sus filas llegan enseguida: se espera hasta 3 s a que aparezca)
+    const clave = actualKey;
+    let intentos = 0;
+    const volver = () => {
+      if (actual >= 0) return;
+      const t = [...document.querySelectorAll('#items .item')].find((x) => x.dataset.key === clave);
+      const a = document.activeElement;
+      if (t) { if (!a || a === document.body || a.closest('#pestanas') || !a.closest('#items')) { t.focus({ preventScroll: true }); t.scrollIntoView({ block: 'center', inline: 'nearest' }); } return; }
+      if (++intentos < 15) setTimeout(volver, 200);
+    };
+    volver();
     aplicarPendientes();
   }
 }
@@ -1578,7 +1587,7 @@ if (esTele) document.documentElement.classList.add('tele');
 const TECLAS = {
   ArrowUp: 'arriba', Up: 'arriba', ArrowDown: 'abajo', Down: 'abajo', ArrowLeft: 'izq', Left: 'izq', ArrowRight: 'der', Right: 'der',
   Enter: 'ok', Escape: 'atras', Esc: 'atras', Backspace: 'atras', GoBack: 'atras', BrowserBack: 'atras',
-  MediaPlayPause: 'play', MediaPlay: 'play', MediaPause: 'play', MediaRewind: 'retroceder', MediaFastForward: 'avanzar',
+  MediaPlayPause: 'play', MediaPlay: 'reanudar', MediaPause: 'pausar', MediaStop: 'pausar', MediaRewind: 'retroceder', MediaFastForward: 'avanzar',
   MediaTrackNext: 'siguiente', MediaTrackPrevious: 'anterior', ChannelUp: 'siguiente', ChannelDown: 'anterior',
 };
 // Códigos de los mandos de Samsung y LG que no traen nombre de tecla
@@ -1622,8 +1631,11 @@ function moverFoco(dir) {
   const r = a.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
   let mejor = null, puntos = Infinity;
-  // En la fila de botones del reproductor, ← → solo pasan de un botón a otro
-  const fila = (dir === 'izq' || dir === 'der') && a.closest && a.closest('.controles');
+  // ← → no se salen de su fila: ni de la de botones del reproductor, ni de una fila de
+  // carátulas (al llegar al final no salta a otra fila), ni de las categorías de arriba
+  const horizontal = dir === 'izq' || dir === 'der';
+  const fila = horizontal && a.closest && a.closest('.controles, .carrusel, .categorias-chips, .destacado-botones');
+  const opciones = [];
   for (const c of cands) {
     if (fila && !fila.contains(c)) continue;
     if (c === a) continue;
@@ -1632,20 +1644,76 @@ function moverFoco(dir) {
     const dx = x - cx, dy = y - cy;
     const principal = { arriba: -dy, abajo: dy, izq: -dx, der: dx }[dir];
     if (principal <= 2) continue;
-    const lateral = dir === 'arriba' || dir === 'abajo' ? Math.abs(dx) : Math.abs(dy);
+    // ↑ ↓: lo de la misma fila (centros casi a la misma altura) no cuenta como «la de abajo»
+    if (!horizontal && principal < Math.min(r.height, s.height) * 0.5) continue;
+    // Los títulos de las filas («Novedades en…  Ver todo») no frenan al bajar o subir con el
+    // mando (lo mismo hacen los botones de categoría de arriba)
+    if (!horizontal && c.matches('.fila-titulo a')) continue;
+    const lateral = horizontal ? Math.abs(dy) : Math.abs(dx);
     // Al subir, el menú de arriba (fijo) solo gana si no queda nada del contenido por encima:
     // así ↑ pasa de una fila del inicio a la anterior y no salta al menú
-    const alMenu = dir === 'arriba' && !a.closest('header') && c.closest('header') ? 100000 : 0;
-    const p = principal + lateral * 2.5 + alMenu;
-    if (p < puntos) { puntos = p; mejor = c; }
+    const alMenu = dir === 'arriba' && !a.closest('header') && c.closest('header');
+    // Lo que separa los bordes (no los centros): la fila de justo debajo/encima está a ~0
+    const borde = Math.max(0, dir === 'abajo' ? s.top - r.bottom : dir === 'arriba' ? r.top - s.bottom : dir === 'der' ? s.left - r.right : r.left - s.right);
+    opciones.push({ c, principal, lateral, alMenu, borde });
+  }
+  if (horizontal) {
+    for (const o of opciones) { const p = o.principal + o.lateral * 2.5; if (p < puntos) { puntos = p; mejor = o.c; } }
+  } else {
+    // ↑ ↓ van siempre a la fila de al lado (la más cercana en esa dirección, aunque su carátula
+    // esté al otro extremo de la pantalla) y, dentro de ella, a lo que quede más a la par
+    const sinMenu = opciones.filter((o) => !o.alMenu);
+    const lista = sinMenu.length ? sinMenu : opciones;
+    const cerca = Math.min(...lista.map((o) => o.borde));
+    for (const o of lista) {
+      if (o.borde > cerca + 24) continue;
+      const p = o.lateral * 4 + o.principal;
+      if (p < puntos) { puntos = p; mejor = o.c; }
+    }
+  }
+  // Al pasar a otra fila de carátulas se vuelve a la que tenías elegida en ella (como en las apps
+  // de la tele), si sigue en la fila
+  const filaVieja = a.closest('.carrusel');
+  if (filaVieja) filaVieja._ultimo = a;
+  if (mejor && !horizontal) {
+    const filaNueva = mejor.closest('.carrusel');
+    const recordada = filaNueva && filaNueva !== a.closest('.carrusel') && filaNueva._ultimo;
+    if (recordada && recordada.isConnected && filaNueva.contains(recordada) && visible(recordada)) mejor = recordada;
   }
   if (mejor) {
-    mejor.focus();
+    mejor.focus({ preventScroll: true });
+    // Con la flecha mantenida no se anima (si no, la página se queda atrás del foco)
+    const comportamiento = rapido ? 'auto' : 'smooth';
     // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
-    if (mejor.closest('header') || mejor.closest('.destacado')) scrollTo({ top: 0, behavior: 'smooth' });
-    else mejor.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (mejor.closest('header') || mejor.closest('.destacado')) scrollTo({ top: 0, behavior: comportamiento });
+    else {
+      mejor.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: comportamiento });
+      // Al cambiar de fila, que se vea la fila entera con su título (no solo la carátula)
+      const seccion = !horizontal && mejor.closest('.fila');
+      if (seccion && seccion.getBoundingClientRect().height < innerHeight * 0.85) seccion.scrollIntoView({ block: 'nearest', behavior: comportamiento });
+    }
   }
 }
+// En la tele, al abrir la app el foco ya está en «▶ Reproducir» del destacado (o, si no hay, en la
+// primera categoría): así el primer OK hace algo y se ve dónde estás sin tocar las flechas
+if (esTele) {
+  let intentos = 0;
+  const vigia = setInterval(() => {
+    const a = document.activeElement;
+    if (++intentos > 50 || (a && a !== document.body)) return clearInterval(vigia);
+    if (actual >= 0 || document.documentElement.classList.contains('con-cuenta')) return;
+    const primero = document.querySelector('.destacado:not([hidden]) .boton.reproducir') || (intentos > 15 && document.querySelector('.chip-cat, .cat:not(.vacia), #items .item'));
+    if (primero) { primero.focus({ preventScroll: true }); clearInterval(vigia); }
+  }, 300);
+}
+
+// Cada fila de carátulas recuerda cuál fue la última elegida
+let rapido = false;
+let ultimaRepeticion = 0;
+document.addEventListener('focusin', (e) => {
+  const fila = e.target.closest && e.target.closest('.carrusel');
+  if (fila) fila._ultimo = e.target;
+}, true);
 
 // Al abrir un vídeo con el mando, el foco va al propio vídeo: OK lo reproduce y ← → lo mueven
 function enfocarVisor() {
@@ -1698,6 +1766,16 @@ document.addEventListener('keydown', (e) => {
     if (a.tagName === 'INPUT' && (k === 'arriba' || k === 'abajo')) { e.preventDefault(); moverFoco(k); }
     return;
   }
+  // Flecha mantenida: el mando repite la tecla muy deprisa; se va a un paso cada 110 ms (en el
+  // vídeo, un salto cada 250 ms) para que el foco y la página no se queden atrás
+  const flecha = ['arriba', 'abajo', 'izq', 'der'].includes(k);
+  if (flecha || k === 'retroceder' || k === 'avanzar') {
+    const ahora = Date.now();
+    const enVideo = actual >= 0 && (!a || a === document.body || a.tagName === 'VIDEO') && (k === 'izq' || k === 'der' || !flecha);
+    if (e.repeat && ahora - ultimaRepeticion < (enVideo ? 250 : 110)) { e.preventDefault(); return; }
+    ultimaRepeticion = ahora;
+    rapido = !!e.repeat;
+  }
   if (k === 'ok' && a && a.matches('.item, .cat')) { e.preventDefault(); a.click(); return; }
 
   if (actual >= 0) {
@@ -1717,6 +1795,13 @@ document.addEventListener('keydown', (e) => {
     const alternar = () => (repro ? repro.alternar() : video && (video.paused ? video.play() : video.pause()));
     const saltar = (s) => (repro ? repro.saltar(s) : video && (video.currentTime += s));
     if (k === 'play' || (k === 'ok' && libre) || (e.key === ' ' && libre)) { e.preventDefault(); return alternar(); }
+    // Los mandos con ▶ y ❚❚ separados: cada uno hace solo lo suyo
+    if (k === 'reanudar' || k === 'pausar') {
+      e.preventDefault();
+      const v = video || (repro && repro.querySelector('video'));
+      if (v && (k === 'reanudar') === v.paused) alternar();
+      return;
+    }
     if (k === 'retroceder') return saltar(-30);
     if (k === 'avanzar') return saltar(30);
     if (k === 'siguiente') { e.preventDefault(); return irVecino(1, { reproducir: !!video }); }
