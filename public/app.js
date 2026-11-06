@@ -902,10 +902,18 @@ function abreHevcDirecto(pix) {
 let cineReal = false;
 const enPantallaCompleta = () => document.fullscreenElement || document.webkitFullscreenElement;
 
+// Dentro de la app de Android (y en la tele) el vídeo ocupa toda la pantalla dentro de la propia
+// página, sin pedir la pantalla completa del sistema: esa abría una vista aparte. La app solo
+// esconde las barras del móvil (y lo pone en horizontal).
+const dentroDeApp = () => !!window.MorvehApp;
+function barrasApp(ocultar) {
+  try { if (window.MorvehApp && typeof window.MorvehApp.barras === 'function') window.MorvehApp.barras(ocultar); } catch (e) {}
+}
 function entrarCine() {
   const visor = $('#visor');
   visor.classList.add('cine');
   despertar();
+  if (dentroDeApp() || esTele) { barrasApp(true); return; }
   if (enPantallaCompleta()) return;
   const pedir = visor.requestFullscreen || visor.webkitRequestFullscreen;
   if (!pedir) return;
@@ -918,6 +926,7 @@ function entrarCine() {
 function salirCine() {
   const visor = $('#visor');
   visor.classList.remove('cine', 'reposo');
+  barrasApp(false);
   if (enPantallaCompleta()) {
     const salir = document.exitFullscreen || document.webkitExitFullscreen;
     try { const p = salir.call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {}

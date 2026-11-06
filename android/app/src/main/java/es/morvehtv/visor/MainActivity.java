@@ -313,6 +313,19 @@ public class MainActivity extends Activity {
             runOnUiThread(MainActivity.this::mostrarWeb);
         }
 
+        // El vídeo a pantalla completa dentro de la propia página (sin abrir una vista aparte):
+        // la web solo pide esconder las barras del móvil y ponerlo en horizontal; al salir del
+        // vídeo, todo vuelve a como estaba. En la tele no hay barras ni giro.
+        @JavascriptInterface
+        public void barras(boolean ocultar) {
+            runOnUiThread(() -> {
+                if (vistaCompleta != null) return;
+                ocultarBarras(ocultar);
+                if (!esTele()) setRequestedOrientation(ocultar ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+                raiz.requestApplyInsets();
+            });
+        }
+
         @JavascriptInterface
         public void pantalla(boolean encendida) {
             runOnUiThread(() -> {
