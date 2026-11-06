@@ -1848,20 +1848,33 @@ function conectar() {
   });
   // Pago hecho o cancelado (aquí o en otro aparato): quitar o poner los anuncios ya
   eventos.addEventListener('plan', () => { if (typeof planCambiado === 'function') planCambiado(true); });
-  eventos.addEventListener('version', (e) => {
-    const v = JSON.parse(e.data);
-    if (versionServidor && v !== versionServidor) {
-      if (actual >= 0) recargarAlCerrar = true;
-      else location.reload();
-    }
-    versionServidor = v;
-  });
+  eventos.addEventListener('version', (e) => nuevaVersion(JSON.parse(e.data)));
+}
+// La versión con la que se cargó esta página (la del «app.js?v=…» que puso el servidor): así, aunque
+// la primera conexión llegue ya con la versión nueva, se nota que esta página es vieja
+versionServidor = ((document.querySelector('script[src*="app.js?v="]') || {}).src || '').match(/[?&]v=([^&#]+)/)?.[1] || null;
+function nuevaVersion(v) {
+  if (!v) return;
+  if (versionServidor && v !== versionServidor) {
+    // Si estás viendo algo, se espera a que cierres el vídeo
+    if (actual >= 0) recargarAlCerrar = true;
+    else return location.reload();
+  }
+  versionServidor = v;
 }
 conectar();
-// Al volver a la app (móvil, tele) se reconecta si la conexión se había perdido
+// Al volver a la app (iPhone con la web en la pantalla de inicio, móvil, tele): iOS congela la
+// página en segundo plano y la conexión en directo puede seguir «abierta» pero muerta, así que no
+// llegaría el aviso de versión nueva. Al volver se pregunta la versión directamente y, si estuvo
+// fuera más de un minuto, se rehace la conexión.
+let ocultaDesde = 0;
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && eventos.readyState !== EventSource.OPEN) conectar();
+  if (document.hidden) { ocultaDesde = Date.now(); return; }
+  if (eventos.readyState !== EventSource.OPEN || (ocultaDesde && Date.now() - ocultaDesde > 60000)) conectar();
+  fetch('/api/salud', { cache: 'no-store' }).then((r) => r.json()).then((d) => nuevaVersion(d.version)).catch(() => {});
 });
+// iOS a veces devuelve la página desde su caché de «atrás/adelante» sin volver a cargarla
+window.addEventListener('pageshow', (e) => { if (e.persisted) fetch('/api/salud', { cache: 'no-store' }).then((r) => r.json()).then((d) => nuevaVersion(d.version)).catch(() => {}); });
 
 window.addEventListener('hashchange', () => {
   estado.prefijo = decodeURIComponent(location.hash.slice(1));
