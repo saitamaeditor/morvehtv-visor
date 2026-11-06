@@ -45,6 +45,7 @@ public class MainActivity extends Activity {
     private Button reintentar;
     private FrameLayout raiz;
     private View vistaCompleta;
+    private boolean sinBarras = false; // viendo un vídeo a pantalla completa dentro de la web
     private WebChromeClient.CustomViewCallback alSalirCompleta;
     private boolean cargada = false;
     private final Cromo cromo = new Cromo();
@@ -116,7 +117,8 @@ public class MainActivity extends Activity {
                 arriba = insets.getSystemWindowInsetTop(); abajo = insets.getSystemWindowInsetBottom();
                 izq = insets.getSystemWindowInsetLeft(); der = insets.getSystemWindowInsetRight();
             }
-            if (vistaCompleta != null) v.setPadding(0, 0, 0, 0);
+            // (viendo un vídeo, sin hueco: ocupa la pantalla entera, también la zona de la cámara)
+            if (vistaCompleta != null || sinBarras) v.setPadding(0, 0, 0, 0);
             else v.setPadding(izq, arriba, der, abajo);
             return insets;
         });
@@ -320,6 +322,14 @@ public class MainActivity extends Activity {
         public void barras(boolean ocultar) {
             runOnUiThread(() -> {
                 if (vistaCompleta != null) return;
+                sinBarras = ocultar;
+                // El vídeo también por la zona de la cámara (muesca o agujero), de borde a borde
+                if (android.os.Build.VERSION.SDK_INT >= 28) {
+                    WindowManager.LayoutParams lp = getWindow().getAttributes();
+                    lp.layoutInDisplayCutoutMode = ocultar ? WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                            : WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
+                    getWindow().setAttributes(lp);
+                }
                 ocultarBarras(ocultar);
                 if (!esTele()) setRequestedOrientation(ocultar ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
                 raiz.requestApplyInsets();

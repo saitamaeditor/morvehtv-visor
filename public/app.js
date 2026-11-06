@@ -914,6 +914,8 @@ function barrasApp(ocultar) {
 function entrarCine() {
   const visor = $('#visor');
   visor.classList.add('cine');
+  visor.classList.toggle('llenar', tactil() && quiereLlenar());
+  document.querySelectorAll('.boton.ajuste').forEach((b) => pintarAjuste(b));
   despertar();
   if (dentroDeApp() || esTele) { barrasApp(true); return; }
   if (enPantallaCompleta()) return;
@@ -995,7 +997,26 @@ const ICONOS = {
   volumen: '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/>',
   mudo: '<path d="M16.5 12A4.5 4.5 0 0 0 14 8v2.18l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>',
   idioma: '<path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>',
+  llenar: '<path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z"/>',
+  ajustar: '<path d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14zM9 8H7v2H5v2h4V8zm6 8h2v-2h2v-2h-4v4z"/>',
 };
+
+// Móvil y tablet: a pantalla completa, el vídeo llena la pantalla entera sea del tamaño que sea
+// (recorta un poco por los lados o por arriba y abajo si la pantalla tiene otra forma). Con el
+// botón ⛶ de al lado, o pellizcando la imagen, se vuelve a ver entero. Se recuerda en el aparato.
+const tactil = () => matchMedia('(pointer: coarse)').matches && !esTele;
+function quiereLlenar() { try { return localStorage.getItem('morvehtv-llenar') !== '0'; } catch (e) { return true; } }
+function ponerLlenar(si) {
+  try { localStorage.setItem('morvehtv-llenar', si ? '1' : '0'); } catch (e) {}
+  $('#visor').classList.toggle('llenar', si && tactil());
+  document.querySelectorAll('.boton.ajuste').forEach((b) => pintarAjuste(b));
+}
+function pintarAjuste(b) {
+  const lleno = $('#visor').classList.contains('llenar');
+  b.innerHTML = icono(lleno ? 'ajustar' : 'llenar');
+  b.title = lleno ? 'Ver la imagen entera' : 'Llenar la pantalla';
+  b.setAttribute('aria-label', b.title);
+}
 const icono = (n) => `<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONOS[n]}</svg>`;
 function boton(clase, html, titulo) {
   const b = el('button', clase);
@@ -1189,6 +1210,21 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   filaProgreso.append(rango, tiempo);
   izq.append(bPlay, bAtras, bAdelante, bSonido);
   if (bAudio) der.append(bAudio);
+  // Móvil y tablet: llenar la pantalla o ver la imagen entera (también pellizcando la imagen)
+  if (tactil()) {
+    const bAjuste = boton('boton ajuste', icono('llenar'), 'Llenar la pantalla');
+    bAjuste.onclick = () => ponerLlenar(!$('#visor').classList.contains('llenar'));
+    pintarAjuste(bAjuste);
+    der.append(bAjuste);
+    let distancia0 = 0;
+    const distancia = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    v.addEventListener('touchstart', (e) => { distancia0 = e.touches.length === 2 ? distancia(e.touches) : 0; }, { passive: true });
+    v.addEventListener('touchmove', (e) => {
+      if (!distancia0 || e.touches.length !== 2 || !$('#visor').classList.contains('cine')) return;
+      const r = distancia(e.touches) / distancia0;
+      if (r > 1.15 || r < 0.87) { ponerLlenar(r > 1); distancia0 = 0; }
+    }, { passive: true });
+  }
   der.append(bPantalla);
   barra.append(filaProgreso, izq, der);
   // Sin avisos de carga («Preparando vídeo…», «Cargando…»): solo se usa para errores reales

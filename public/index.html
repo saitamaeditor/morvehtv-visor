@@ -1072,6 +1072,10 @@
     border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08); gap: 10px 12px; }
   /* (Sin desenfoque del fondo: recalcularlo en cada fotograma del vídeo hacía perder imágenes en
      las teles y el vídeo se quedaba por detrás del sonido.) */
+  /* El vídeo a pantalla completa ocupa el alto real de la pantalla (en el móvil, 100vh contaba la
+     barra del navegador) y, en móvil y tablet, la llena entera («llenar»: recorta lo que sobre) */
+  #visor.cine .repro video, #visor.cine .contenido > video { height: 100vh; height: 100dvh; width: 100vw; }
+  #visor.cine.llenar .repro video { object-fit: cover; }
   #visor.cine .controles .grupo .boton { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); }
   #visor.cine .controles .grupo.izq .boton:first-child { background: var(--deg); border-color: transparent; }
   #visor.cine .controles .grupo .boton:hover, #visor.cine .controles .grupo .boton:focus { background: var(--deg); border-color: transparent; }
