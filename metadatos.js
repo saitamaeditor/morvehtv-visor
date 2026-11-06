@@ -613,20 +613,41 @@ export function claveDe(key) {
 }
 
 // ---------- Para el gestor: elegir el título antes de subirlo ----------
-// Por nombre o por IMDb (el código «tt…» o el enlace entero de imdb.com)
+// Por nombre, por IMDb (el código «tt…» o el enlace entero de imdb.com) o por TMDB (el enlace de
+// themoviedb.org, «tmdb:603» / «tmdb tv 1399» o solo el número)
 const resultado = (r, tipo) => ({
   tmdbId: r.id, tipo, titulo: r.title ?? r.name, original: r.original_title ?? r.original_name ?? '',
   anio: (r.release_date ?? r.first_air_date ?? '').slice(0, 4), poster: img(r.poster_path, 'w185'), sinopsis: r.overview ?? '',
 });
+// El título de TMDB con ese número (como película, como serie o, sin saber cuál, los dos)
+async function porIdTmdb(id, tipo) {
+  const tipos = tipo ? [tipo] : ['pelicula', 'serie'];
+  const hallados = await Promise.all(tipos.map((t) => pedir(`/${t === 'serie' ? 'tv' : 'movie'}/${id}`).then((r) => (r?.id ? resultado(r, t) : null)).catch(() => null)));
+  return hallados.filter(Boolean);
+}
 export async function buscarParaSubir(q) {
-  const imdb = String(q ?? '').match(/tt\d{5,10}/)?.[0];
+  const texto = String(q ?? '').trim();
+  const imdb = texto.match(/tt\d{5,10}/)?.[0];
   if (imdb) {
     const r = await pedir(`/find/${imdb}`, { external_source: 'imdb_id' });
     return [...(r.movie_results ?? []).map((x) => resultado(x, 'pelicula')), ...(r.tv_results ?? []).map((x) => resultado(x, 'serie'))];
   }
-  const { results = [] } = await pedir('/search/multi', { query: String(q ?? '').trim(), include_adult: 'false' });
-  return results.filter((r) => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 20)
+  // Enlace de TMDB: https://www.themoviedb.org/movie/603-the-matrix o …/tv/1399-juego-de-tronos
+  const enlace = texto.match(/themoviedb\.org\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?(movie|tv)\/(\d{1,9})/i);
+  if (enlace) return porIdTmdb(Number(enlace[2]), enlace[1].toLowerCase() === 'tv' ? 'serie' : 'pelicula');
+  // «tmdb:603», «tmdb 603», «tmdb tv 1399», «tmdb movie/603», «tmdb serie 1399»
+  const codigo = texto.match(/^tmdb\s*[:#/-]?\s*(movie|tv|pelicula|película|serie)?\s*[:#/-]?\s*(\d{1,9})$/i);
+  if (codigo) return porIdTmdb(Number(codigo[2]), !codigo[1] ? null : /tv|serie/i.test(codigo[1]) ? 'serie' : 'pelicula');
+  const { results = [] } = await pedir('/search/multi', { query: texto, include_adult: 'false' });
+  const porNombre = results.filter((r) => r.media_type === 'movie' || r.media_type === 'tv').slice(0, 20)
     .map((r) => resultado(r, r.media_type === 'tv' ? 'serie' : 'pelicula'));
+  // Solo un número: puede ser el de TMDB o un título como «1917» o «300». Primero lo que tenga
+  // ese número en TMDB y detrás lo que se llame así
+  if (/^\d{1,9}$/.test(texto)) {
+    const porId = await porIdTmdb(Number(texto));
+    return [...porId, ...porNombre.filter((x) => !porId.some((y) => y.tmdbId === x.tmdbId && y.tipo === x.tipo))];
+  }
+  return porNombre;
 }
 
 // Ficha para subir: la película, o la serie con todas sus temporadas y el nombre de cada
