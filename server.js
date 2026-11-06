@@ -497,6 +497,10 @@ async function hlsIniciar(p, quien) {
     // Android no lo decodifican y se queda sin sonido
     ...(info.audios[audio]?.codec === 'aac' && (info.audios[audio]?.canales || 2) <= 2 ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']),
     '-sn',
+    // Copiando la imagen, ffmpeg la empieza en el fotograma clave anterior al segundo pedido y el
+    // sonido justo en ese segundo: en fMP4 cada pista se ponía a cero por su cuenta y se
+    // desincronizaban. Así se desplazan las dos lo mismo y siguen a la par.
+    ...(copiaHevc ? ['-avoid_negative_ts', 'make_zero'] : []),
     '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0', '-hls_playlist_type', 'event',
     ...(copiaHevc
       ? ['-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4', '-hls_segment_filename', path.join(carpeta, 's%05d.m4s')]

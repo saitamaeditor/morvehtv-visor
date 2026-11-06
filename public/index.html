@@ -1068,9 +1068,10 @@
   .controles input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.2); margin-top: -5px; }
   /* A pantalla completa: el panel de cristal flota abajo, centrado y con margen */
   #visor.cine .controles { left: 50%; right: auto; bottom: max(16px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(1180px, calc(100% - 28px));
-    padding: 14px 18px; border-radius: 22px; background: rgba(14,14,22,.58); -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+    padding: 14px 18px; border-radius: 22px; background: rgba(14,14,22,.84);
     border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 70px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08); gap: 10px 12px; }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { #visor.cine .controles { background: rgba(14,14,22,.9); } }
+  /* (Sin desenfoque del fondo: recalcularlo en cada fotograma del vídeo hacía perder imágenes en
+     las teles y el vídeo se quedaba por detrás del sonido.) */
   #visor.cine .controles .grupo .boton { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); }
   #visor.cine .controles .grupo.izq .boton:first-child { background: var(--deg); border-color: transparent; }
   #visor.cine .controles .grupo .boton:hover, #visor.cine .controles .grupo .boton:focus { background: var(--deg); border-color: transparent; }
@@ -1088,8 +1089,8 @@
   @keyframes latido-play { 0%, 100% { box-shadow: 0 10px 40px rgba(255,61,154,.5), 0 0 0 0 rgba(255,61,154,.4); } 50% { box-shadow: 0 10px 40px rgba(255,61,154,.6), 0 0 0 18px rgba(255,61,154,0); } }
   @media (prefers-reduced-motion: reduce) { .gran-play, #visor.cine .gran-play { animation: none; } }
   /* La lista de idiomas: cristal, con la etiqueta de cada uno; el elegido con ✓ */
-  .menu-audio { left: auto; right: 12px; bottom: 76px; min-width: 280px; padding: 10px; gap: 6px; border-radius: 18px; background: rgba(16,16,26,.84);
-    -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 70px rgba(0,0,0,.6); }
+  .menu-audio { left: auto; right: 12px; bottom: 76px; min-width: 280px; padding: 10px; gap: 6px; border-radius: 18px; background: rgba(16,16,26,.95);
+    border: 1px solid rgba(255,255,255,.14); box-shadow: 0 24px 70px rgba(0,0,0,.6); }
   #visor.cine .menu-audio { right: max(26px, calc((100% - 1180px) / 2 + 26px)); bottom: calc(132px + env(safe-area-inset-bottom)); }
   .menu-audio h4 { margin: 4px 8px 6px; font-size: 13px; font-weight: 800; color: #fff; letter-spacing: .02em; }
   .menu-audio button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; font-size: 15px; font-weight: 600; }
