@@ -882,7 +882,7 @@ http
           const planes = pagos.planesPortada();
           const mejor = planes.reduce((m, x) => (!m || x.meses > m.meses ? x : m), null);
           html = html.replace('{{PLANES_VIP}}', planes.map((x) => `<button type="button" class="plan${x === mejor && planes.length > 1 ? ' mejor' : ''}" data-plan="${escHtml(x.id)}" data-nombre="${escHtml(`${x.titulo} · ${x.precio}`)}">`
-            + `${x === mejor && planes.length > 1 ? '<em>El que más compensa</em>' : ''}<b>${escHtml(x.titulo)}</b><strong>${escHtml(x.precio)}</strong><small>${escHtml(x.alMes || 'Pago único')}</small></button>`).join(''));
+            + `${x === mejor && planes.length > 1 ? '<em>El que más compensa</em>' : ''}<b>${escHtml(x.titulo)}</b><strong>${escHtml(x.precio)}</strong><small>Pago único</small></button>`).join(''));
           // La portada con los datos de verdad: versión de la app de Android y grupo de Telegram
           const version = versionApk();
           html = version ? html.replace(/<!--\/?CONVERSION-->/g, '').replace(/\{\{VERSION_APK\}\}/g, escHtml(version)) : html.replace(/<!--CONVERSION-->[\s\S]*?<!--\/CONVERSION-->/g, '');
