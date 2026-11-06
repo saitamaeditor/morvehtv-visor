@@ -193,10 +193,19 @@ export async function atender(ruta, req, res, json, { ip, nube }) {
   const usuario = ver ? decodeURIComponent(ver[2]) : url.searchParams.get('username');
   const clave = ver ? decodeURIComponent(ver[3]) : url.searchParams.get('password');
   let cuenta = null;
+  let demasiadas = false;
   try {
     cuenta = await credenciales(usuario, clave, ip);
   } catch (e) {
     if (e.status !== 429) throw e;
+    demasiadas = true;
+  }
+  // Registro para ver qué pide cada reproductor y por qué falla (sin IP ni contraseña); se lee con
+  // «docker logs morvehtv-visor». Los vídeos no se apuntan (serían demasiadas líneas).
+  if (!ver) {
+    const accion = url.searchParams.get('action') || (ruta === '/get.php' ? `m3u ${url.searchParams.get('type') || ''}` : 'entrar');
+    const resultado = cuenta ? 'ok' : demasiadas ? 'demasiados intentos' : !usuario ? 'sin usuario' : 'usuario o contraseña incorrectos';
+    console.log(`Xtream: ${accion} · usuario «${String(usuario ?? '').slice(0, 30)}» · ${resultado} · app ${String(req.headers['user-agent'] ?? '¿?').slice(0, 80)}`);
   }
 
   const vetado = cuenta && !(await permitido(cuenta));
