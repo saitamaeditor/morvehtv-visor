@@ -388,7 +388,8 @@ function pintarInicio(carpetas, archivos) {
     let filasPuestas = 0;
     for (const { cat, suyas } of categoriasDe(carpetas)) {
       const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
-      const titulos = entrada ? entrada.titulos.slice(0, 20) : [];
+      // En cada fila «Novedades en…», solo los 5 últimos (el resto, en «Ver todo»)
+      const titulos = entrada ? entrada.titulos.slice(0, 5) : [];
       if (!titulos.length) continue;
       const f = fila(`Novedades en ${cat.nombre}`, () => irA(suyas[0]));
       const pelis = titulos.filter((x) => x.tipo === 'archivo');
