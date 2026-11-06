@@ -1054,10 +1054,20 @@ function botonMetaMask(d) {
 }
 
 // Al crear la cuenta pulsando «Hazte VIP» se llega con ?vip=1: se abre «Mi cuenta» en el plan
-function ofertaVipAlEntrar() {
+// Si en la portada ya se eligió plan (y se aceptó la condición), llega con &plan=…&acepta=1: se
+// prepara el pedido de ese plan y se abre directamente su pantalla de pago en Ko-fi.
+async function ofertaVipAlEntrar() {
   if (!/[?&]vip=1\b/.test(location.search)) return;
+  const q = new URLSearchParams(location.search);
   try { history.replaceState(null, '', location.pathname + location.hash); } catch (e) {}
-  if (!planInfo || !planInfo.activo || planInfo.plan === 'premium') return;
+  if (!planInfo || !planInfo.activo || planInfo.admin) return;
+  const plan = q.get('plan');
+  if (plan && q.get('acepta') === '1' && planInfo.proveedor === 'kofi' && (planInfo.opciones || []).some((o) => String(o.id) === plan)) {
+    try {
+      await enviar('/api/pago/kofi/pedido', { opcion: plan, acepta: true });
+      await cargarPlan();
+    } catch (e) { /* si falla, se abre la elección de plan normal */ }
+  } else if (planInfo.plan === 'premium') return;
   abrirCuenta();
   setTimeout(() => {
     const plan = document.querySelector('.cuenta-bloque.plan-basico, .cuenta-bloque[class*="plan"]');
@@ -1123,9 +1133,13 @@ function pantallaKofi(b, d) {
   const cCod = el('button', 'boton', 'Copiar código'); cCod.onclick = () => copiar(d.codigo, cCod);
   cod.append(cCod);
   const p2 = el('p', 'pago-paso');
-  p2.innerHTML = `2. Pulsa el botón, elige <b>${d.importeTexto}</b> y <b>pega el código en el mensaje</b> del pago. Puedes marcar el mensaje como privado.`;
+  p2.innerHTML = `2. Pulsa el botón (el código se copia solo), elige <b>${d.importeTexto}</b> en Ko-fi y <b>pega el código en el mensaje</b> del pago. Puedes marcar el mensaje como privado.`;
   const ir = el('a', 'boton boton-acento', `☕ Pagar ${d.importeTexto} en Ko-fi ↗`);
   ir.href = d.url; ir.target = '_blank'; ir.rel = 'noopener';
+  // Al ir a Ko-fi el código se copia solo: allí basta con pegarlo en el mensaje
+  ir.addEventListener('click', () => {
+    try { if (navigator.clipboard) navigator.clipboard.writeText(d.codigo).then(() => { cCod.textContent = '✓ Copiado: pégalo en Ko-fi'; }).catch(() => {}); } catch (e) {}
+  });
   const p3 = el('p', 'pago-paso', '3. Vuelve aquí: el VIP se activa solo en cuanto Ko-fi avise (normalmente en unos segundos).');
   const nota = el('small', 'suave', 'Sin el código también se puede activar, pero a mano: si se te olvida, avisa a la administración con tu usuario. Si vuelves a pagar desde el mismo correo de PayPal, se reconoce solo.');
   const estado = el('div', 'pago-estado esperando');

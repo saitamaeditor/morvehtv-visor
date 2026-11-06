@@ -126,6 +126,24 @@
   .dialogo h4 { margin: 0 0 12px; font-size: 20px; }
   .dialogo ol { margin: 0 0 18px; padding-left: 22px; color: #c9ced8; }
   .dialogo li { margin: 8px 0; }
+  .caja-vip { width: min(560px, 100%) !important; max-height: calc(100vh - 40px); overflow: auto; }
+  .sub-vip { margin: 0 0 18px; color: var(--suave); font-size: 15px; }
+  .planes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .plan { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 22px 10px 16px; border-radius: 16px; cursor: pointer;
+    border: 1px solid var(--borde); background: rgba(255,255,255,.04); color: var(--texto); font: inherit; text-align: center; transition: border-color .15s, box-shadow .15s, transform .15s; }
+  .plan b { font-size: 15px; color: var(--suave); font-weight: 600; }
+  .plan strong { font-size: 28px; font-weight: 900; letter-spacing: -.02em; }
+  .plan small { color: var(--tenue); font-size: 12.5px; }
+  .plan em { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 10px; border-radius: 999px;
+    background: #ffb224; color: #111; font: 700 11px system-ui, sans-serif; font-style: normal; letter-spacing: .02em; }
+  .plan:hover, .plan:focus { outline: none; border-color: rgba(224,69,155,.6); transform: translateY(-2px); }
+  .plan.activo { border-color: var(--acento); background: rgba(224,69,155,.14); box-shadow: 0 0 0 2px var(--acento); }
+  .plan.activo b { color: #fff; }
+  .enviar.secundario { margin-top: 10px; background: #2a2e3a; }
+  .enviar.secundario:hover, .enviar.secundario:focus { background: #353a48; }
+  .cerrar-vip { display: block; margin: 14px auto 0; color: var(--suave); }
+  .aviso-vip { margin: 0 0 16px; padding: 10px 12px; border-radius: 11px; border: 1px solid rgba(255,178,36,.45); background: rgba(255,178,36,.1); color: #ffd27a; font-size: 14px; }
+  @media (max-width: 480px) { .planes { gap: 8px; } .plan { padding: 20px 4px 12px; } .plan strong { font-size: 22px; } .plan b { font-size: 13px; } .plan small { font-size: 11px; } .plan em { font-size: 9.5px; padding: 2px 7px; } }
   .dialogo code { padding: 2px 7px; border-radius: 6px; background: rgba(255,255,255,.08); color: #fff; font-size: 15px; }
 
   /* ---------- Tamaños ---------- */
@@ -184,6 +202,7 @@
     <section class="tarjeta" id="tarjeta">
       <h2 id="t-titulo">Comienza ahora</h2>
       <p class="sub" id="t-sub">Entra o crea tu cuenta gratis en un momento.</p>
+      <p class="aviso-vip" id="aviso-vip" hidden></p>
       <div class="pestanas" role="tablist">
         <button type="button" class="pestana activa" id="p-entrar" role="tab">Iniciar sesión</button>
         <button type="button" class="pestana" id="p-registro" role="tab">Crear cuenta</button>
@@ -280,6 +299,27 @@
   </div>
 </div>
 
+<!--PAGOS--><div class="dialogo" id="d-vip" hidden role="dialog" aria-modal="true" aria-labelledby="d-vip-t">
+  <div class="caja caja-vip">
+    <div id="vip-paso1">
+      <h4 id="d-vip-t">⭐ Hazte VIP</h4>
+      <p class="sub-vip">Todo sin anuncios en la web, el móvil y la tele. Pago único con tarjeta o PayPal en Ko-fi, sin suscripción: no se renueva solo.</p>
+      <div class="planes">{{PLANES_VIP}}</div>
+      <label class="acepto"><input type="checkbox" id="vip-acepta"> <span>Entiendo que el VIP empieza en cuanto llega el pago y que, por eso, no se puede devolver.</span></label>
+      <button type="button" class="enviar" id="vip-seguir">Continuar al pago</button>
+      <p class="error" id="vip-error" role="alert"></p>
+      <button type="button" class="enlace cerrar-vip" data-cerrar>Ahora no</button>
+    </div>
+    <div id="vip-paso2" hidden>
+      <h4>Un paso más: tu cuenta</h4>
+      <p class="sub-vip">El VIP se activa en tu cuenta de MorvehTV. Crea una gratis (o entra con la tuya) y te llevamos directo al pago de <b id="vip-elegido"></b>.</p>
+      <button type="button" class="enviar" id="vip-crear">Crear mi cuenta</button>
+      <button type="button" class="enviar secundario" id="vip-entrar">Ya tengo cuenta: entrar</button>
+      <button type="button" class="enlace cerrar-vip" id="vip-volver">‹ Cambiar de plan</button>
+    </div>
+  </div>
+</div><!--/PAGOS-->
+
 <div class="dialogo" id="d-tele" hidden role="dialog" aria-modal="true" aria-labelledby="d-tele-t">
   <div class="caja">
     <h4 id="d-tele-t">MorvehTV en tu tele</h4>
@@ -341,22 +381,55 @@
     var tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !/\btele\b/.test(document.documentElement.className);
     if (location.hash === '#registro' || location.hash === '#vip') cambiar('registro', tactil); else if (!tactil) $('e-usuario').focus();
 
-    // «Acceso VIP» arriba: a crear cuenta, con la oferta VIP a la vista
-    function irVip() {
-      cambiar('registro', true);
-      var t = $('tarjeta');
-      if (t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setTimeout(function () { ($('r-vip-boton') || $('r-nombre')).focus(); }, 350);
-    }
-    if ($('cabecera-vip')) $('cabecera-vip').onclick = irVip;
-    if (location.hash === '#vip') setTimeout(irVip, 50);
-
-    // Ventanas de ayuda (iPhone y tele)
+    // Ventanas (planes VIP, ayuda del iPhone y de la tele)
     var abierto = null, antes = null;
-    function abrir(id) {
+    function abrir(id, foco) {
       antes = document.activeElement; abierto = $(id); abierto.hidden = false;
-      abierto.querySelector('[data-cerrar]').focus();
+      (foco || abierto.querySelector('[data-cerrar]')).focus();
     }
+
+    // «Acceso VIP»: los planes; al elegir uno se crea la cuenta (o se entra) y se llega directo
+    // a su pago en Ko-fi (?vip=1&plan=…: lo abre la app nada más entrar)
+    var destinoVip = null;
+    var planes = document.querySelectorAll('.plan');
+    var planElegido = null;
+    function elegirPlan(b) {
+      planElegido = b;
+      for (var p = 0; p < planes.length; p++) planes[p].className = planes[p].className.replace(/\s*activo/g, '') + (planes[p] === b ? ' activo' : '');
+    }
+    for (var q = 0; q < planes.length; q++) planes[q].onclick = function () { elegirPlan(this); $('vip-error').textContent = ''; };
+    function abrirVip() {
+      if (!$('d-vip')) return;
+      $('vip-paso1').hidden = false; $('vip-paso2').hidden = true; $('vip-error').textContent = '';
+      if (!planElegido) elegirPlan(document.querySelector('.plan.mejor') || planes[0]);
+      abrir('d-vip', planElegido || $('vip-seguir'));
+    }
+    if ($('cabecera-vip')) $('cabecera-vip').onclick = abrirVip;
+    if ($('vip-seguir')) {
+      $('vip-seguir').onclick = function () {
+        if (!planElegido) { $('vip-error').textContent = 'Elige uno de los planes'; return; }
+        if (!$('vip-acepta').checked) { $('vip-error').textContent = 'Marca la casilla para continuar'; $('vip-acepta').focus(); return; }
+        $('vip-elegido').textContent = planElegido.getAttribute('data-nombre');
+        $('vip-paso1').hidden = true; $('vip-paso2').hidden = false;
+        $('vip-crear').focus();
+      };
+      $('vip-volver').onclick = function () { $('vip-paso2').hidden = true; $('vip-paso1').hidden = false; planElegido.focus(); };
+      var seguirConCuenta = function (modoNuevo) {
+        destinoVip = '/?vip=1&plan=' + encodeURIComponent(planElegido.getAttribute('data-plan')) + '&acepta=1';
+        destino = destinoVip;
+        $('aviso-vip').innerHTML = '⭐ Después irás directo al pago de <b></b>.';
+        $('aviso-vip').querySelector('b').textContent = planElegido.getAttribute('data-nombre');
+        $('aviso-vip').hidden = false;
+        abierto.hidden = true; abierto = null;
+        cambiar(modoNuevo, true);
+        var t = $('tarjeta');
+        if (t.scrollIntoView) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(function () { $(modoNuevo === 'entrar' ? 'e-usuario' : 'r-nombre').focus(); }, 350);
+      };
+      $('vip-crear').onclick = function () { seguirConCuenta('registro'); };
+      $('vip-entrar').onclick = function () { seguirConCuenta('entrar'); };
+    }
+    if (location.hash === '#vip') setTimeout(abrirVip, 50);
     function cerrarDialogo() { if (!abierto) return; abierto.hidden = true; abierto = null; if (antes && antes.focus) antes.focus(); }
     $('a-iphone').onclick = function () { abrir('d-iphone'); };
     $('a-tele').onclick = function () { abrir('d-tele'); };
@@ -417,7 +490,7 @@
     // «Crear cuenta y hacerme VIP»: lo mismo, y al entrar se abre el pago
     var vip = $('r-vip-boton');
     var destinoNormal = destino;
-    $('f-registro').querySelector('button[type=submit]').onclick = function () { destino = destinoNormal; };
+    $('f-registro').querySelector('button[type=submit]').onclick = function () { destino = destinoVip || destinoNormal; };
     if (vip) vip.onclick = function () { destino = '/?vip=1'; $('f-registro').requestSubmit ? $('f-registro').requestSubmit() : $('f-registro').onsubmit(new Event('submit')); };
     $('f-registro').onsubmit = function (e) {
       e.preventDefault();
@@ -435,7 +508,18 @@
     document.addEventListener('keydown', function (e) {
       var k = e.key || '', c = e.keyCode;
       if (abierto && (k === 'Escape' || k === 'Backspace' || k === 'GoBack' || c === 27 || c === 8 || c === 10009 || c === 461)) { e.preventDefault(); cerrarDialogo(); return; }
-      if (abierto) return;
+      // Dentro de una ventana, las flechas del mando van de un botón a otro
+      if (abierto) {
+        if ((k === 'Enter' || c === 13) && document.activeElement && document.activeElement.type === 'checkbox') { e.preventDefault(); document.activeElement.checked = !document.activeElement.checked; return; }
+        var mover = k === 'ArrowUp' || k === 'ArrowLeft' || c === 38 || c === 37 ? -1 : k === 'ArrowDown' || k === 'ArrowRight' || c === 40 || c === 39 ? 1 : 0;
+        if (!mover) return;
+        var dentro = abierto.querySelectorAll('button, input');
+        var vis = [];
+        for (var v = 0; v < dentro.length; v++) if (dentro[v].offsetParent) vis.push(dentro[v]);
+        var sig = vis[vis.indexOf(document.activeElement) + mover];
+        if (sig) { e.preventDefault(); sig.focus(); }
+        return;
+      }
       var arriba = k === 'ArrowUp' || c === 38, abajo = k === 'ArrowDown' || c === 40;
       var a = document.activeElement;
       if ((k === 'ArrowLeft' || c === 37 || k === 'ArrowRight' || c === 39) && a && /pestana/.test(a.className)) {

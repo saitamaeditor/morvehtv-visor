@@ -124,6 +124,9 @@ const error = (status, message) => Object.assign(new Error(message), { status })
 const EUR_POR_USD = Number(process.env.CRIPTO_EUR_POR_USD) > 0 ? Number(process.env.CRIPTO_EUR_POR_USD) : 0.92;
 // «5,50 USDC (unos 5 €) / 12 meses»
 const euros = (usdc) => { const e = Math.round(usdc * EUR_POR_USD * 2) / 2; return `unos ${e.toLocaleString('es-ES', { maximumFractionDigits: 2 })} €`; };
+// Los planes para la portada (sin sesión): título, precio y lo que sale al mes
+export const planesPortada = () => (KOFI ? KOFI_PLANES.map((o) => ({ id: o.id, titulo: mesesTexto(o.meses), precio: eur(o.euros),
+  alMes: o.meses > 1 ? `${eur(Math.floor((o.euros / o.meses) * 100) / 100)} al mes` : null, meses: o.meses })) : []);
 export const precioTexto = async () => (KOFI ? KOFI_PLANES.map((o) => `${eur(o.euros)} ${o.meses === 1 ? 'al mes' : o.meses === 12 ? 'al año' : `${o.meses} meses`}`).join(', ').replace(/, ([^,]*)$/, ' o $1')
   : OPCIONES[0] ? `${fmt(OPCIONES[0].usdc * 1e6)} USDC (${euros(OPCIONES[0].usdc)}) / ${OPCIONES[0].meses === 1 ? 'mes' : `${OPCIONES[0].meses} meses`}` : null);
 
