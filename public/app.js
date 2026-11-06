@@ -952,6 +952,9 @@ const ICONOS = {
   pantalla: '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>',
   anterior: '<path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/>',
   siguiente: '<path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/>',
+  volumen: '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4zM14 3.23v2.06a7 7 0 0 1 0 13.42v2.06a9 9 0 0 0 0-17.54z"/>',
+  mudo: '<path d="M16.5 12A4.5 4.5 0 0 0 14 8v2.18l2.45 2.45c.03-.2.05-.41.05-.63zM19 12c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.8 8.8 0 0 0 21 12a9 9 0 0 0-7-8.77v2.06A7 7 0 0 1 19 12zM4.27 3 3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a9 9 0 0 0 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4 9.91 6.09 12 8.18V4z"/>',
+  idioma: '<path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z"/>',
 };
 const icono = (n) => `<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ICONOS[n]}</svg>`;
 function boton(clase, html, titulo) {
@@ -1013,8 +1016,13 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   const total = () => m.duracion || (isFinite(v.duration) ? v.duration : 0);
   const rango = el('input'); rango.type = 'range'; rango.min = 0; rango.max = Math.floor(total()) || 0; rango.step = 10; rango.value = 0;
   const tiempo = el('span', 'tiempo', `0:00 / ${hms(total())}`);
-  const bSonido = el('button', 'boton sonido', '🔊');
+  const bSonido = boton('boton sonido', icono('volumen'), 'Silenciar');
   const bPantalla = boton('boton', icono('pantalla'), 'Pantalla completa');
+  // Como en las apps de streaming: la barra de progreso a lo ancho arriba y, debajo, los botones
+  // de reproducir a la izquierda y los de idioma, capítulos y pantalla a la derecha
+  const filaProgreso = el('div', 'fila-progreso');
+  const izq = el('div', 'grupo izq');
+  const der = el('div', 'grupo der');
   // El idioma del audio va el primero, a la izquierda. Es un botón que abre una lista de botones
   // (no un desplegable del sistema: en Android TV / Google TV el mando no lo abría)
   let selAudio = null; // { value: número de pista (texto) }
@@ -1032,11 +1040,10 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     if (n < 0) n = m.audios.findIndex((a) => /^(spa|es|esp|cas)$/i.test(a.idioma) || /espa[ñn]ol|castellano|latino|spanish/i.test(a.titulo));
     selAudio.value = String(Math.max(0, n));
     bAudio = boton('boton audio', '', 'Idioma del audio');
-    const pintarAudio = () => { bAudio.textContent = `🗣 ${nombreAudio(m.audios[Number(selAudio.value)], Number(selAudio.value))} ▾`; };
+    const pintarAudio = () => { bAudio.innerHTML = icono('idioma'); bAudio.append(el('span', null, nombreAudio(m.audios[Number(selAudio.value)], Number(selAudio.value)))); };
     pintarAudio();
     bAudio.onclick = () => menuAudio();
     bAudio.pintar = pintarAudio;
-    barra.append(bAudio);
   }
   // La lista de idiomas, encima de los controles; el foco va al que suena
   function menuAudio() {
@@ -1067,8 +1074,11 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     return true;
   }
   caja.cerrarMenuAudio = cerrarMenuAudio;
-  // Todos los botones a la izquierda y, detrás, la barra de progreso con el tiempo
-  barra.append(bPlay, bAtras, bAdelante, bSonido, bPantalla, rango, tiempo);
+  filaProgreso.append(rango, tiempo);
+  izq.append(bPlay, bAtras, bAdelante, bSonido);
+  if (bAudio) der.append(bAudio);
+  der.append(bPantalla);
+  barra.append(filaProgreso, izq, der);
   // Sin avisos de carga («Preparando vídeo…», «Cargando…»): solo se usa para errores reales
   const cargando = el('div', 'cargando');
   cargando.hidden = true;
@@ -1148,7 +1158,11 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
       if (mio === turno) { cargando.hidden = false; cargando.textContent = e.message; }
     }
   }
-  const pintarTiempo = (t) => (tiempo.textContent = `${hms(t)} / ${hms(total())}`);
+  // El tiempo y lo recorrido de la barra (relleno de color hasta el punto actual)
+  const pintarTiempo = (t) => {
+    tiempo.textContent = `${hms(t)} / ${hms(total())}`;
+    rango.style.setProperty('--pct', `${total() ? Math.min(100, (t / total()) * 100) : 0}%`);
+  };
   v.onloadedmetadata = () => { rango.max = Math.floor(total()) || 0; pintarTiempo(ahora()); };
 
   // Se guarda por dónde vas cada 5 s, al pausar y al cerrar
@@ -1257,13 +1271,18 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     guardarIdioma(claveAudio(m.audios[n]));
     const t = ahora(); parar(sesion); sesion = null; ir(t);
   }
-  bSonido.onclick = () => { v.muted = !v.muted; bSonido.textContent = v.muted ? '🔇' : '🔊'; };
+  bSonido.onclick = () => {
+    v.muted = !v.muted;
+    bSonido.innerHTML = icono(v.muted ? 'mudo' : 'volumen');
+    bSonido.title = v.muted ? 'Activar el sonido' : 'Silenciar'; bSonido.setAttribute('aria-label', bSonido.title);
+  };
   bPantalla.onclick = () => ($('#visor').classList.contains('cine') ? salirCine() : entrarCine());
   caja.irA = ir;
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
   caja.controles = barra;
-  caja.despues = bAdelante; // tras él van ⏮ ⏭ (los pone abrir())
+  caja.despues = bAdelante;
+  caja.grupoDer = der; // ahí van ⏮ ⏭ (los pone abrir()), delante del idioma y la pantalla completa
   // Al pasar de capítulo se sigue viendo sin tener que pulsar ▶
   const solo = !!opciones.reproducir;
   if (solo) quiere = true;
@@ -1495,7 +1514,7 @@ function navegacionReproductor(caja, i) {
   bAnt.hidden = true; bSig.hidden = true;
   bAnt.onclick = () => irVecino(-1, { reproducir: true });
   bSig.onclick = () => irVecino(1, { reproducir: true });
-  caja.despues.after(bAnt, bSig);
+  if (caja.grupoDer) caja.grupoDer.prepend(bAnt, bSig); else caja.despues.after(bAnt, bSig);
   const sigue = () => caja.isConnected && actual === i && listaVisor === lista;
   [[bAnt, -1, 'Anterior'], [bSig, 1, serie ? 'Siguiente episodio' : 'Siguiente']].forEach(([b, dir, texto]) => {
     vecino(dir, i, lista).then(async (v) => {
@@ -1738,6 +1757,11 @@ function moverFoco(dir) {
     const otro = cands[cands.indexOf(a) + (dir === 'abajo' ? 1 : -1)];
     if (otro) { otro.focus(); otro.scrollIntoView({ block: 'nearest' }); }
     return;
+  }
+  // Del vídeo, ↓ baja siempre a ▶ (el primero de los controles), no al botón que quede debajo
+  if (enVisor && dir === 'abajo' && a.tagName === 'VIDEO') {
+    const play = a.closest('.repro') && a.closest('.repro').querySelector('.controles .grupo.izq .boton');
+    if (play && visible(play)) { play.focus({ preventScroll: true }); return; }
   }
   const r = a.getBoundingClientRect();
   const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
