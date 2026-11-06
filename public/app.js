@@ -776,7 +776,8 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     if (medio) {
       fila('Duración', medio.duracion && hms(medio.duracion));
       fila('Vídeo', [medio.resolucion, medio.video].filter(Boolean).join(' · '));
-      fila('Audio', medio.audios.map(pista).join(' | '));
+      const nombres = nombresAudio(medio.audios, archivo.key);
+      fila('Audio', medio.audios.map((p, n) => [nombres[n], p.codec && p.codec.toUpperCase()].filter(Boolean).join(' · ')).join(' | '));
       fila('Subtítulos', medio.subtitulos?.map(pista).join(' | '));
     }
     cuerpo.append(tec);
@@ -1027,6 +1028,7 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   // (no un desplegable del sistema: en Android TV / Google TV el mando no lo abría)
   let selAudio = null; // { value: número de pista (texto) }
   let bAudio = null;
+  const nombresPistas = nombresAudio(m.audios, key);
   // En todos los vídeos con sonido (aunque tengan una sola pista: así se ve cuál es)
   if (m.audios.length >= 1) {
     selAudio = { value: '0' };
@@ -1037,10 +1039,11 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     const [prefIdioma] = pref.split('|');
     let n = pref ? m.audios.findIndex((a) => claveAudio(a) === pref) : -1;
     if (n < 0 && pref) n = m.audios.findIndex((a) => (a.idioma || a.titulo || '').toLowerCase() === prefIdioma);
-    if (n < 0) n = m.audios.findIndex((a) => /^(spa|es|esp|cas)$/i.test(a.idioma) || /espa[ñn]ol|castellano|latino|spanish/i.test(a.titulo));
+    if (n < 0) n = nombresPistas.findIndex((x) => x.startsWith('Castellano'));
+    if (n < 0) n = nombresPistas.findIndex((x) => x.startsWith('Latino'));
     selAudio.value = String(Math.max(0, n));
     bAudio = boton('boton audio', '', 'Idioma del audio');
-    const pintarAudio = () => { bAudio.innerHTML = icono('idioma'); bAudio.append(el('span', null, nombreAudio(m.audios[Number(selAudio.value)], Number(selAudio.value)))); };
+    const pintarAudio = () => { bAudio.innerHTML = icono('idioma'); bAudio.append(el('span', null, nombresPistas[Number(selAudio.value)])); };
     pintarAudio();
     bAudio.onclick = () => menuAudio();
     bAudio.pintar = pintarAudio;
@@ -1053,7 +1056,7 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     menu.setAttribute('role', 'menu');
     menu.append(el('h4', null, 'Idioma del audio'));
     m.audios.forEach((a, n) => {
-      const b = el('button', String(n) === selAudio.value ? 'activo' : '', nombreAudio(a, n));
+      const b = el('button', String(n) === selAudio.value ? 'activo' : '', nombresPistas[n]);
       b.type = 'button'; b.setAttribute('role', 'menuitemradio');
       b.onclick = () => { cerrarMenuAudio(); if (String(n) !== selAudio.value) cambiarAudio(n); };
       menu.append(b);
@@ -1297,15 +1300,53 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   return caja;
 }
 
-// Nombre de una pista de audio para la lista: su título o su idioma en claro, y «5.1» si lo es
-const IDIOMAS = { spa: 'Español', es: 'Español', esp: 'Español', cas: 'Castellano', lat: 'Latino', eng: 'Inglés', en: 'Inglés', fre: 'Francés', fra: 'Francés', fr: 'Francés',
-  ger: 'Alemán', deu: 'Alemán', de: 'Alemán', ita: 'Italiano', it: 'Italiano', por: 'Portugués', pt: 'Portugués', jpn: 'Japonés', ja: 'Japonés', kor: 'Coreano', ko: 'Coreano',
-  tur: 'Turco', tr: 'Turco', cat: 'Catalán', ca: 'Catalán', rus: 'Ruso', chi: 'Chino', zho: 'Chino', ara: 'Árabe', und: '' };
-function nombreAudio(a, n) {
-  if (!a) return `Pista ${n + 1}`;
-  const idioma = IDIOMAS[String(a.idioma || '').toLowerCase()] ?? String(a.idioma || '').toUpperCase();
-  const base = a.titulo && !/^(stereo|surround|5\.1|2\.0|audio)$/i.test(a.titulo.trim()) ? a.titulo : idioma || a.titulo || `Pista ${n + 1}`;
-  return `${base}${a.canales > 2 ? ` · ${a.canales === 6 ? '5.1' : a.canales === 8 ? '7.1' : `${a.canales} canales`}` : ''}`;
+// Nombre de cada pista de audio: el idioma en claro («Castellano», «Latino», «Inglés»…), sacado
+// de su título («Spanish (Latin America)», «ESP AC3 5.1», «VO»…), de su código de idioma
+// («spa», «es-419», «eng») o, si la pista no dice nada, del nombre del archivo («Dual
+// Castellano-Inglés»). El español sin más es Castellano (salvo que algo diga latino).
+const IDIOMAS = { spa: 'Castellano', es: 'Castellano', esp: 'Castellano', cas: 'Castellano', 'es-es': 'Castellano', lat: 'Latino', 'es-419': 'Latino', 'es-mx': 'Latino', 'es-la': 'Latino',
+  eng: 'Inglés', en: 'Inglés', fre: 'Francés', fra: 'Francés', fr: 'Francés', ger: 'Alemán', deu: 'Alemán', de: 'Alemán', ita: 'Italiano', it: 'Italiano',
+  por: 'Portugués', pt: 'Portugués', jpn: 'Japonés', ja: 'Japonés', kor: 'Coreano', ko: 'Coreano', tur: 'Turco', tr: 'Turco', cat: 'Catalán', ca: 'Catalán',
+  rus: 'Ruso', ru: 'Ruso', chi: 'Chino', zho: 'Chino', zh: 'Chino', ara: 'Árabe', ar: 'Árabe', hin: 'Hindi', pol: 'Polaco', dut: 'Neerlandés', nld: 'Neerlandés',
+  glg: 'Gallego', gl: 'Gallego', baq: 'Euskera', eus: 'Euskera', eu: 'Euskera' };
+// Palabras que delatan el idioma en un título o en el nombre del archivo (el orden importa:
+// «latino» antes que «español», que también lo contienen muchos títulos de latino)
+const PALABRAS_IDIOMA = [
+  ['Latino', /latin|latam|\blat\b|es[-_ ]?419|m[eé]xic|hispanoam/i],
+  ['Castellano', /castellano|castilian|espa[ñn]a|\bspain\b|espa[ñn]ol|spanish|\besp\b|\bspa\b|\bcast\b/i],
+  ['Inglés', /ingl[eé]s|english|\beng\b|^v\.?o\.?(s\.?e\.?)?$/i],
+  ['Francés', /franc[eé]s|french|fran[cç]ais/i], ['Italiano', /italian/i], ['Alemán', /alem[aá]n|german|deutsch/i],
+  ['Portugués', /portugu[eé]s|portuguese|brasil/i], ['Japonés', /japon[eé]s|japanese/i], ['Coreano', /coreano|korean/i], ['Catalán', /catal[aà]n?/i],
+  ['Turco', /turco|turkish/i], ['Gallego', /gallego|galician/i], ['Euskera', /euskera|basque/i],
+];
+function idiomaDeTexto(t) { for (const [nombre, re] of PALABRAS_IDIOMA) if (re.test(t)) return nombre; return null; }
+function nombresAudio(audios, key) {
+  // Del nombre del archivo, los idiomas en el orden en que salen («Dual Latino-Inglés»)
+  const enNombre = [];
+  const nombreArchivo = String(key || '').split('/').pop().replace(/\.[^.]+$/, '');
+  for (const trozo of nombreArchivo.split(/[\s._\-+()[\]]+/)) { const i = idiomaDeTexto(trozo); if (i && !enNombre.includes(i)) enNombre.push(i); }
+  const sinDatos = audios.filter((a) => !idiomaDeTexto(a.titulo || '') && !IDIOMAS[String(a.idioma || '').toLowerCase()]);
+  const nombres = audios.map((a, n) => {
+    const porTitulo = idiomaDeTexto(a.titulo || '');
+    const codigo = IDIOMAS[String(a.idioma || '').toLowerCase()];
+    // «spa» con un título que diga latino es Latino (el título manda sobre el código)
+    let nombre = porTitulo || codigo || null;
+    if (!nombre && enNombre.length) {
+      const i = sinDatos.indexOf(a);
+      nombre = enNombre[i] || (audios.length === 1 ? enNombre[0] : null);
+    }
+    return nombre || (audios.length === 1 ? 'Audio' : `Audio ${n + 1}`);
+  });
+  // Si dos se llaman igual (Castellano 5.1 y Castellano estéreo), se distinguen por los canales
+  // (y si también coinciden los canales, se numeran: «Inglés 1», «Inglés 2»)
+  const canal = (c) => (c === 6 ? '5.1' : c === 8 ? '7.1' : c === 2 ? 'estéreo' : c === 1 ? 'mono' : '');
+  return nombres.map((x, n) => {
+    const iguales = nombres.map((y, i) => (y === x ? i : -1)).filter((i) => i >= 0);
+    if (iguales.length < 2) return x;
+    const c = canal(audios[n].canales);
+    const mismoCanal = iguales.filter((i) => canal(audios[i].canales) === c);
+    return c && mismoCanal.length < 2 ? `${x} · ${c}` : `${x} ${iguales.indexOf(n) + 1}`;
+  });
 }
 
 const claveAudio = (a) => (a ? `${a.idioma || ''}|${a.titulo || ''}`.toLowerCase() : '');
