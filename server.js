@@ -98,7 +98,9 @@ await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, 
 // Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso
 pagos.iniciar({ perfiles, firmar: (k, o) => firmar(k, o) });
 xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales, esAdmin: perfiles.esAdmin,
-  permitido: async (c) => !pagos.activo || (await perfiles.planDe(c)).tipo === 'premium' });
+  // Los reproductores externos (King Stream Player…) funcionan con todas las cuentas; con
+  // XTREAM_SOLO_VIP=1 vuelven a ser solo para VIP (en ellos no se pueden poner anuncios)
+  permitido: async (c) => process.env.XTREAM_SOLO_VIP !== '1' || !pagos.activo || (await perfiles.planDe(c)).tipo === 'premium' });
 // API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
 panel.iniciar({ s3, s3Virtual, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos });
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);

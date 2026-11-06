@@ -12,7 +12,7 @@ import * as meta from './metadatos.js';
 import { nombreSeccion } from './telegram.js';
 
 let foto; let firmar; let esVideo; let credenciales; let esAdmin = async () => false;
-// Con los planes activados, los reproductores externos son solo de Premium (en ellos no se pueden poner anuncios)
+// Quién puede usarlos: todas las cuentas, salvo que el servidor diga otra cosa (XTREAM_SOLO_VIP=1)
 let permitido = async () => true;
 export function iniciar(opciones) {
   ({ foto, firmar, esVideo, credenciales } = opciones);
@@ -201,8 +201,8 @@ export async function atender(ruta, req, res, json, { ip, nube }) {
 
   const vetado = cuenta && !(await permitido(cuenta));
   if (vetado) {
-    if (ver || ruta === '/get.php') { res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('Los reproductores externos son solo para cuentas Premium'); }
-    return json(res, 200, { user_info: { auth: 0, status: 'Disabled', message: 'Los reproductores externos son solo para cuentas Premium' } });
+    if (ver || ruta === '/get.php') { res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('Los reproductores externos son solo para cuentas VIP'); }
+    return json(res, 200, { user_info: { auth: 0, status: 'Disabled', message: 'Los reproductores externos son solo para cuentas VIP' } });
   }
 
   // Reproducir: al vídeo en e2 con un enlace firmado (de 12 horas, para películas largas)
