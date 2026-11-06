@@ -867,6 +867,34 @@ function cargarHls() {
 // (Android, smart TV, ordenador) lo hace con hls.js
 const hlsNativo = (v) => !(window.Hls && Hls.isSupported()) && !!v.canPlayType('application/vnd.apple.mpegurl');
 
+// ¿Este aparato decodifica HEVC (H.265)? Casi todas las Android TV / Google TV, muchos móviles y
+// los ordenadores con aceleración. 8 o 10 bits según el vídeo; el 4:2:2 / 4:4:4 no.
+const HEVC_CODECS = { 8: ['hvc1.1.6.L120.90', 'hev1.1.6.L120.90'], 10: ['hvc1.2.4.L120.90', 'hev1.2.4.L120.90'] };
+const bitsHevc = (pix) => (/^yuv420p$|^yuvj420p$|^$/.test(pix || '') ? 8 : /^yuv420p10/.test(pix) ? 10 : 0);
+const hevcCache = {};
+// Por partes (hls.js): lo que pregunta MediaSource
+function abreHevc(pix) {
+  const bits = bitsHevc(pix);
+  if (!bits) return false;
+  const k = `ms${bits}`;
+  if (!(k in hevcCache)) {
+    const MS = window.ManagedMediaSource || window.MediaSource;
+    try { hevcCache[k] = !!MS && HEVC_CODECS[bits].some((c) => MS.isTypeSupported(`video/mp4; codecs="${c}"`)); } catch (e) { hevcCache[k] = false; }
+  }
+  return hevcCache[k];
+}
+// El archivo entero (MP4 directo de e2): lo que dice el propio <video>
+function abreHevcDirecto(pix) {
+  const bits = bitsHevc(pix);
+  if (!bits) return false;
+  const k = `v${bits}`;
+  if (!(k in hevcCache)) {
+    const v = document.createElement('video');
+    try { hevcCache[k] = HEVC_CODECS[bits].some((c) => v.canPlayType(`video/mp4; codecs="${c}"`) === 'probably'); } catch (e) { hevcCache[k] = false; }
+  }
+  return hevcCache[k];
+}
+
 // ---------- Modo cine: el vídeo a pantalla completa nada más darle a reproducir ----------
 // Se pide la pantalla completa del navegador (o de la app Android) en el mismo toque/clic que
 // abre el vídeo, porque los navegadores solo la permiten en respuesta a una acción tuya. Donde
@@ -1102,6 +1130,29 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   let turno = 0;
   let arrastrando = false;
   let quiere = false; // se pulsó ▶ antes de que el vídeo estuviera listo
+  // HEVC copiado tal cual (si el aparato lo decodifica). Si aun así falla, se vuelve a pedir
+  // convertido a H.264 desde el mismo segundo y ya no se intenta más con este vídeo.
+  let sinHevc = false;
+  let sesionHevc = false;
+  let fallosMedia = 0;
+  const pedirHevc = () => m.video === 'hevc' && !sinHevc && abreHevc(m.pix);
+  function sinHevcDesdeAqui() {
+    sinHevc = true; fallosMedia = 0;
+    const t = ahora(); const seguir = quiere || !v.paused;
+    if (directo) { directo = false; v.removeAttribute('src'); v.load(); }
+    parar(sesion); sesion = null;
+    ir(t, seguir);
+  }
+  // Hay aparatos que dicen que abren HEVC pero solo suena el audio (imagen negra): si al poco de
+  // empezar no ha salido ni un fotograma, se pasa al vídeo convertido
+  v.addEventListener('playing', () => {
+    if (!(sesionHevc || (directo && m.video === 'hevc')) || sinHevc) return;
+    setTimeout(() => {
+      if (!caja.isConnected || v.paused || sinHevc) return;
+      const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
+      if (!v.videoWidth || (q && q.totalVideoFrames === 0)) sinHevcDesdeAqui();
+    }, 4000);
+  });
   const ahora = () => desde + v.currentTime;
   const preparado = () => (v.seekable.length ? v.seekable.end(v.seekable.length - 1) : 0);
   const parar = (id) => id && fetch(`/api/hls-parar?id=${id}`, { keepalive: true }).catch(() => {});
@@ -1117,15 +1168,22 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
       arrancar();
       return;
     }
-    // Colchón de hasta 3 minutos ya descargados y reintentos generosos ante cortes de red
+    // Colchón de lo que queda por ver y reintentos generosos ante cortes de red. Lo ya visto se
+    // suelta de la memoria (antes se guardaba la película entera: en teles de 1-2 GB acababa
+    // dando tirones o cerrando la app). En la tele, colchón más corto y con tope de tamaño.
     hls = new Hls({
-      startPosition: inicio, maxBufferLength: 120, maxMaxBufferLength: 180,
+      startPosition: inicio,
+      ...(esTele ? { maxBufferLength: 60, maxMaxBufferLength: 90, maxBufferSize: 60 * 1000 * 1000, backBufferLength: 20 }
+        : { maxBufferLength: 120, maxMaxBufferLength: 180, backBufferLength: 60 }),
       fragLoadingMaxRetry: 8, manifestLoadingMaxRetry: 6, levelLoadingMaxRetry: 8,
     });
     hls.loadSource(url);
     hls.attachMedia(v);
     hls.on(Hls.Events.MANIFEST_PARSED, arrancar);
     hls.on(Hls.Events.ERROR, (_, d) => {
+      // HEVC que el aparato no traga (códec incompatible o errores de imagen repetidos): al
+      // vídeo convertido, desde el mismo segundo
+      if (sesionHevc && (/incompatible|codec/i.test(String(d.details)) || (d.fatal && d.type === Hls.ErrorTypes.MEDIA_ERROR && ++fallosMedia >= 2))) return sinHevcDesdeAqui();
       if (!d.fatal) return;
       if (d.type === Hls.ErrorTypes.MEDIA_ERROR) return hls.recoverMediaError();
       // La sesión ya no existe (servidor reiniciado…): se prepara otra desde el mismo punto
@@ -1150,10 +1208,10 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     try {
       // Empieza 20 s antes: así retroceder un poco es instantáneo
       const antes = Math.min(20, Math.floor(t));
-      const r = await api('/api/hls', { key, desde: Math.floor(t) - antes, margen: antes, audio: selAudio ? selAudio.value : 0 });
+      const r = await api('/api/hls', { key, desde: Math.floor(t) - antes, margen: antes, audio: selAudio ? selAudio.value : 0, hevc: pedirHevc() ? 1 : 0 });
       if (mio !== turno || !caja.isConnected) return parar(r.id);
       parar(sesion);
-      sesion = r.id; desde = r.desde;
+      sesion = r.id; desde = r.desde; sesionHevc = !!r.hevc;
       await cargarHls();
       if (mio !== turno || !caja.isConnected) return;
       fuente(r.url, t - r.desde, reproducir);
@@ -1206,6 +1264,8 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     if (/\.m3u8(\?|#|$)/i.test(urlDirecto)) { cargando.hidden = false; cargando.textContent = 'Este dispositivo no puede reproducir este formato.'; return; }
     const t = v.currentTime > 0 ? ahora() : inicio;
     const seguir = quiere || !v.paused;
+    // (si era un HEVC que el aparato decía abrir y no pudo, el servidor lo da ya convertido)
+    if (m.video === 'hevc') sinHevc = true;
     directo = false;
     v.removeAttribute('src'); v.load();
     cargando.hidden = true;
@@ -1413,7 +1473,8 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       // audio compatible. Lo demás (.mkv, .ts, AC3, varios idiomas…) pasa por el servidor.
       // En la tele, un audio de más de 2 canales (5.1, 7.1) también pasa por el servidor, que lo
       // deja en estéreo: muchas Android TV / Google TV lo reproducen sin sonido
-      const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && m.videoNativo.includes(m.video)
+      // (un MP4 en HEVC también va directo si este aparato lo abre: así no pasa por el servidor)
+      const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && (m.videoNativo.includes(m.video) || (m.video === 'hevc' && abreHevcDirecto(m.pix)))
         && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec) && !(esTele && a.canales > 2));
       // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
       // Anuncio en vídeo (VAST de una red externa) antes de empezar, si están activados

@@ -378,6 +378,8 @@ function medio(key) {
               ok({
                 duracion: Number(d.format?.duration) || 0,
                 video: codec,
+                // (el reproductor lo usa para saber si el aparato abre ese HEVC: 8 o 10 bits)
+                pix: pix || null,
                 resolucion: video?.width ? `${video.width}×${video.height}` : null,
                 subtitulos: pistas
                   .filter((s) => s.codec_type === 'subtitle')
@@ -429,6 +431,11 @@ async function hlsIniciar(p, quien) {
   const id = randomUUID();
   const carpeta = path.join(DIR_HLS, id);
   await mkdir(carpeta, { recursive: true });
+  // HEVC (H.265) en un aparato que lo decodifica (casi todas las Android TV / Google TV): la
+  // imagen se copia tal cual en trozos fMP4, sin volver a codificarla. Arranca antes, no se
+  // queda atrás y conserva la calidad; el servidor apenas trabaja. Si no, se pasa a H.264.
+  const copiaHevc = info.video === 'hevc' && p.get('hevc') === '1';
+  const copiaVideo = VIDEO_NATIVO.includes(info.video) || copiaHevc;
   const args = [
     // -multiple_requests reutiliza la conexión con e2 al buscar el minuto (salta el doble de rápido)
     // -reconnect…: si e2 corta la conexión a mitad de película, ffmpeg la retoma donde iba
@@ -437,15 +444,18 @@ async function hlsIniciar(p, quien) {
     '-ss', String(desde), '-i', url,
     // «?»: si una pista no está donde decía ffprobe, se sigue sin ella en vez de fallar
     '-map', '0:v:0', ...(info.audios.length ? ['-map', `0:a:${audio}?`] : []),
-    ...(VIDEO_NATIVO.includes(info.video)
-      ? ['-c:v', 'copy']
+    ...(copiaVideo
+      ? ['-c:v', 'copy', ...(copiaHevc ? ['-tag:v', 'hvc1'] : [])]
       : ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-pix_fmt', 'yuv420p', '-g', '96']),
     // El AAC estéreo se copia; el 5.1/7.1 (aunque sea AAC) se pasa a estéreo: muchas teles
     // Android no lo decodifican y se queda sin sonido
     ...(info.audios[audio]?.codec === 'aac' && (info.audios[audio]?.canales || 2) <= 2 ? ['-c:a', 'copy'] : ['-c:a', 'aac', '-ac', '2', '-b:a', '192k']),
     '-sn',
     '-f', 'hls', '-hls_time', '4', '-hls_list_size', '0', '-hls_playlist_type', 'event',
-    '-hls_segment_filename', path.join(carpeta, 's%05d.ts'), path.join(carpeta, 'index.m3u8'),
+    ...(copiaHevc
+      ? ['-hls_segment_type', 'fmp4', '-hls_fmp4_init_filename', 'init.mp4', '-hls_segment_filename', path.join(carpeta, 's%05d.m4s')]
+      : ['-hls_segment_filename', path.join(carpeta, 's%05d.ts')]),
+    path.join(carpeta, 'index.m3u8'),
   ];
   const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
   const sesion = { ff, carpeta, ultimo: Date.now(), errores: '', usuario: quien?.cuenta.usuario };
@@ -459,7 +469,7 @@ async function hlsIniciar(p, quien) {
   for (let i = 0; i < 150; i++) {
     const lista = await readFile(path.join(carpeta, 'index.m3u8'), 'utf8').catch(() => '');
     const preparado = [...lista.matchAll(/#EXTINF:([\d.]+)/g)].reduce((s, m) => s + Number(m[1]), 0);
-    if (preparado > 0 && (preparado >= margen + 2 || ff.exitCode !== null)) return { id, url: `/hls/${id}/index.m3u8`, desde };
+    if (preparado > 0 && (preparado >= margen + 2 || ff.exitCode !== null)) return { id, url: `/hls/${id}/index.m3u8`, desde, hevc: copiaHevc };
     if (ff.exitCode !== null) break;
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -483,11 +493,12 @@ setInterval(() => {
 
 async function hlsServir(res, id, archivo) {
   const s = sesionesHls.get(id);
-  if (!s || !/^[\w.]+\.(m3u8|ts)$/.test(archivo)) throw Object.assign(new Error('Sesión de vídeo caducada'), { status: 404 });
+  if (!s || !/^[\w.]+\.(m3u8|ts|m4s|mp4)$/.test(archivo)) throw Object.assign(new Error('Sesión de vídeo caducada'), { status: 404 });
   s.ultimo = Date.now();
   const cuerpo = await readFile(path.join(s.carpeta, archivo));
+  const tipo = { m3u8: 'application/vnd.apple.mpegurl', ts: 'video/mp2t', m4s: 'video/iso.segment', mp4: 'video/mp4' }[archivo.split('.').pop()];
   res.writeHead(200, {
-    'content-type': archivo.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t',
+    'content-type': tipo,
     'cache-control': 'no-store',
   });
   res.end(cuerpo);
