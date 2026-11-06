@@ -743,6 +743,9 @@
     scroll-snap-type: x proximity; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .carrusel::-webkit-scrollbar { display: none; }
   .carrusel > * { flex: 0 0 auto; scroll-snap-align: start; }
+  /* Con el mando el desplazamiento lo lleva el foco (con un trozo de la siguiente a la vista): el
+     «imán» de las tarjetas, pensado para el dedo, lo deshacía y dejaba la elegida cortada */
+  .usa-mando .carrusel, .tele .carrusel { scroll-snap-type: none; }
   .carrusel .item { width: clamp(118px, 10.5vw, 185px); }
   .carrusel.anchas .item, .carrusel .item.episodio { width: clamp(220px, 19vw, 330px); }
   .carrusel .item .resumen { display: none; }

@@ -185,8 +185,7 @@ function pintar() {
   if (!estado.prefijo) {
     pintarInicio(carpetas, archivos);
     $('#mas').hidden = true;
-    const conMando = esTele || document.documentElement.classList.contains('usa-mando');
-    if (conMando && actual < 0 && (!document.activeElement || document.activeElement === document.body)) moverFoco('abajo');
+    enfocarAlLlegar();
     return;
   }
   // Plan Básico: un anuncio a lo ancho encima de la carpeta
@@ -194,6 +193,7 @@ function pintar() {
   if (banner) items.append(banner);
   for (const c of carpetas) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
+    t.dataset.carpeta = c;
     items.append(t);
     conMeta(t, 'carpeta', c); estrella(t, c);
   }
@@ -209,10 +209,34 @@ function pintar() {
   });
   if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
   $('#mas').hidden = !estado.token;
-  // En la tele siempre hay algo con foco para que el mando funcione desde el principio
-  const conMando = esTele || document.documentElement.classList.contains('usa-mando');
-  if (conMando && actual < 0 && (!document.activeElement || document.activeElement === document.body)) moverFoco('abajo');
+  enfocarAlLlegar();
 }
+
+// En la tele siempre hay algo con foco para que el mando funcione desde el principio. Al volver
+// atrás (de una serie a su sección, de una sección a la portada) el foco cae en la carpeta o la
+// categoría de la que vienes, como en las apps de la tele; al entrar, en lo primero.
+let vengoDe = null;
+function enfocarAlLlegar() {
+  const conMando = esTele || document.documentElement.classList.contains('usa-mando');
+  const a = document.activeElement;
+  if (!conMando || actual >= 0 || (a && a !== document.body && siguienteFoco === null)) return;
+  const de = vengoDe;
+  vengoDe = null;
+  let t = null;
+  if (de && de !== estado.prefijo && de.startsWith(estado.prefijo)) {
+    t = [...document.querySelectorAll('#items .item[data-carpeta]')].find((x) => de.startsWith(x.dataset.carpeta))
+      || [...document.querySelectorAll('.cat[data-carpetas], .chip-cat[data-carpetas]')].find((x) => x.dataset.carpetas.split('|').some((c) => de.startsWith(c)));
+  }
+  // Tras «Cargar más» con el mando: a la primera tarjeta nueva
+  if (siguienteFoco !== null) {
+    const lista = document.querySelectorAll('#items > .item');
+    t = lista[Math.min(siguienteFoco, lista.length - 1)];
+    siguienteFoco = null;
+  }
+  if (t && visible(t)) { t.focus({ preventScroll: true }); t.scrollIntoView({ block: 'center', inline: 'nearest' }); return; }
+  moverFoco('abajo');
+}
+let siguienteFoco = null;
 
 // ---------- Inicio: filas que se deslizan hacia los lados ----------
 // «Mis medios» (las categorías), «Seguir viendo», «Favoritos» y, por cada categoría, lo último
@@ -324,6 +348,7 @@ function pintarInicio(carpetas, archivos) {
   for (const { cat, suyas } of categoriasDe(carpetas)) {
     const b = el('button', 'chip-cat', cat.nombre);
     b.title = suyas.map(nombre).join(', ');
+    b.dataset.carpetas = suyas.join('|');
     b.onclick = () => irA(suyas[0]);
     cats.append(b);
   }
@@ -499,6 +524,7 @@ function portada(carpetas) {
     texto.append(el('div', 'icono', cat.icono), el('div', 'nombre', cat.nombre), meta);
     t.append(abanico, texto);
     t.title = suyas.map(nombre).join(', ');
+    t.dataset.carpetas = suyas.join('|');
     t.onclick = () => irA(suyas[0]);
     // Se precarga todo para que aparezca de golpe con un fundido, no a trozos
     arteCategoria(cat, suyas).then(async ({ carteles, fondo }) => {
@@ -1661,7 +1687,8 @@ function moverFoco(dir) {
   // ← → no se salen de su fila: ni de la de botones del reproductor, ni de una fila de
   // carátulas (al llegar al final no salta a otra fila), ni de las categorías de arriba
   const horizontal = dir === 'izq' || dir === 'der';
-  const fila = horizontal && a.closest && a.closest('.controles, .carrusel, .categorias-chips, .destacado-botones');
+  // (en la cuadrícula de una sección, ← → no se escapan al menú de arriba: siguen por las tarjetas)
+  const fila = horizontal && a.closest && (a.closest('.controles, .carrusel, .categorias-chips, .destacado-botones') || (a.matches('#items > .item') && $('#items')));
   const opciones = [];
   for (const c of cands) {
     if (fila && !fila.contains(c)) continue;
@@ -1718,19 +1745,62 @@ function moverFoco(dir) {
     const recordada = filaNueva && filaNueva !== a.closest('.carrusel') && filaNueva._ultimo;
     if (recordada && recordada.isConnected && filaNueva.contains(recordada) && visible(recordada)) mejor = recordada;
   }
-  if (mejor) {
-    mejor.focus({ preventScroll: true });
-    // Con la flecha mantenida no se anima (si no, la página se queda atrás del foco)
-    const comportamiento = rapido ? 'auto' : 'smooth';
-    // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
-    if (mejor.closest('header') || mejor.closest('.destacado')) scrollTo({ top: 0, behavior: comportamiento });
-    else {
-      mejor.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: comportamiento });
-      // Al cambiar de fila, que se vea la fila entera con su título (no solo la carátula)
-      const seccion = !horizontal && mejor.closest('.fila');
-      if (seccion && seccion.getBoundingClientRect().height < innerHeight * 0.85) seccion.scrollIntoView({ block: 'nearest', behavior: comportamiento });
-    }
+  // En la cuadrícula de una sección o una serie, ← → siguen de una fila a la siguiente (al final
+  // de una fila, → pasa a la primera de la de abajo), como leyendo
+  if (!mejor && horizontal && a.matches('#items > .item')) {
+    const lista = [...document.querySelectorAll('#items > .item')].filter(visible);
+    mejor = lista[lista.indexOf(a) + (dir === 'der' ? 1 : -1)] || null;
   }
+  // Al bajar hasta «Cargar más» se carga solo y el foco sigue en la primera tarjeta nueva
+  if (mejor && mejor.id === 'mas' && dir === 'abajo' && !cargar.ocupado) {
+    siguienteFoco = document.querySelectorAll('#items > .item').length;
+    a.blur();
+    cargar(true).finally(() => { siguienteFoco = null; });
+    return;
+  }
+  if (!mejor) { topar(a, dir); return; }
+  mejor.focus({ preventScroll: true });
+  // Con la flecha mantenida no se anima (si no, la página se queda atrás del foco)
+  const comportamiento = rapido ? 'auto' : 'smooth';
+  // El menú de arriba está fijo: al subir hasta él, la página vuelve al principio
+  if (mejor.closest('header') || mejor.closest('.destacado')) scrollTo({ top: 0, behavior: comportamiento });
+  else if (!enCuenta && !enVisor) {
+    // Dentro de una fila de carátulas: siempre se ve un trozo de la siguiente (y de la anterior)
+    // para saber que hay más; al final de la fila no queda pegada al borde
+    const carrusel = mejor.closest('.carrusel');
+    if (carrusel) {
+      const c = carrusel.getBoundingClientRect(), s = mejor.getBoundingClientRect();
+      const margen = Math.min(s.width * 0.6, c.width * 0.2);
+      const dx = s.right > c.right - margen ? s.right - (c.right - margen) : s.left < c.left + margen ? s.left - (c.left + margen) : 0;
+      if (dx) carrusel.scrollBy({ left: dx, behavior: comportamiento });
+    }
+    // Y en vertical, que se vea entera con aire alrededor (el menú de arriba es fijo y tapaba la
+    // fila al subir): la fila de carátulas con su título, o la tarjeta
+    if (!horizontal || !carrusel) {
+      const caja = (!horizontal && mejor.closest('.fila')) || mejor;
+      const r2 = caja.getBoundingClientRect();
+      const cabecera = document.querySelector('header');
+      const pegada = cabecera && /fixed|sticky/.test(getComputedStyle(cabecera).position);
+      const aire = Math.min(innerHeight * 0.12, 90); // se asoma la fila de al lado
+      const arriba = (pegada ? Math.max(0, cabecera.getBoundingClientRect().bottom) : 0) + aire;
+      const abajo = innerHeight - aire;
+      let dy = 0;
+      if (r2.height > abajo - arriba) dy = r2.top - arriba; // más alta que la pantalla: su principio arriba
+      else if (r2.bottom > abajo) dy = r2.bottom - abajo;
+      else if (r2.top < arriba) dy = r2.top - arriba;
+      if (dy) scrollBy({ top: dy, behavior: comportamiento });
+    }
+  } else mejor.scrollIntoView({ block: 'nearest', behavior: comportamiento });
+}
+
+// Al llegar a un borde (fin de una fila, lo más alto de la página…) la tarjeta da un pequeño
+// rebote hacia ese lado: así se nota que el mando ha respondido y que no hay más
+function topar(a, dir) {
+  if (!a || !a.animate || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const d = 6, [x, y] = { arriba: [0, -d], abajo: [0, d], izq: [-d, 0], der: [d, 0] }[dir] || [0, 0];
+  const base = getComputedStyle(a).transform;
+  const t = base && base !== 'none' ? `${base} ` : '';
+  a.animate([{ transform: `${t}translate(0,0)` }, { transform: `${t}translate(${x}px,${y}px)` }, { transform: `${t}translate(0,0)` }], { duration: 180, easing: 'ease-out' });
 }
 // En la tele, al abrir la app el foco ya está en «▶ Reproducir» del destacado (o, si no hay, en la
 // primera categoría): así el primer OK hace algo y se ve dónde estás sin tocar las flechas
@@ -1768,6 +1838,14 @@ function atras() {
   if ($('#visor').classList.contains('cine')) { salirCine(); return true; }
   if (actual >= 0) { cerrar(); return true; }
   if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }
+  // En la portada con el mando: el primer Atrás sube al principio (a «▶ Reproducir» del
+  // destacado o al menú); solo desde ahí arriba se sale de la app
+  if (esTele || document.documentElement.classList.contains('usa-mando')) {
+    const inicio = document.querySelector('.destacado:not([hidden]) .boton.reproducir') || document.querySelector('#pestanas button');
+    const a = document.activeElement;
+    const yaArriba = scrollY < 40 && (!a || a === document.body || a === inicio || a.closest('header'));
+    if (inicio && !yaArriba) { inicio.focus({ preventScroll: true }); scrollTo({ top: 0, behavior: 'smooth' }); return true; }
+  }
   return false;
 }
 window.morvehAtras = atras;
@@ -2000,6 +2078,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pageshow', (e) => { if (e.persisted) fetch('/api/salud', { cache: 'no-store' }).then((r) => r.json()).then((d) => nuevaVersion(d.version)).catch(() => {}); });
 
 window.addEventListener('hashchange', () => {
+  vengoDe = estado.prefijo;
   estado.prefijo = decodeURIComponent(location.hash.slice(1));
   cerrar(); cargar();
 });
