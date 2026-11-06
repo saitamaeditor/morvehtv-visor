@@ -287,10 +287,7 @@ export async function atender(ruta, req, res, json, ip) {
     const c = await necesitaCuenta(req);
     const pendientes = posPendientes.get(c.id);
     const posiciones = { ...c.posiciones, ...(pendientes ? Object.fromEntries(pendientes) : {}) };
-    const plan = (await planDe(c)).tipo;
-    // ¿Puede usar las apps IPTV (Xtream Codes)? La misma regla que en server.js
-    const xtream = process.env.XTREAM_SOLO_VIP !== '1' || !pagos.activo || plan === 'premium';
-    return json(res, 200, { ...publica(c), admin: await esAdmin(c), plan, xtream, favoritos: c.favoritos, posiciones });
+    return json(res, 200, { ...publica(c), admin: await esAdmin(c), plan: (await planDe(c)).tipo, favoritos: c.favoritos, posiciones });
   }
   if (req.method !== 'POST') throw error(405, 'Método no permitido');
   const datos = await cuerpo(req);

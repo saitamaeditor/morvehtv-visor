@@ -120,9 +120,6 @@ function abrirCuenta() {
     caja.append(bd.s);
   }
 
-  // Apps IPTV (Xtream Codes): los datos para ver MorvehTV en ellas
-  caja.append(bloqueXtream());
-
   // Nombre visible
   const bn = bloque('Nombre', 'Es el que se ve arriba. Tu usuario para entrar no cambia.');
   const n = campo('Nombre', 'text', 'nickname');
@@ -182,46 +179,6 @@ function abrirCuenta() {
   caja.append(bb.s);
 
   x.focus();
-}
-
-// «📺 Apps IPTV»: MorvehTV también se ve en las apps de IPTV que entran con «Xtream Codes»
-// (King Stream Player, IPTV Smarters, TiviMate, XCIPTV…) con la misma cuenta. Aquí salen el
-// servidor y el usuario para copiarlos, y el enlace M3U para las apps que solo aceptan lista
-// (se arma aquí mismo con la contraseña que escribas: no se manda a ningún sitio).
-function bloqueXtream() {
-  const b = bloque('📺 Apps IPTV (Xtream Codes)');
-  if (yo.xtream === false) {
-    b.s.append(el('p', 'cuenta-texto', 'Ver MorvehTV en apps de IPTV (King Stream Player, IPTV Smarters, TiviMate…) es una ventaja VIP. Hazte VIP en «Plan» y aquí aparecerán tus datos.'));
-    return b.s;
-  }
-  b.s.append(el('p', 'cuenta-texto', 'Mira MorvehTV en apps de IPTV como King Stream Player, IPTV Smarters, TiviMate o XCIPTV. En la app elige «Xtream Codes» (o «Login with Xtream Codes API») y escribe estos datos:'));
-  const servidor = location.origin;
-  const dato = (etiqueta, valor) => {
-    const fila = el('div', 'xtream-dato');
-    const c = el('button', 'boton', 'Copiar');
-    c.onclick = () => copiar(valor, c);
-    fila.append(el('span', 'xtream-etiqueta', etiqueta), el('code', null, valor), c);
-    return fila;
-  };
-  const clave = el('div', 'xtream-dato');
-  clave.append(el('span', 'xtream-etiqueta', 'Contraseña'), el('span', 'xtream-nota', 'la misma con la que entras en MorvehTV'));
-  b.s.append(dato('Servidor', servidor), dato('Usuario', yo.usuario), clave);
-
-  // Enlace M3U: lleva la contraseña dentro, así que se arma solo en este aparato
-  const m3u = el('details', 'xtream-m3u');
-  m3u.append(el('summary', null, '¿Tu app solo acepta una lista M3U?'));
-  const c = campo('Escribe tu contraseña para crear tu enlace', 'password', 'current-password');
-  const crear = el('button', 'boton', 'Copiar enlace M3U');
-  crear.onclick = () => {
-    if (!c.i.value) { b.msg.className = 'cuenta-msg mal'; b.msg.textContent = 'Escribe tu contraseña'; c.i.focus(); return; }
-    b.msg.className = 'cuenta-msg bien';
-    b.msg.textContent = 'Enlace copiado. No lo compartas: lleva tu contraseña.';
-    copiar(`${servidor}/get.php?username=${encodeURIComponent(yo.usuario)}&password=${encodeURIComponent(c.i.value)}&type=m3u_plus&output=mp4`, crear);
-    c.i.value = '';
-  };
-  m3u.append(el('p', 'cuenta-texto', 'Pégalo en la app como «lista M3U» o «URL de lista». Es mejor «Xtream Codes»: con la lista, las series salen como vídeos sueltos.'), c.l, crear);
-  b.s.append(m3u, el('p', 'cuenta-texto', 'Lo que subamos aparece en la app al recargar la lista (en muchas, «Actualizar» o volver a entrar). Si cambias la contraseña, cámbiala también en la app.'), b.msg);
-  return b.s;
 }
 
 function cerrarCuenta() {
