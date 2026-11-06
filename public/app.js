@@ -1609,12 +1609,39 @@ const visible = (x) => {
   return e.visibility !== 'hidden' && e.pointerEvents !== 'none';
 };
 
+// Todo lo que se puede pulsar en la pantalla de delante, para que el mando llegue a todas partes
+// (no solo a una lista fija): botones, enlaces, campos, desplegables… de la portada, las
+// secciones, las series, «Mi cuenta» o el reproductor. Fuera: lo que va dentro de una carátula
+// (su estrella), lo que no se enfoca a propósito (tabindex -1, como las flechas ‹ › de las filas)
+// y la barra de progreso del vídeo (con el mando se avanza con ← → desde el propio vídeo).
+const PULSABLES = 'a[href], button, input:not([type="hidden"]), select, textarea, summary, [tabindex]';
+function candidatosMando(enCuenta, enVisor, capaAnuncio) {
+  const fijos = capaAnuncio ? capaAnuncio.querySelectorAll('button, a')
+    : document.querySelectorAll(enCuenta ? '#cuenta button, #cuenta input, #cuenta a' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP);
+  const zonas = capaAnuncio ? [] : enCuenta ? [$('#cuenta')] : enVisor ? [$('#visor')] : [document.querySelector('header'), document.querySelector('main')];
+  const todos = new Set(fijos);
+  for (const z of zonas) {
+    if (!z) continue;
+    for (const x of z.querySelectorAll(PULSABLES)) {
+      if (x.disabled || x.tabIndex < 0) continue;
+      if (x.parentElement && x.parentElement.closest('.item, .cat')) continue;
+      if (x.type === 'range' && x.closest('.repro')) continue;
+      todos.add(x);
+    }
+  }
+  // Lo de un desplegable cerrado no se puede enfocar (solo su título, que lo abre con OK); el
+  // botón grande ▶ del vídeo tampoco hace falta: OK sobre el propio vídeo hace lo mismo
+  const cerrado = (x) => { const d = x.closest('details'); return d && !d.open && !(x.tagName === 'SUMMARY' && x.parentElement === d); };
+  // En el orden de la página (para «Mi cuenta», que va en una columna)
+  return [...todos].filter((x) => visible(x) && !cerrado(x) && !x.matches('.gran-play')).sort((p, q) => (p.compareDocumentPosition(q) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
+}
+
 function moverFoco(dir) {
   const enCuenta = document.documentElement.classList.contains('con-cuenta');
   const enVisor = !enCuenta && actual >= 0;
   // Con un anuncio en pantalla, el foco no sale de él (ni va a los controles del vídeo de detrás)
   const capaAnuncio = enVisor && document.querySelector('.anuncio-previo');
-  const cands = [...(capaAnuncio ? capaAnuncio.querySelectorAll('button, a') : document.querySelectorAll(enCuenta ? '#cuenta button, #cuenta input, #cuenta a' : enVisor ? ENFOCABLES_VISOR : ENFOCABLES_APP))].filter(visible);
+  const cands = candidatosMando(enCuenta, enVisor, capaAnuncio);
   const a = document.activeElement;
   if (!a || a === document.body || !cands.includes(a)) {
     // En la portada, el foco empieza en «▶ Reproducir» del destacado (si lo hay)
@@ -1675,6 +1702,17 @@ function moverFoco(dir) {
   // de la tele), si sigue en la fila
   const filaVieja = a.closest('.carrusel');
   if (filaVieja) filaVieja._ultimo = a;
+  // ← desde la primera carátula de una fila: a su título («Novedades en…  Ver todo ›»)
+  if (!mejor && dir === 'izq' && filaVieja && a === filaVieja.firstElementChild) {
+    const titulo = a.closest('.fila') && a.closest('.fila').querySelector('.fila-titulo a');
+    if (titulo && visible(titulo)) mejor = titulo;
+  }
+  // Desde el título, → o ↓ entran en su fila (por la carátula que tenías elegida)
+  if (a.matches('.fila-titulo a') && (dir === 'der' || dir === 'abajo')) {
+    const suFila = a.closest('.fila') && a.closest('.fila').querySelector('.carrusel');
+    const destino = suFila && (suFila._ultimo && suFila.contains(suFila._ultimo) ? suFila._ultimo : suFila.firstElementChild);
+    if (destino && visible(destino)) mejor = destino;
+  }
   if (mejor && !horizontal) {
     const filaNueva = mejor.closest('.carrusel');
     const recordada = filaNueva && filaNueva !== a.closest('.carrusel') && filaNueva._ultimo;
