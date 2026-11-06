@@ -870,6 +870,7 @@ const hlsNativo = (v) => !(window.Hls && Hls.isSupported()) && !!v.canPlayType('
 
 // ¿Este aparato decodifica HEVC (H.265)? Casi todas las Android TV / Google TV, muchos móviles y
 // los ordenadores con aceleración. 8 o 10 bits según el vídeo; el 4:2:2 / 4:4:4 no.
+const HEVC_DIRECTO = false;
 const HEVC_CODECS = { 8: ['hvc1.1.6.L120.90', 'hev1.1.6.L120.90'], 10: ['hvc1.2.4.L120.90', 'hev1.2.4.L120.90'] };
 const bitsHevc = (pix) => (/^yuv420p$|^yuvj420p$|^$/.test(pix || '') ? 8 : /^yuv420p10/.test(pix) ? 10 : 0);
 const hevcCache = {};
@@ -1564,8 +1565,9 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       // audio compatible. Lo demás (.mkv, .ts, AC3, varios idiomas…) pasa por el servidor.
       // En la tele, un audio de más de 2 canales (5.1, 7.1) también pasa por el servidor, que lo
       // deja en estéreo: muchas Android TV / Google TV lo reproducen sin sonido
-      // (un MP4 en HEVC también va directo si este aparato lo abre: así no pasa por el servidor)
-      const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && (m.videoNativo.includes(m.video) || (m.video === 'hevc' && abreHevcDirecto(m.pix)))
+      // (el HEVC directo está apagado, HEVC_DIRECTO: con él el audio y la imagen se desfasaban
+      // en las teles; los MP4 en HEVC los convierte el servidor, como siempre)
+      const directo = m && /\.(mp4|m4v|mov)$/i.test(f.key) && (m.videoNativo.includes(m.video) || (HEVC_DIRECTO && m.video === 'hevc' && abreHevcDirecto(m.pix)))
         && m.audios.length <= 1 && m.audios.every((a) => m.audioNativo.includes(a.codec) && !(esTele && a.canales > 2));
       // Mismo reproductor en los dos casos (si no se pudo analizar el archivo, se intenta directo)
       // Anuncio en vídeo (VAST de una red externa) antes de empezar, si están activados

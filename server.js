@@ -480,7 +480,9 @@ async function hlsIniciar(p, quien) {
   // HEVC (H.265) en un aparato que lo decodifica (casi todas las Android TV / Google TV): la
   // imagen se copia tal cual en trozos fMP4, sin volver a codificarla. Arranca antes, no se
   // queda atrás y conserva la calidad; el servidor apenas trabaja. Si no, se pasa a H.264.
-  const copiaHevc = info.video === 'hevc' && p.get('hevc') === '1';
+  // APAGADO (2026-11-06): en las teles el audio y la imagen se desincronizaban. Solo con
+  // VISOR_HEVC_COPIA=1 en el servidor; si no, el HEVC se convierte a H.264 como siempre.
+  const copiaHevc = process.env.VISOR_HEVC_COPIA === '1' && info.video === 'hevc' && p.get('hevc') === '1';
   const copiaVideo = VIDEO_NATIVO.includes(info.video) || copiaHevc;
   const args = [
     // -multiple_requests reutiliza la conexión con e2 al buscar el minuto (salta el doble de rápido)
