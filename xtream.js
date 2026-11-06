@@ -87,13 +87,14 @@ function ficha(x) {
   }
   return Promise.race([fichas.get(id), new Promise((ok) => setTimeout(() => ok(null), 8000))]);
 }
-async function conFichas(lista, fn) {
+// «hasta»: promesa que, al cumplirse, corta la espera de las fichas que falten (se usan sin ficha)
+async function conFichas(lista, fn, hasta = null) {
   const fuera = new Array(lista.length);
   let siguiente = 0;
   await Promise.all(Array.from({ length: 6 }, async () => {
     while (siguiente < lista.length) {
       const i = siguiente++;
-      fuera[i] = fn(lista[i], await ficha(lista[i]));
+      fuera[i] = fn(lista[i], await (hasta ? Promise.race([ficha(lista[i]), hasta]) : ficha(lista[i])));
     }
   }));
   return fuera;
@@ -265,20 +266,22 @@ export async function atender(ruta, req, res, json, { ip, nube }) {
 
 // Lista M3U con todo (para los reproductores que solo aceptan una URL de lista)
 async function m3u(req, res, b, usuario, clave) {
+  const inicio = Date.now();
   const m = await modelo();
   const u = encodeURIComponent(usuario); const c = encodeURIComponent(clave);
   const linea = (nombreX, logo, grupo, enlace) =>
     `#EXTINF:-1 tvg-name="${nombreX.replace(/"/g, "'")}" tvg-logo="${logo ?? ''}" group-title="${grupo.replace(/"/g, "'")}",${nombreX}\n${enlace}`;
   const lineas = ['#EXTM3U'];
+  // Las apps esperan la lista unos pocos segundos: las fichas (carátula y título bonito) que no
+  // estén listas en 4 s se dejan para la próxima vez y el título sale del nombre del archivo
+  const hasta = new Promise((ok) => setTimeout(() => ok(null), 4000));
   lineas.push(...await conFichas(m.peliculas, (p, f) =>
-    linea(nombre(p, f), f?.poster, m.secciones.get(p.seccion).nombre, `${b.url}/movie/${u}/${c}/${p.id}.${ext(p.key)}`)));
-  for (const s of m.series.values()) {
-    const f = await ficha(s);
-    for (const e of s.episodios) {
-      lineas.push(linea(`${nombre(s, f)} S${String(e.temporada).padStart(2, '0')}E${String(e.episodio).padStart(2, '0')}`,
-        f?.poster, m.secciones.get(s.seccion).nombre, `${b.url}/series/${u}/${c}/${e.id}.${ext(e.key)}`));
-    }
-  }
+    linea(nombre(p, f), f?.poster, m.secciones.get(p.seccion).nombre, `${b.url}/movie/${u}/${c}/${p.id}.${ext(p.key)}`), hasta));
+  const series = [...m.series.values()];
+  for (const grupo of await conFichas(series, (s, f) => s.episodios.map((e) =>
+    linea(`${nombre(s, f)} S${String(e.temporada).padStart(2, '0')}E${String(e.episodio).padStart(2, '0')}`,
+      f?.poster, m.secciones.get(s.seccion).nombre, `${b.url}/series/${u}/${c}/${e.id}.${ext(e.key)}`)), hasta)) lineas.push(...grupo);
   res.writeHead(200, { 'content-type': 'audio/x-mpegurl; charset=utf-8', 'content-disposition': 'inline; filename="morvehtv.m3u"', 'cache-control': 'no-store' });
   res.end(`${lineas.join('\n')}\n`);
+  console.log(`Xtream: lista M3U enviada · ${lineas.length - 1} vídeos · ${((Date.now() - inicio) / 1000).toFixed(1)} s`);
 }
