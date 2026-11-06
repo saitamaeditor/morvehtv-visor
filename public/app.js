@@ -970,7 +970,8 @@ function barraVisto(t) {
 
 // «renovar»: cómo conseguir otra vez la dirección si se corta (un enlace de e2 nuevo, por si caducó)
 function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', { key }).then((r) => r.url), opciones = {}) {
-  const directo = !!urlDirecto;
+  // (deja de ser directo si este aparato no sabe abrir el archivo: entonces lo prepara el servidor)
+  let directo = !!urlDirecto;
   const caja = el('div', 'repro');
   // No arranca solo: se prepara en segundo plano y empieza cuando pulsas ▶
   const v = el('video'); v.playsInline = true; v.setAttribute('playsinline', '');
@@ -1117,7 +1118,15 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
   v.onerror = () => {
     if (!directo || !v.getAttribute('src')) return;
     if (v.error && v.error.code === 2) return retomar(); // error de red
-    cargando.hidden = false; cargando.textContent = 'Este dispositivo no puede reproducir este formato.';
+    // El aparato no sabe abrir el archivo tal cual (p. ej. un MP4 de 10 bits): en vez de quedarse
+    // ahí, se pasa al vídeo que prepara el servidor, desde el mismo segundo
+    if (/\.m3u8(\?|#|$)/i.test(urlDirecto)) { cargando.hidden = false; cargando.textContent = 'Este dispositivo no puede reproducir este formato.'; return; }
+    const t = v.currentTime > 0 ? ahora() : inicio;
+    const seguir = quiere || !v.paused;
+    directo = false;
+    v.removeAttribute('src'); v.load();
+    cargando.hidden = true;
+    ir(t, seguir);
   };
   v.onwaiting = () => {
     clearTimeout(vigia);

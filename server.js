@@ -358,16 +358,23 @@ function medio(key) {
         new Promise((ok, mal) =>
           execFile(
             'ffprobe',
-            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height:stream_tags=language,title', '-of', 'json', url],
+            ['-v', 'error', '-show_entries', 'format=duration:stream=codec_type,codec_name,profile,pix_fmt,width,height:stream_tags=language,title', '-of', 'json', url],
             { timeout: 60000 },
             (err, salida) => {
               if (err) return mal(new Error(`ffprobe no pudo leer el vídeo: ${err.message}`));
               const d = JSON.parse(salida);
               const pistas = d.streams ?? [];
-              const video = pistas.find((s) => s.codec_type === 'video');
+              // (las carátulas incrustadas también salen como «vídeo»: se coge la primera pista de verdad)
+              const video = pistas.find((s) => s.codec_type === 'video' && !['mjpeg', 'png', 'bmp', 'gif'].includes(s.codec_name))
+                ?? pistas.find((s) => s.codec_type === 'video');
+              // H.264 de 10 bits o con color 4:2:2 / 4:4:4 no lo abre casi ningún navegador ni tele:
+              // se marca aparte para que no vaya directo ni se copie tal cual, sino que se convierta
+              let codec = video?.codec_name ?? null;
+              const pix = String(video?.pix_fmt ?? '');
+              if (codec === 'h264' && ((pix && !/^yuvj?420p$/.test(pix)) || /high 10|4:2:2|4:4:4/i.test(String(video?.profile ?? '')))) codec = `h264-${pix || 'raro'}`;
               ok({
                 duracion: Number(d.format?.duration) || 0,
-                video: video?.codec_name ?? null,
+                video: codec,
                 resolucion: video?.width ? `${video.width}×${video.height}` : null,
                 subtitulos: pistas
                   .filter((s) => s.codec_type === 'subtitle')
