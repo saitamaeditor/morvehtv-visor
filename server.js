@@ -465,10 +465,18 @@ const sesionesHls = new Map(); // id → { ff, carpeta, ultimo, errores }
 // a normales (SDR) para que no se vea grisáceo en aparatos sin HDR. Si el vídeo no se convierte
 // (H.264 normal), va tal cual en su resolución.
 const filtrosFfmpeg = await new Promise((ok) => execFile('ffmpeg', ['-hide_banner', '-filters'], { maxBuffer: 1e7 }, (e, out) => ok(out || '')));
-let HAY_TONEMAP = /\szscale\s/.test(filtrosFfmpeg) && /\stonemap\s/.test(filtrosFfmpeg);
-// Al arrancar, prueba la cadena completa con 2 s de imagen 4K HDR inventada: si falla, se
-// convierte sin pasar los colores (mejor algo grisáceo que no verlo) y mide a cuántas imágenes
-// por segundo lo hace este servidor (sale en /api/salud; por debajo de ~30 iría a tirones)
+// Cómo se pasan los colores HDR a normales: «tonemapx» (el ffmpeg de Jellyfin, rápido, con
+// instrucciones SIMD), «zscale» (zscale + tonemap, más lento) o nada (se ve algo grisáceo)
+const MODOS_TONEMAP = [
+  /\stonemapx\s/.test(filtrosFfmpeg) && 'tonemapx',
+  /\szscale\s/.test(filtrosFfmpeg) && /\stonemap\s/.test(filtrosFfmpeg) && 'zscale',
+].filter(Boolean);
+let TONEMAP = MODOS_TONEMAP[0] || null;
+let HAY_TONEMAP = !!TONEMAP;
+// Al arrancar, prueba la cadena completa con 2 s de imagen 4K HDR inventada: si un modo falla
+// se pasa al siguiente, y si fallan todos se convierte sin pasar los colores (mejor algo
+// grisáceo que no verlo). Mide a cuántas imágenes por segundo lo hace este servidor (sale en
+// /api/salud; por debajo de ~30 iría a tirones)
 const pruebaVideo = { estado: 'probando' };
 setTimeout(() => {
   const prueba = (hdr) => new Promise((ok) => {
@@ -479,11 +487,14 @@ setTimeout(() => {
     (e, _o, err) => ok(e ? { error: String(err || e.message).trim().split('\n').pop() } : { fps: Math.round(48000 / (Date.now() - t0)) }));
   });
   (async () => {
-    if (HAY_TONEMAP) {
+    for (const modo of MODOS_TONEMAP) {
+      TONEMAP = modo;
       const r = await prueba(true);
-      if (r.error) { HAY_TONEMAP = false; console.error(`4K HDR: la conversión de colores falla (${r.error}); se convierte sin ella`); }
-      else pruebaVideo.hdr = r.fps;
+      if (!r.error) { pruebaVideo.hdr = r.fps; pruebaVideo.modoHdr = modo; break; }
+      console.error(`4K HDR: la conversión de colores con ${modo} falla (${r.error})`);
+      TONEMAP = null;
     }
+    HAY_TONEMAP = !!TONEMAP;
     const r = await prueba(false);
     Object.assign(pruebaVideo, { estado: r.error ? 'error' : 'ok', '4k': r.fps ?? null, ...(r.error && { error: r.error }) });
   })();
@@ -496,8 +507,12 @@ function filtroVideo(info) {
   // (se reduce antes de convertir los colores: así esa parte trabaja con 4 veces menos píxeles)
   // (bilinear: casi igual de nítido al reducir y bastante más rápido que bicubic)
   if (grande) f.push(`scale=w=${MAX_ANCHO}:h=${MAX_ALTO}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=bilinear`);
-  if (info.hdr && HAY_TONEMAP) {
-    const tin = info.hdr === 'hlg' ? 'arib-std-b67' : 'smpte2084';
+  const tin = info.hdr === 'hlg' ? 'arib-std-b67' : 'smpte2084';
+  if (info.hdr && TONEMAP === 'tonemapx') {
+    // (setparams: muchos archivos no dicen bien sus colores; tonemapx los lee de cada imagen)
+    f.push(`setparams=color_primaries=bt2020:color_trc=${tin}:colorspace=bt2020nc:range=tv`,
+      'tonemapx=tonemap=bt2390:desat=0:peak=100:t=bt709:m=bt709:p=bt709:format=yuv420p');
+  } else if (info.hdr && TONEMAP === 'zscale') {
     f.push(`zscale=tin=${tin}:min=bt2020nc:pin=bt2020:rin=tv:t=linear:npl=100`, 'format=gbrpf32le', 'zscale=p=bt709',
       'tonemap=tonemap=hable:desat=0', 'zscale=t=bt709:m=bt709:r=tv');
   }
@@ -969,7 +984,7 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
