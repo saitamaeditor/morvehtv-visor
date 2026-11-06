@@ -630,7 +630,13 @@ export async function buscarParaSubir(q) {
   const imdb = texto.match(/tt\d{5,10}/)?.[0];
   if (imdb) {
     const r = await pedir(`/find/${imdb}`, { external_source: 'imdb_id' });
-    return [...(r.movie_results ?? []).map((x) => resultado(x, 'pelicula')), ...(r.tv_results ?? []).map((x) => resultado(x, 'serie'))];
+    const series = (r.tv_results ?? []).map((x) => resultado(x, 'serie'));
+    // El código de un capítulo o de una temporada (lo que sale al copiar el enlace estando en un
+    // episodio de IMDb): se busca la serie a la que pertenece
+    const deSerie = [...new Set([...(r.tv_episode_results ?? []), ...(r.tv_season_results ?? [])].map((x) => x.show_id).filter(Boolean))]
+      .filter((id) => !series.some((s) => s.tmdbId === id));
+    const madres = (await Promise.all(deSerie.map((id) => porIdTmdb(id, 'serie')))).flat();
+    return [...(r.movie_results ?? []).map((x) => resultado(x, 'pelicula')), ...series, ...madres];
   }
   // Enlace de TMDB: https://www.themoviedb.org/movie/603-the-matrix o …/tv/1399-juego-de-tronos
   const enlace = texto.match(/themoviedb\.org\/(?:[a-z]{2}(?:-[A-Z]{2})?\/)?(movie|tv)\/(\d{1,9})/i);
