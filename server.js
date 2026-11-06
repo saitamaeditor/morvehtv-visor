@@ -95,7 +95,8 @@ for (const senal of ['SIGTERM', 'SIGINT']) {
 const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(key);
 // Avisos de lo nuevo en Telegram, con un tema por sección (ver telegram.js)
 await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
-// Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso
+// Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso.
+// Apagados salvo que el servidor tenga XTREAM_ACTIVO=1
 pagos.iniciar({ perfiles, firmar: (k, o) => firmar(k, o) });
 xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; }, firmar, esVideo, credenciales: perfiles.credenciales, esAdmin: perfiles.esAdmin,
   // Los reproductores externos (King Stream Player…) funcionan con todas las cuentas; con
@@ -816,7 +817,7 @@ http
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(`User-agent: *\nAllow: /entrar.html\nAllow: /ads.txt\nDisallow: /\nDisallow: ${defensa.TRAMPA}\n`);
       }
-      const paraProgramas = ['/api/salud', '/ads.txt', '/apk', '/api/kofi/webhook'].includes(url.pathname) || xtream.esRuta(url.pathname);
+      const paraProgramas = ['/api/salud', '/ads.txt', '/apk', '/api/kofi/webhook'].includes(url.pathname) || (xtream.esRuta(url.pathname) && process.env.XTREAM_ACTIVO === '1');
       if (!paraProgramas && defensa.esBot(req)) return json(res, 403, { error: 'Acceso automático no permitido' });
       // ads.txt de la red de anuncios (público: lo lee su rastreador)
       if (url.pathname === '/ads.txt') {
@@ -848,6 +849,8 @@ http
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
+      // (apagados: ninguna app de IPTV puede entrar; con XTREAM_ACTIVO=1 vuelven a funcionar)
+      if (xtream.esRuta(url.pathname) && process.env.XTREAM_ACTIVO !== '1') return json(res, 404, { error: 'No disponible' });
       if (xtream.esRuta(url.pathname)) return await xtream.atender(url.pathname, req, res, json, { ip: acceso.ipDe(req), nube: acceso.NUBE });
       // Sin sesión solo se llega a la pantalla de entrar o registrarse
       if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
