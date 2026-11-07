@@ -777,6 +777,16 @@
   .carrusel .item { width: clamp(118px, 10.5vw, 185px); }
   .carrusel.anchas .item, .carrusel .item.episodio { width: clamp(220px, 19vw, 330px); }
   .carrusel .item .resumen { display: none; }
+  /* Top 10: el número grande, con borde, asomando por detrás del cartel (como en las plataformas) */
+  .carrusel.top10 { gap: clamp(4px, .6vw, 10px); }
+  .top-item { position: relative; display: flex; align-items: flex-end; padding-left: clamp(34px, 3.6vw, 64px); }
+  .top-num { position: absolute; left: 0; bottom: clamp(34px, 3vw, 52px); z-index: 0; font: 900 clamp(84px, 8.4vw, 150px)/.8 "Arial Black", Impact, system-ui, sans-serif;
+    color: var(--fondo, #0b0c10); -webkit-text-stroke: 3px rgba(255,255,255,.85); letter-spacing: -.06em; pointer-events: none; user-select: none; }
+  .top-item .item { position: relative; z-index: 1; }
+  /* La nota encima del cartel (arriba a la izquierda) */
+  .nota-top { position: absolute; top: 6px; left: 6px; z-index: 2; padding: 2px 7px; border-radius: 6px; font-size: 11.5px; font-weight: 800;
+    color: #ffd166; background: rgba(0,0,0,.72); pointer-events: none; }
+  .tele .top-num { font-size: 11vh; }
   .carrusel.medios .cat { width: clamp(250px, 24vw, 400px); aspect-ratio: 16 / 9; }
   .tele .carrusel .item { width: 15vw; }
   .tele .carrusel.anchas .item, .tele .carrusel .item.episodio { width: 26vw; }

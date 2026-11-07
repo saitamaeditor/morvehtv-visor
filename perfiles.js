@@ -184,6 +184,16 @@ export function ponerAdmin(usuario, si, { por, secciones } = {}) {
     }
   });
 }
+// Qué se ha visto últimamente (para «Tendencias» de la portada): cuántas cuentas distintas han
+// visto cada vídeo en los últimos `ms`. Solo el recuento: nada de quién.
+export async function vistasRecientes(ms) {
+  const desde = Date.now() - ms;
+  const cuentas = new Map(); // key → Set de cuentas
+  const anotar = (id, key, cuando) => { if (cuando > desde) { if (!cuentas.has(key)) cuentas.set(key, new Set()); cuentas.get(key).add(id); } };
+  for (const c of (await leer()).cuentas || []) for (const [key, pos] of Object.entries(c.posiciones || {})) anotar(c.id, key, pos?.cuando ?? 0);
+  for (const [id, m] of posPendientes) for (const [key, pos] of m) if (pos) anotar(id, key, pos.cuando);
+  return new Map([...cuentas].map(([k, s]) => [k, s.size]));
+}
 export const colaboradorDe = async (c) => (c ? ((await leer()).colaboradores || []).find((x) => x.usuario === c.usuario) ?? null : null);
 // Una cuenta por su id (o null), leída del archivo
 export const cuentaPorId = async (id) => ((await leer()).cuentas || []).find((x) => x.id === id) ?? null;

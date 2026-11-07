@@ -971,6 +971,43 @@ async function catalogo(max) {
   }
   return r;
 }
+// ---------- Filas de la portada: Tendencias, Más valoradas y Populares ----------
+// Para películas y series por separado, con lo que hay en MorvehTV (los 600 títulos más nuevos):
+// «Tendencias» = lo que más cuentas distintas han visto en las últimas 2 semanas (y, si hay poco,
+// lo más popular en TMDB); «Más valoradas» = mejor nota de TMDB (con un mínimo de votos);
+// «Populares» = popularidad de TMDB. Se recalcula cada 10 minutos o al cambiar el contenido.
+let filasPortada = { id: null, hasta: 0, p: null };
+async function portadaFilas() {
+  if (filasPortada.p && filasPortada.id === huella && filasPortada.hasta > Date.now()) return filasPortada.p;
+  filasPortada = { id: huella, hasta: Date.now() + 600000, p: (async () => {
+    const c = await catalogoEntero();
+    const todos = c.carpetas.flatMap((x) => x.titulos).sort((a, b) => b.fecha - a.fecha).slice(0, 600);
+    const conFicha = [];
+    for (let i = 0; i < todos.length; i += 8) {
+      const lote = await Promise.all(todos.slice(i, i + 8).map(async (x) => ({ x, m: await (x.tipo === 'carpeta' ? meta.deCarpeta(x.key) : meta.deArchivo(x.key)).catch(() => null) })));
+      conFicha.push(...lote.filter((y) => y.m?.encontrado && y.m.poster));
+    }
+    const vistas = await perfiles.vistasRecientes(14 * 86400000).catch(() => new Map());
+    const vistasDe = (x) => (x.tipo === 'carpeta' ? [...vistas].filter(([k]) => k.startsWith(x.key)).reduce((s, [, n]) => Math.max(s, n), 0) : vistas.get(x.key) ?? 0);
+    const item = ({ x, m }) => ({ tipo: x.tipo, key: x.key, titulo: m.titulo, anio: m.anio, poster: m.poster, valoracion: m.valoracion ?? null });
+    const grupo = (lista) => {
+      // Un título una sola vez (aunque esté en dos carpetas)
+      const vistos = new Set();
+      const unicos = lista.filter(({ m }) => { const k = `${m.tmdbId ?? m.id ?? m.titulo}|${m.tipo}`; if (vistos.has(k)) return false; vistos.add(k); return true; });
+      const pop = (y) => y.m.popularidad ?? 0;
+      const tendencias = [...unicos].map((y) => ({ y, v: vistasDe(y.x) })).sort((a, b) => b.v - a.v || pop(b.y) - pop(a.y)).slice(0, 10).map(({ y }) => item(y));
+      const valoradas = unicos.filter((y) => y.m.valoracion && (y.m.votos == null || y.m.votos >= 50)).sort((a, b) => b.m.valoracion - a.m.valoracion).slice(0, 20).map(item);
+      const populares = unicos.filter((y) => y.m.popularidad).sort((a, b) => pop(b) - pop(a)).slice(0, 20).map(item);
+      return { tendencias, valoradas, populares };
+    };
+    return {
+      peliculas: grupo(conFicha.filter((y) => y.x.tipo === 'archivo' && y.m.tipo !== 'serie')),
+      series: grupo(conFicha.filter((y) => y.x.tipo === 'carpeta' && y.m.tipo === 'serie')),
+    };
+  })() };
+  filasPortada.p.catch(() => { filasPortada.p = null; });
+  return filasPortada.p;
+}
 async function catalogoEntero() {
   let objetos;
   if (foto) {
@@ -1054,6 +1091,7 @@ const rutas = {
   }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
   '/api/catalogo': (p) => catalogo(p.get('max')),
+  '/api/portada-filas': () => portadaFilas(),
   // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
   '/api/tmdb-buscar': async (p, req, quien) => {
     if (!quien.admin) throw Object.assign(new Error('Solo los administradores pueden corregir fichas'), { status: 403 });
