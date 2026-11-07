@@ -1,5 +1,5 @@
 {
-  "_nota": "Fichas escritas a mano para lo que no está en TMDB ni en las otras fuentes. Cada una vale para los vídeos cuyo nombre (sin carpeta ni extensión) esté en «archivos». Las imágenes van en esta carpeta y se sirven en https://morvehtv.com/fichas/…. Con «anunciar» (cualquier texto, p. ej. la fecha) Telegram publica el aviso con la ficha una vez; para repetirlo, cambia el texto.",
+  "_nota": "Fichas escritas a mano para lo que no está en TMDB ni en las otras fuentes. Cada una vale para los vídeos cuyo nombre (sin carpeta ni extensión) esté en «archivos». Las imágenes van en esta carpeta y se sirven en https://morvehtv.com/fichas/…. Con «anunciar» (cualquier texto, p. ej. la fecha) Telegram publica el aviso con la ficha una vez; para repetirlo, cambia el texto. Series: «archivos» es el nombre de la carpeta de la serie y «temporadas» la lista de capítulos ({ \"1\": [{ numero, titulo, sinopsis, imagen, duracion }] }); con \"ficha\": false se conserva la ficha de TMDB y solo se completan los capítulos.",
   "fichas": [
     {
       "archivos": ["Informe Plus Toni Bou 40 de 40 - 2026"],

@@ -343,6 +343,21 @@ export function anunciosManuales(keys) {
   }
   return lista;
 }
+// Capítulos escritos a mano de una serie («temporadas»: { "1": [{ numero, titulo, sinopsis,
+// imagen, duracion }] }). Valen tanto para una ficha a mano entera como para completar los
+// capítulos de una serie que sí tiene ficha en TMDB (entonces la entrada lleva "ficha": false)
+const imagenManual = (x) => (!x ? null : /^https?:\/\//.test(x) ? x : `${URL_FICHAS()}/${encodeURIComponent(x)}`);
+function capitulosManuales(carpetaSerie, temporada) {
+  const f = carpetaSerie && manualDe(carpetaSerie);
+  const lista = f?.temporadas?.[String(temporada)];
+  if (!Array.isArray(lista)) return null;
+  return lista.map((e) => ({ numero: Number(e.numero), titulo: e.titulo ?? '', sinopsis: e.sinopsis ?? '', imagen: imagenManual(e.imagen),
+    fecha: e.fecha ?? null, duracion: e.duracion ?? null }));
+}
+function temporadaManual(id, numero) {
+  const episodios = capitulosManuales(id, numero);
+  return episodios ? { nombre: null, sinopsis: '', poster: null, anio: '', valoracion: null, episodios } : null;
+}
 function fichaManual(id) {
   const f = manualDe(id);
   if (!f) return Promise.reject(Object.assign(new Error('Sin ficha manual'), { status: 404 }));
@@ -384,6 +399,7 @@ function temporadaDe(id, numero) {
   if (id.fuente === 'tvmaze') return recordar(`tvmaze-temp:${id.id}:${numero}`, () => temporadaTvmaze(id.id, numero));
   if (id.fuente === 'anilist') return recordar(`anilist-temp:${id.id}`, () => temporadaAnilist(id.id));
   if (id.fuente === 'kitsu') return recordar(`kitsu-temp:${id.id}`, () => temporadaKitsu(id.id));
+  if (id.fuente === 'manual') return Promise.resolve(temporadaManual(id.id, numero));
   if (id.fuente) return Promise.resolve(null);
   return recordar(`tmdb-temp:${id.tmdbId}:${numero}`, async () => {
     const es = await temporada(id.tmdbId, numero).catch(() => null);
@@ -573,7 +589,8 @@ const buscando = new Map(); // `${seccion}|${clave}` → promesa
 const noEncontrados = new Map(); // `${seccion}|${clave}` → hasta cuándo
 async function identificar(clave, seccion, datos) {
   if (cache.correcciones[clave]) return cache.correcciones[clave];
-  if (manualDe(clave)) return { fuente: 'manual', id: clave, tipo: manualDe(clave).tipo === 'serie' ? 'serie' : 'pelicula' };
+  // (las que solo completan capítulos, con "ficha": false, no cambian la ficha)
+  if (manualDe(clave) && manualDe(clave).ficha !== false) return { fuente: 'manual', id: clave, tipo: manualDe(clave).tipo === 'serie' ? 'serie' : 'pelicula' };
   if (clave in cache[seccion]) return cache[seccion][clave];
   const id = `${seccion}|${clave}`;
   if (noEncontrados.get(id) > Date.now()) return null;
@@ -602,7 +619,10 @@ export async function deArchivo(key) {
   if (id.tipo !== 'serie') return { encontrado: true, ...f };
 
   const s = await temporadaDe(id, datos.temporada).catch(() => null);
-  const e = s?.episodios.find((x) => x.numero === datos.episodio);
+  const deFuente = s?.episodios.find((x) => x.numero === datos.episodio);
+  // Lo escrito a mano para ese capítulo manda sobre la base de datos (lo que no traiga, de ella)
+  const aMano = id.fuente === 'manual' ? null : capitulosManuales(datos.carpeta, datos.temporada)?.find((x) => x.numero === datos.episodio);
+  const e = aMano ? { ...deFuente, ...Object.fromEntries(Object.entries(aMano).filter(([, v]) => v != null && v !== '')) } : deFuente;
   return {
     encontrado: true,
     ...f,
