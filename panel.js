@@ -482,9 +482,10 @@ export async function atender(ruta, req, res, json, ip) {
   if (ruta === '/api/panel/titulos') {
     const q = String(url.searchParams.get('q') ?? '').trim();
     if (q.length < 2) return json(res, 200, []);
-    return json(res, 200, await meta.buscarParaSubir(q));
+    return json(res, 200, await meta.buscarParaSubir(q, url.searchParams.get('fuente') || 'tmdb'));
   }
-  if (ruta === '/api/panel/titulo') return json(res, 200, await meta.fichaParaSubir(url.searchParams.get('tipo'), url.searchParams.get('id')));
+  if (ruta === '/api/panel/fuentes') return json(res, 200, meta.FUENTES_GESTOR);
+  if (ruta === '/api/panel/titulo') return json(res, 200, await meta.fichaParaSubir(url.searchParams.get('tipo'), url.searchParams.get('id'), url.searchParams.get('fuente') || 'tmdb'));
 
   // Un trozo que llega por el servidor: se reenvía a e2 tal cual va llegando (con PUT, por eso va
   // antes de la regla de solo POST). PANEL_POR_SERVIDOR=0 lo apaga: el gestor vuelve solo a subir
@@ -510,7 +511,7 @@ export async function atender(ruta, req, res, json, ip) {
   if (ruta === '/api/panel/vincular') {
     const clave = claveValida(datos.clave);
     if (!puede(clave)) throw fuera();
-    return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo));
+    return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo, datos.fuente && datos.fuente !== 'tmdb' ? { fuente: String(datos.fuente), id: datos.id } : null));
   }
 
   // Crear carpetas (una o varias: «SERIES/Nueva/Temporada 1/»…)
