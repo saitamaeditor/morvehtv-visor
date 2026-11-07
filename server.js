@@ -3,7 +3,7 @@
 // cuentas (_morvehtv/usuarios.json, ver perfiles.js). Sin sesión solo se ve entrar.html.
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
-import { readFile, writeFile, mkdir, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, stat, rename } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
 import { gzip, brotliCompress, constants as zlibC } from 'node:zlib';
@@ -492,10 +492,52 @@ function medirLuego(keys) {
     medio(k).then((m) => anotarDuracion(k, m.duracion)).catch(() => {}).finally(() => { midiendo--; medirLuego([]); });
   }
 }
+// ---------- Miniatura de cada capítulo ----------
+// Los capítulos sin imagen propia en su ficha (versiones internacionales, series de Wikipedia…)
+// llevan un fotograma de su propio vídeo, sacado con ffmpeg una sola vez y guardado en
+// data/miniaturas/ (640 px de ancho). Como mucho dos a la vez, para no frenar los vídeos.
+const DIR_MINIATURAS = path.join(dir, 'data', 'miniaturas');
+const miniaturasEnCurso = new Map();
+let haciendoMiniaturas = 0;
+const esperaMiniatura = [];
+const archivoMiniatura = (key) => path.join(DIR_MINIATURAS, `${createHash('sha1').update(claveDuracion(key)).digest('hex').slice(0, 20)}.jpg`);
+function miniatura(key) {
+  const destino = archivoMiniatura(key);
+  if (existsSync(destino)) return Promise.resolve(destino);
+  if (!miniaturasEnCurso.has(key)) {
+    const p = (async () => {
+      if (haciendoMiniaturas >= 2) await new Promise((ok) => esperaMiniatura.push(ok));
+      haciendoMiniaturas++;
+      try {
+        const m = await medio(key).catch(() => null);
+        const segundos = m?.duracion || duracionDe(key) || 0;
+        // Un momento ya metido en el capítulo (no la cabecera ni un fundido a negro)
+        const en = segundos ? Math.max(5, Math.min(segundos * 0.3, segundos - 5)) : 120;
+        await mkdir(DIR_MINIATURAS, { recursive: true });
+        const url = await firmar(key, { segundos: 600 });
+        const tmp = `${destino}.${process.pid}.tmp.jpg`;
+        const filtro = m?.hdr ? 'zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=hable,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=640:-2' : 'scale=640:-2';
+        await new Promise((ok, mal) => execFile('ffmpeg', ['-v', 'error', '-ss', String(Math.round(en)), '-i', url, '-frames:v', '1', '-vf', filtro, '-q:v', '4', '-y', tmp],
+          { timeout: 90000 }, (e) => (e ? mal(e) : ok())));
+        await rename(tmp, destino);
+        return destino;
+      } finally {
+        haciendoMiniaturas--;
+        esperaMiniatura.shift()?.();
+      }
+    })();
+    p.catch(() => {}).finally(() => miniaturasEnCurso.delete(key));
+    miniaturasEnCurso.set(key, p);
+  }
+  return miniaturasEnCurso.get(key);
+}
+const urlMiniatura = (key) => `/api/miniatura?key=${encodeURIComponent(key)}&v=${encodeURIComponent(foto?.get(key)?.split(':')[0] ?? '')}`;
+
 // Completa la ficha con la duración real (en minutos, como la de las bases de datos)
 function conDuracion(key, r) {
   if (!r?.encontrado || !key) return r;
   const segundos = duracionDe(key);
+  if (r.episodio && !r.episodio.imagenPropia && esVideo(key)) r.episodio.imagen = urlMiniatura(key);
   if (r.episodio && !r.episodio.duracion) {
     if (segundos) r.episodio.duracion = Math.max(1, Math.round(segundos / 60)); else medirLuego([key]);
   } else if (!r.episodio && !r.duracion) {
@@ -903,6 +945,7 @@ const rutas = {
     const videos = foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)) : [];
     // Al abrir una temporada, se miden (en segundo plano) los capítulos que aún no tienen duración
     medirLuego(videos);
+    for (const k of videos.slice(0, 300)) if (!existsSync(archivoMiniatura(k))) miniatura(k).catch(() => {});
     return videos.length;
   }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
@@ -1149,6 +1192,13 @@ http
       if (url.pathname === '/api/eventos') return eventos(req, res, cuenta);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       if (pagos.RUTAS.includes(url.pathname)) return await pagos.atender(url.pathname, req, res, json, cuenta);
+      if (url.pathname === '/api/miniatura') {
+        const key = url.searchParams.get('key') ?? '';
+        if (!esVideo(key) || prohibido(key) || esInterna(key)) return json(res, 404, { error: 'No existe' });
+        const fichero = await miniatura(key).catch(() => null);
+        if (!fichero) return json(res, 404, { error: 'No se pudo sacar la imagen' });
+        return await servirFijo(req, res, fichero, 'image/jpeg', 'private, max-age=2592000, immutable');
+      }
       const hls = url.pathname.match(/^\/hls\/([\w-]+)\/([^/]+)$/);
       if (hls) return await hlsServir(res, hls[1], hls[2]);
       const ruta = rutas[url.pathname];

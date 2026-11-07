@@ -643,6 +643,9 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   const mini = t.querySelector('.mini');
   if (imagen) {
     const img = el('img'); img.loading = 'lazy'; img.decoding = 'async'; img.src = imagen; img.alt = '';
+    // Si el fotograma del capítulo no se pudo sacar, la imagen de la serie
+    const otra = d.fondo || d.poster;
+    if (otra && otra !== imagen) img.onerror = () => { img.onerror = null; img.src = otra; };
     const visto = mini.querySelector('.visto'); // la barra de lo que ya has visto se queda
     mini.replaceChildren(img);
     if (visto) mini.append(visto);

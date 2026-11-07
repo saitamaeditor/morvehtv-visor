@@ -680,6 +680,8 @@ export async function deArchivo(key) {
       // Sin imagen propia (capítulos que la base de datos no tiene, p. ej. de una versión doblada
       // con otra numeración): el fondo de la serie, para que salga igual que los demás
       imagen: e?.imagen ?? f.fondo ?? f.poster ?? null,
+      // (sin imagen propia: el servidor la cambia por un fotograma del propio capítulo)
+      imagenPropia: Boolean(e?.imagen),
       fecha: e?.fecha ?? null,
       duracion: e?.duracion ?? null,
     },
