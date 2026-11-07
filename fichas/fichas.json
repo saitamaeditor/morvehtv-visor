@@ -1,5 +1,5 @@
 {
-  "_nota": "Fichas escritas a mano para lo que no está en TMDB ni en las otras fuentes. Cada una vale para los vídeos cuyo nombre (sin carpeta ni extensión) esté en «archivos». Las imágenes van en esta carpeta y se sirven en https://morvehtv.com/fichas/…",
+  "_nota": "Fichas escritas a mano para lo que no está en TMDB ni en las otras fuentes. Cada una vale para los vídeos cuyo nombre (sin carpeta ni extensión) esté en «archivos». Las imágenes van en esta carpeta y se sirven en https://morvehtv.com/fichas/…. Con «anunciar» (cualquier texto, p. ej. la fecha) Telegram publica el aviso con la ficha una vez; para repetirlo, cambia el texto.",
   "fichas": [
     {
       "archivos": ["Informe Plus Toni Bou 40 de 40 - 2026"],
@@ -14,7 +14,8 @@
       "poster": "toni-bou-40-de-40-poster.jpg",
       "fondo": "toni-bou-40-de-40-fondo.jpg",
       "web": "https://www.filmaffinity.com/es/film259520.html",
-      "fuente": "FilmAffinity"
+      "fuente": "FilmAffinity",
+      "anunciar": "2026-11-07"
     }
   ]
 }

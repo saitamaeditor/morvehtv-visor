@@ -399,6 +399,25 @@ export async function repaso(foto) {
     const masNueva = Math.max(0, ...videos.map((v) => v.fecha));
     // La primera vez no se avisa de todo el catálogo: solo de lo que llegue a partir de ahora
     if (!datos.ultimo) { datos.ultimo = masNueva || Date.now(); await guardarDatos(); estado = 'ok'; return; }
+    // Avisos que se piden a mano desde fichas/fichas.json («anunciar»): una sola vez cada uno
+    datos.anunciados = datos.anunciados ?? [];
+    for (const { key, marca } of meta.anunciosManuales(videos.map((v) => v.key))) {
+      if (datos.anunciados.includes(marca)) continue;
+      const v = videos.find((x) => x.key === key);
+      const carpeta = `${key.split('/')[0]}/`;
+      const m = await mensaje(carpeta, key, [v]);
+      let tema = datos.temas[carpeta] ?? await crearTema(carpeta);
+      try { await enviar(tema, m); } catch (e) {
+        if (!/thread|topic/i.test(e.message)) throw e;
+        delete datos.temas[carpeta];
+        tema = await crearTema(carpeta);
+        await enviar(tema, m);
+      }
+      datos.anunciados.push(marca);
+      await guardarDatos();
+      console.log(`Telegram: aviso pedido a mano en «${tema.nombre}» (${key})`);
+      await espera(1500);
+    }
     for (const [k, hasta] of ignorados) if (hasta < Date.now()) ignorados.delete(k);
     const todos = videos.filter((v) => v.fecha > datos.ultimo);
     const nuevos = todos.filter((v) => !ignorados.has(v.key)).sort((a, b) => a.fecha - b.fecha);

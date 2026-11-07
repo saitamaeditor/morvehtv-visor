@@ -291,6 +291,17 @@ function manualDe(clave) {
   }
   return manuales.get(comparable(nombreSolo(clave))) ?? null;
 }
+// Fichas con «anunciar»: Telegram las anuncia (otra vez) una sola vez por cada valor distinto de
+// «anunciar». Sirve para repetir con su portada el aviso de un vídeo que se anunció sin ficha.
+export function anunciosManuales(keys) {
+  manualDe('');
+  const lista = [];
+  for (const key of keys) {
+    const f = manuales.get(comparable(nombreSolo(key)));
+    if (f?.anunciar) lista.push({ key, marca: `${comparable(nombreSolo(key))}|${f.anunciar}` });
+  }
+  return lista;
+}
 function fichaManual(id) {
   const f = manualDe(id);
   if (!f) return Promise.reject(Object.assign(new Error('Sin ficha manual'), { status: 404 }));
