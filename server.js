@@ -3,7 +3,7 @@
 // cuentas (_morvehtv/usuarios.json, ver perfiles.js). Sin sesión solo se ve entrar.html.
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
-import { readFile, mkdir, rm, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, stat } from 'node:fs/promises';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
 import { gzip, brotliCompress, constants as zlibC } from 'node:zlib';
@@ -460,6 +460,50 @@ async function guardarNombresAudio(req, quien) {
 const VIDEO_NATIVO = ['h264'];
 const medios = new Map();
 
+// ---------- Duración real de cada vídeo ----------
+// Para los capítulos y películas cuya ficha no dice cuánto duran (versiones internacionales,
+// fichas de Wikipedia…): se mide el propio archivo con ffprobe una sola vez y se guarda en
+// data/duraciones.json («key|tamaño» → segundos; si se cambia el archivo, se vuelve a medir)
+const ARCHIVO_DURACIONES = path.join(dir, 'data', 'duraciones.json');
+let duraciones = {};
+try { duraciones = JSON.parse(readFileSync(ARCHIVO_DURACIONES, 'utf8')); } catch {}
+let guardandoDuraciones = null;
+const claveDuracion = (key) => `${key}|${foto?.get(key)?.split(':')[0] ?? ''}`;
+const duracionDe = (key) => duraciones[claveDuracion(key)] ?? null;
+function anotarDuracion(key, segundos) {
+  if (!(segundos > 0)) return;
+  duraciones[claveDuracion(key)] = Math.round(segundos);
+  clearTimeout(guardandoDuraciones);
+  guardandoDuraciones = setTimeout(() => {
+    mkdir(path.dirname(ARCHIVO_DURACIONES), { recursive: true })
+      .then(() => writeFile(ARCHIVO_DURACIONES, JSON.stringify(duraciones)))
+      .catch((e) => console.error(`No se pudieron guardar las duraciones: ${e.message}`));
+  }, 3000);
+}
+// Cola para medir sin cargar el servidor: dos a la vez, como mucho 2000 esperando
+const porMedir = new Set();
+let midiendo = 0;
+function medirLuego(keys) {
+  for (const k of keys) if (porMedir.size < 2000 && esVideo(k) && duracionDe(k) == null && !esInterna(k)) porMedir.add(k);
+  while (midiendo < 2 && porMedir.size) {
+    const k = porMedir.values().next().value;
+    porMedir.delete(k);
+    midiendo++;
+    medio(k).then((m) => anotarDuracion(k, m.duracion)).catch(() => {}).finally(() => { midiendo--; medirLuego([]); });
+  }
+}
+// Completa la ficha con la duración real (en minutos, como la de las bases de datos)
+function conDuracion(key, r) {
+  if (!r?.encontrado || !key) return r;
+  const segundos = duracionDe(key);
+  if (r.episodio && !r.episodio.duracion) {
+    if (segundos) r.episodio.duracion = Math.max(1, Math.round(segundos / 60)); else medirLuego([key]);
+  } else if (!r.episodio && !r.duracion) {
+    if (segundos) r.duracion = Math.max(1, Math.round(segundos / 60)); else medirLuego([key]);
+  }
+  return r;
+}
+
 function medio(key) {
   if (!medios.has(key)) {
     const p = firmar(key).then(
@@ -503,7 +547,7 @@ function medio(key) {
           ),
         ),
     );
-    p.catch(() => medios.delete(key));
+    p.then((m) => anotarDuracion(key, m.duracion), () => medios.delete(key));
     medios.set(key, p);
   }
   return medios.get(key);
@@ -849,13 +893,18 @@ function eventos(req, res, cuenta) {
 }
 
 const rutas = {
-  '/api/meta': (p) => meta.deArchivo(p.get('key')),
+  '/api/meta': async (p) => conDuracion(p.get('key'), await meta.deArchivo(p.get('key'))),
   '/api/metas': async (p) => {
     const keys = p.getAll('key').slice(0, 30);
     if (keys.some((k) => prohibido(k))) throw Object.assign(new Error('No'), { status: 403 });
-    return Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await meta.deArchivo(k).catch(() => null)])));
+    return Object.fromEntries(await Promise.all(keys.map(async (k) => [k, conDuracion(k, await meta.deArchivo(k).catch(() => null))])));
   },
-  '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo'), (pre) => (foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)).length : 0)),
+  '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo'), (pre) => {
+    const videos = foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)) : [];
+    // Al abrir una temporada, se miden (en segundo plano) los capítulos que aún no tienen duración
+    medirLuego(videos);
+    return videos.length;
+  }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
   '/api/catalogo': (p) => catalogo(p.get('max')),
   // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
