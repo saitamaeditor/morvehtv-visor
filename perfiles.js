@@ -161,6 +161,29 @@ export async function claveDeColaborador(usuario, clave) {
     comprobadas.delete(usuario);
   });
 }
+// Administradores del gestor (y de la web): los del archivo y los fijos del servidor (VISOR_ADMINS,
+// que desde el gestor no se pueden quitar)
+export async function listaAdmins() {
+  const d = await leer();
+  const todos = [...new Set([...(d.admins || []), ...ADMINS_ENTORNO])];
+  return todos.map((u) => ({ usuario: u, existe: (d.cuentas || []).some((x) => x.usuario === u), fijo: ADMINS_ENTORNO.includes(u) }));
+}
+// Hacer administrador (deja de ser colaborador: ya puede con todo) o quitárselo. Con
+// «secciones», al quitarlo pasa a colaborador de esas secciones.
+export function ponerAdmin(usuario, si, { por, secciones } = {}) {
+  usuario = normalizar(usuario);
+  return cambiar((d) => {
+    if (!(d.cuentas || []).some((x) => x.usuario === usuario)) throw error(404, 'No hay ninguna cuenta de MorvehTV con ese usuario');
+    d.admins = (d.admins || []).filter((u) => u !== usuario);
+    d.colaboradores = (d.colaboradores || []).filter((x) => x.usuario !== usuario);
+    if (si) d.admins.push(usuario);
+    else {
+      if (ADMINS_ENTORNO.includes(usuario)) throw error(403, 'Este administrador está fijado en el servidor (VISOR_ADMINS): no se puede quitar desde el gestor');
+      if (![...d.admins, ...ADMINS_ENTORNO].length) throw error(409, 'Tiene que quedar al menos un administrador');
+      if (secciones?.length) d.colaboradores.push({ usuario, secciones, creado: new Date().toISOString(), por });
+    }
+  });
+}
 export const colaboradorDe = async (c) => (c ? ((await leer()).colaboradores || []).find((x) => x.usuario === c.usuario) ?? null : null);
 // Una cuenta por su id (o null), leída del archivo
 export const cuentaPorId = async (id) => ((await leer()).cuentas || []).find((x) => x.id === id) ?? null;

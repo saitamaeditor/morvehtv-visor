@@ -284,7 +284,7 @@ export async function atender(ruta, req, res, json, ip) {
   if (!admin && !colab) throw error(403, 'Esta cuenta ya no tiene acceso al gestor');
   const secciones = admin ? null : (colab.secciones || []);
   const puede = (clave) => !secciones || secciones.some((s) => String(clave).startsWith(s));
-  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|trabajo|mantenimiento)/;
+  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento)/;
   if (!admin && (SOLO_ADMIN.test(ruta) || datos.anuncio)) throw error(403, 'Eso solo lo pueden hacer los administradores');
   const fuera = () => error(403, 'No tienes permiso en esa sección');
 
@@ -295,14 +295,38 @@ export async function atender(ruta, req, res, json, ip) {
     const lista = (await p.leerAjuste('colaboradores')) ?? [];
     const conCuenta = await Promise.all(lista.map(async (x) => ({ ...x, existe: Boolean(await p.cuentaPorUsuario(x.usuario)) })));
     const todas = [...new Set([...(await foto()).keys()].filter((k) => k.includes('/')).map((k) => `${k.split('/')[0]}/`))].sort();
-    return json(res, 200, { colaboradores: conCuenta, secciones: todas });
+    return json(res, 200, { colaboradores: conCuenta, secciones: todas, admins: await p.listaAdmins(), yo: c.usuario });
+  }
+  // Administradores: dar el papel a una cuenta que ya existe, o quitárselo (a otro: uno mismo no,
+  // para no quedarse fuera; y nunca el último). Al quitarlo, con «secciones» pasa a colaborador.
+  if (ruta === '/api/panel/admins/dar') {
+    const quien = await p.cuentaPorUsuario(String(datos.usuario ?? ''));
+    if (!quien) throw error(404, 'No hay ninguna cuenta de MorvehTV con ese usuario: que se registre primero');
+    if (await p.esAdmin(quien)) throw error(409, 'Esa cuenta ya es administradora');
+    await p.ponerAdmin(quien.usuario, true, { por: c.usuario });
+    await registrar(c, ip, `hace administrador a ${quien.usuario}`);
+    return json(res, 200, { ok: true });
+  }
+  if (ruta === '/api/panel/admins/quitar') {
+    const usuario = String(datos.usuario ?? '').trim().toLowerCase();
+    if (usuario === c.usuario) throw error(409, 'No puedes quitarte a ti mismo: que lo haga otro administrador');
+    const elegidas = [...new Set((Array.isArray(datos.secciones) ? datos.secciones : []).map((x) => carpetaValida(x)).filter((x) => x.split('/').length === 2))];
+    await p.ponerAdmin(usuario, false, { por: c.usuario, secciones: elegidas });
+    await registrar(c, ip, elegidas.length ? `pasa a ${usuario} de administrador a colaborador` : `quita el permiso de administrador a ${usuario}`, elegidas.length ? elegidas : undefined);
+    return json(res, 200, { ok: true });
   }
   if (ruta === '/api/panel/colaboradores') {
     const quien = await p.cuentaPorUsuario(String(datos.usuario ?? ''));
     if (!quien) throw error(404, 'No hay ninguna cuenta de MorvehTV con ese usuario: que se registre primero');
-    if (await p.esAdmin(quien)) throw error(409, 'Esa cuenta ya es administradora');
     const elegidas = [...new Set((Array.isArray(datos.secciones) ? datos.secciones : []).map((x) => carpetaValida(x)).filter((x) => x.split('/').length === 2))];
     if (!elegidas.length) throw error(400, 'Elige al menos una sección');
+    // Un administrador que pasa a colaborador
+    if (await p.esAdmin(quien)) {
+      if (quien.usuario === c.usuario) throw error(409, 'No puedes quitarte a ti mismo el permiso de administrador');
+      await p.ponerAdmin(quien.usuario, false, { por: c.usuario, secciones: elegidas });
+      await registrar(c, ip, `pasa a ${quien.usuario} de administrador a colaborador`, elegidas);
+      return json(res, 200, { ok: true });
+    }
     const lista = ((await p.leerAjuste('colaboradores')) ?? []).filter((x) => x.usuario !== quien.usuario);
     lista.push({ usuario: quien.usuario, secciones: elegidas, creado: new Date().toISOString(), por: c.usuario });
     await p.guardarAjuste('colaboradores', lista);
@@ -312,6 +336,13 @@ export async function atender(ruta, req, res, json, ip) {
   // Crear la cuenta de un colaborador (usuario, nombre y contraseña) con sus secciones
   if (ruta === '/api/panel/colaboradores/crear') {
     const elegidas = [...new Set((Array.isArray(datos.secciones) ? datos.secciones : []).map((x) => carpetaValida(x)).filter((x) => x.split('/').length === 2))];
+    // Cuenta nueva de administrador: se crea igual y se le da el papel (sin secciones: puede con todo)
+    if (datos.rol === 'admin') {
+      const nueva = await p.crearColaborador({ usuario: datos.usuario, nombre: datos.nombre, clave: datos.clave, secciones: [], por: c.usuario });
+      await p.ponerAdmin(nueva.usuario, true, { por: c.usuario });
+      await registrar(c, ip, `crea la cuenta de administrador ${nueva.usuario}`);
+      return json(res, 200, { ok: true, usuario: nueva.usuario });
+    }
     if (!elegidas.length) throw error(400, 'Elige al menos una sección');
     const nueva = await p.crearColaborador({ usuario: datos.usuario, nombre: datos.nombre, clave: datos.clave, secciones: elegidas, por: c.usuario });
     console.log(`Panel: ${c.usuario} crea la cuenta de colaborador ${nueva.usuario}`);
