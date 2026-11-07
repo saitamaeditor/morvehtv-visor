@@ -341,7 +341,13 @@ function manualDe(clave) {
         for (const a of f.archivos ?? []) manuales.set(comparable(a), f);
       }
     } catch (e) { console.log(`fichas/fichas.json: ${e.message}`); }
-    for (const f of fichasGestor) for (const a of f.archivos ?? []) manuales.set(comparable(a), f);
+    // (si la del gestor no dice la numeración, se queda la de la del repositorio)
+    for (const f of fichasGestor) {
+      for (const a of f.archivos ?? []) {
+        const previa = manuales.get(comparable(a));
+        manuales.set(comparable(a), previa?.numeracion && !f.numeracion ? { ...f, numeracion: previa.numeracion } : f);
+      }
+    }
   }
   const nombre = comparable(nombreSolo(clave));
   // También si en la ficha se escribió sin el año («Amor de contrabando» para «… - 2014»)
@@ -379,6 +385,13 @@ function capitulosManuales(carpetaSerie, temporada) {
   if (!Array.isArray(lista)) return null;
   return lista.map((e) => ({ numero: Number(e.numero), titulo: e.titulo ?? '', sinopsis: e.sinopsis ?? '', imagen: imagenManual(e.imagen),
     fecha: e.fecha ?? null, duracion: e.duracion ?? null }));
+}
+// ¿Esta serie se subió con la numeración de la versión internacional? (lo marca el gestor al subir
+// con «📼 Versión internacional», o la ficha a mano con "numeracion": "internacional")
+function internacional(carpetaSerie, id) {
+  if (id?.internacional) return true;
+  const f = carpetaSerie && manualDe(carpetaSerie);
+  return f?.numeracion === 'internacional';
 }
 function temporadaManual(id, numero) {
   const episodios = capitulosManuales(id, numero);
@@ -519,7 +532,9 @@ export function analizar(key) {
     // (sin la extensión: el «4» de «.mp4» no es un número de episodio)
     const episodio = Number(ep?.[3] ?? ep?.[5] ?? ep?.[7] ?? archivo.replace(/\.[a-z0-9]{2,4}$/i, '').match(/(\d{1,3})/)?.[1]);
     // La carpeta de la serie manda sobre el nombre del archivo, que suele venir sin tildes
-    const nombreCarpeta = [...carpetas].reverse().find((c) => !CARPETA_SERIE.test(c) && !CARPETA_TEMPORADA.test(c));
+    // (la sección y las carpetas que solo agrupan, como «SERIES» o «NOVELAS TURCAS», no son el
+    // título; una serie que se llame «La novela de…» sí)
+    const nombreCarpeta = [...carpetas.slice(1)].reverse().find((c) => !CARPETA_TEMPORADA.test(c) && !esAgrupadora(c));
     const { anio, antes } = separarAnio(nombreCarpeta || ep?.[1] || '');
     const nombre = limpiarNombre(antes.replace(/^[¡¿]/, ''));
     if (!nombre || !episodio) return null;
@@ -645,7 +660,10 @@ export async function deArchivo(key) {
   const f = await fichaDe(id);
   if (id.tipo !== 'serie') return { encontrado: true, ...f };
 
-  const s = await temporadaDe(id, datos.temporada).catch(() => null);
+  // Versión internacional (otra numeración que la de la base de datos): sus capítulos no se
+  // corresponden con los de la ficha, así que no se cogen (salvo lo escrito a mano)
+  const inter = internacional(datos.carpeta, id);
+  const s = inter ? null : await temporadaDe(id, datos.temporada).catch(() => null);
   const deFuente = s?.episodios.find((x) => x.numero === datos.episodio);
   // Lo escrito a mano para ese capítulo manda sobre la base de datos (lo que no traiga, de ella)
   const aMano = id.fuente === 'manual' ? null : capitulosManuales(datos.carpeta, datos.temporada)?.find((x) => x.numero === datos.episodio);
@@ -653,6 +671,7 @@ export async function deArchivo(key) {
   return {
     encontrado: true,
     ...f,
+    ...(inter && { temporadas: null, numeracion: 'internacional' }),
     episodio: {
       temporada: datos.temporada,
       numero: datos.episodio,
@@ -685,17 +704,20 @@ export async function deCarpeta(prefijo, cuantos) {
     const padre = partes.slice(0, -1).join('/') + '/';
     const serie = await deCarpeta(padre);
     if (!serie?.encontrado || serie.tipo !== 'serie') return serie;
-    const id = cache.correcciones[padre] ?? cache.carpetas[padre];
-    const s = id && await temporadaDe(id, Number(numero)).catch(() => null);
+    const id = cache.correcciones[padre] ?? cache.carpetas[padre] ?? (manualDe(padre) && manualDe(padre).ficha !== false ? { fuente: 'manual', id: padre } : null);
+    // Versión internacional: la temporada es la tuya (no la de la base de datos)
+    const inter = internacional(padre, id);
+    const s = id && !inter ? await temporadaDe(id, Number(numero)).catch(() => null) : null;
+    const aMano = inter ? capitulosManuales(padre, Number(numero)) : null;
     return {
       ...serie,
       temporada: {
         numero: Number(numero),
         nombre: s?.nombre || `Temporada ${Number(numero)}`,
         sinopsis: s?.sinopsis ?? '',
-        poster: s?.poster ?? null,
-        anio: s?.anio ?? '',
-        episodios: Math.max(s?.episodios.length || 0, cuantos?.(prefijo) || 0) || null,
+        poster: s?.poster ?? (inter ? serie.poster ?? null : null),
+        anio: s?.anio ?? (inter ? serie.anio ?? '' : ''),
+        episodios: Math.max(s?.episodios.length || 0, aMano?.length || 0, cuantos?.(prefijo) || 0) || null,
         valoracion: s?.valoracion ?? null,
       },
     };
@@ -703,7 +725,8 @@ export async function deCarpeta(prefijo, cuantos) {
   const { anio, antes } = separarAnio(n);
   const tipo = partes.slice(0, -1).some((c) => CARPETA_SERIE.test(c)) ? 'serie' : null;
   const id = await identificar(prefijo, 'carpetas', { nombre: limpiarNombre(antes.replace(/^[¡¿]/, '')), tipo, anio, anime: /anime/i.test(prefijo) });
-  return id ? { encontrado: true, ...(await fichaDe(id)) } : { encontrado: false };
+  if (!id) return { encontrado: false };
+  return { encontrado: true, ...(await fichaDe(id)), ...(internacional(prefijo, id) && { temporadas: null, numeracion: 'internacional' }) };
 }
 
 // Imágenes de fondo para las categorías de la portada que aún no tienen vídeos con ficha:
@@ -741,13 +764,15 @@ export async function portadaCategoria(id) {
 
 // Elegir a mano el título correcto cuando la búsqueda automática se equivoca (de TMDB o, con
 // «otra», de otra fuente: { fuente: 'tvmaze' | 'anilist' | 'kitsu' | 'wikipedia', id })
-export function corregir(clave, tmdbId, tipo, otra) {
+// Con «internacional», la serie se subió con la numeración de la versión internacional: se queda
+// la ficha (cartel, sinopsis…) pero no los capítulos de la base de datos
+export function corregir(clave, tmdbId, tipo, otra, { internacional: inter = false } = {}) {
   const t = tipo === 'serie' ? 'serie' : 'pelicula';
+  const marca = inter && t === 'serie' ? { internacional: true } : {};
   if (otra?.fuente && otra.fuente !== 'tmdb') {
     if (!RESPALDO[otra.fuente] || otra.fuente === 'manual' || !otra.id) throw Object.assign(new Error('Fuente desconocida'), { status: 400 });
-    cache.correcciones[clave] = { fuente: otra.fuente, id: String(otra.id).slice(0, 200), tipo: t };
-    fichas.delete(`${otra.fuente}:${t}:${otra.id}`);
-  } else if (tmdbId) cache.correcciones[clave] = { tmdbId: Number(tmdbId), tipo: t };
+    cache.correcciones[clave] = { fuente: otra.fuente, id: String(otra.id).slice(0, 200), tipo: t, ...marca };
+  } else if (tmdbId) cache.correcciones[clave] = { tmdbId: Number(tmdbId), tipo: t, ...marca };
   else delete cache.correcciones[clave];
   olvidarNoEncontrado(clave);
   guardar();

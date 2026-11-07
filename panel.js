@@ -583,6 +583,7 @@ export async function atender(ruta, req, res, json, ip) {
       generos: lista(f.generos, 6), direccion: lista(f.direccion, 6), reparto: lista(f.reparto, 12),
       poster: imagen(f.poster), fondo: imagen(f.fondo), web: /^https:\/\//.test(texto(f.web, 500)) ? texto(f.web, 500) : null, fuente: texto(f.fuente, 30) || null,
       ...(Object.keys(temporadas).length && { temporadas }),
+      ...(f.tipo === 'serie' && f.numeracion === 'internacional' && { numeracion: 'internacional' }),
       // «Anunciar en Telegram» al guardar: una vez (cada vez que se marca, con otra marca)
       anunciar: f.anunciar ? new Date().toISOString() : (antes?.anunciar ?? null),
       cambiada: new Date().toISOString(), por: c.usuario,
@@ -639,7 +640,8 @@ export async function atender(ruta, req, res, json, ip) {
   if (ruta === '/api/panel/vincular') {
     const clave = claveValida(datos.clave);
     if (!puede(clave)) throw fuera();
-    return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo, datos.fuente && datos.fuente !== 'tmdb' ? { fuente: String(datos.fuente), id: datos.id } : null));
+    return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo, datos.fuente && datos.fuente !== 'tmdb' ? { fuente: String(datos.fuente), id: datos.id } : null,
+      { internacional: datos.internacional === true }));
   }
 
   // Crear carpetas (una o varias: «SERIES/Nueva/Temporada 1/»…)
