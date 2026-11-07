@@ -838,7 +838,7 @@ const rutas = {
     if (keys.some((k) => prohibido(k))) throw Object.assign(new Error('No'), { status: 403 });
     return Object.fromEntries(await Promise.all(keys.map(async (k) => [k, await meta.deArchivo(k).catch(() => null)])));
   },
-  '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo')),
+  '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo'), (pre) => (foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)).length : 0)),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
   '/api/catalogo': (p) => catalogo(p.get('max')),
   '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),

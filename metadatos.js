@@ -611,7 +611,9 @@ export async function deArchivo(key) {
       numero: datos.episodio,
       titulo: e?.titulo || `Episodio ${datos.episodio}`,
       sinopsis: e?.sinopsis ?? '',
-      imagen: e?.imagen ?? null,
+      // Sin imagen propia (capítulos que la base de datos no tiene, p. ej. de una versión doblada
+      // con otra numeración): el fondo de la serie, para que salga igual que los demás
+      imagen: e?.imagen ?? f.fondo ?? null,
       fecha: e?.fecha ?? null,
       duracion: e?.duracion ?? null,
     },
@@ -624,7 +626,9 @@ export async function deArchivo(key) {
 // Al corregir un título a mano se olvida el «no encontrado»
 export const olvidarNoEncontrado = (clave) => { for (const s of ['archivos', 'carpetas']) noEncontrados.delete(`${s}|${clave}`); };
 
-export async function deCarpeta(prefijo) {
+// `cuantos(prefijo)`: los vídeos que hay de verdad en la carpeta (si hay más que en la base de
+// datos, se dice ese número)
+export async function deCarpeta(prefijo, cuantos) {
   const partes = prefijo.replace(/\/$/, '').split('/');
   const n = partes.at(-1);
   if (partes.length < 2 || esAgrupadora(n)) return null;
@@ -644,7 +648,7 @@ export async function deCarpeta(prefijo) {
         sinopsis: s?.sinopsis ?? '',
         poster: s?.poster ?? null,
         anio: s?.anio ?? '',
-        episodios: s?.episodios.length || null,
+        episodios: Math.max(s?.episodios.length || 0, cuantos?.(prefijo) || 0) || null,
         valoracion: s?.valoracion ?? null,
       },
     };
