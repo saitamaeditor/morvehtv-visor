@@ -320,6 +320,18 @@ async function fichaWikipedia(titulo, tipo) {
 const DIR_FICHAS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fichas');
 const URL_FICHAS = () => (process.env.VISOR_URL_FICHAS || 'https://morvehtv.com/fichas').replace(/\/$/, '');
 let manuales = null;
+// Las que se escriben desde el gestor («✍️ Ficha a mano»): se guardan en e2 (archivo de cuentas)
+// y el servidor las pasa aquí al arrancar y cada vez que cambian. Mandan sobre las del repositorio.
+let fichasGestor = [];
+export function ponerFichasGestor(lista) {
+  fichasGestor = Array.isArray(lista) ? lista : [];
+  manuales = null;
+  for (const k of [...fichas.keys()]) if (k.startsWith('manual:')) fichas.delete(k);
+}
+// Las del repositorio (fichas/fichas.json), para enseñarlas en el gestor (solo lectura)
+export function fichasRepo() {
+  try { return JSON.parse(readFileSync(path.join(DIR_FICHAS, 'fichas.json'), 'utf8')).fichas ?? []; } catch { return []; }
+}
 const nombreSolo = (clave) => clave.replace(/\/$/, '').split('/').pop().replace(/\.[a-z0-9]{2,4}$/i, '');
 function manualDe(clave) {
   if (!manuales) {
@@ -329,19 +341,31 @@ function manualDe(clave) {
         for (const a of f.archivos ?? []) manuales.set(comparable(a), f);
       }
     } catch (e) { console.log(`fichas/fichas.json: ${e.message}`); }
+    for (const f of fichasGestor) for (const a of f.archivos ?? []) manuales.set(comparable(a), f);
   }
   return manuales.get(comparable(nombreSolo(clave))) ?? null;
 }
 // Fichas con «anunciar»: Telegram las anuncia (otra vez) una sola vez por cada valor distinto de
 // «anunciar». Sirve para repetir con su portada el aviso de un vídeo que se anunció sin ficha.
+// Devuelve [{ clave, keys, marca }]: «clave» es el vídeo (película) o la carpeta de la serie, y
+// «keys» sus vídeos
 export function anunciosManuales(keys) {
   manualDe('');
-  const lista = [];
+  const porMarca = new Map();
   for (const key of keys) {
-    const f = manuales.get(comparable(nombreSolo(key)));
-    if (f?.anunciar) lista.push({ key, marca: `${comparable(nombreSolo(key))}|${f.anunciar}` });
+    const partes = key.split('/');
+    // El propio vídeo o una de sus carpetas (la de la serie); nunca la sección
+    for (let i = partes.length; i >= 2; i--) {
+      const clave = i === partes.length ? key : `${partes.slice(0, i).join('/')}/`;
+      const f = manuales.get(comparable(nombreSolo(clave)));
+      if (!f?.anunciar) continue;
+      const marca = `${comparable(nombreSolo(clave))}|${f.anunciar}`;
+      if (!porMarca.has(marca)) porMarca.set(marca, { clave, keys: [], marca });
+      porMarca.get(marca).keys.push(key);
+      break;
+    }
   }
-  return lista;
+  return [...porMarca.values()];
 }
 // Capítulos escritos a mano de una serie («temporadas»: { "1": [{ numero, titulo, sinopsis,
 // imagen, duracion }] }). Valen tanto para una ficha a mano entera como para completar los

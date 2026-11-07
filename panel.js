@@ -53,7 +53,9 @@ let s3; let s3Virtual = null; let bucket; let foto; let nube; let p; let alMover
 let pagosEstado = () => 'desactivado';
 let pagos = null; // pagos.js (USDC)
 let alMantenimiento = () => {};
+let alFichas = () => {};
 export function iniciar(opciones) {
+  alFichas = opciones.alFichas ?? alFichas;
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
   s3Virtual = opciones.s3Virtual ?? null;
   alMover = opciones.alMover ?? alMover;
@@ -284,7 +286,7 @@ export async function atender(ruta, req, res, json, ip) {
   if (!admin && !colab) throw error(403, 'Esta cuenta ya no tiene acceso al gestor');
   const secciones = admin ? null : (colab.secciones || []);
   const puede = (clave) => !secciones || secciones.some((s) => String(clave).startsWith(s));
-  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento)/;
+  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento|fichas)/;
   if (!admin && (SOLO_ADMIN.test(ruta) || datos.anuncio)) throw error(403, 'Eso solo lo pueden hacer los administradores');
   const fuera = () => error(403, 'No tienes permiso en esa sección');
 
@@ -476,6 +478,88 @@ export async function atender(ruta, req, res, json, ip) {
     alMantenimiento(m);
     await registrar(c, ip, activo ? 'pone la web en mantenimiento' : 'quita el mantenimiento');
     return json(res, 200, m);
+  }
+
+  // ---------- Fichas a mano (para lo que no está en ninguna base de datos) ----------
+  // Se guardan en «fichasManuales» del archivo de cuentas y sus imágenes en _morvehtv/fichas/
+  // (se ven en morvehtv.com/fichas/…). Las del repositorio (fichas/fichas.json) solo se enseñan.
+  if (ruta === '/api/panel/fichas' && req.method === 'GET') {
+    return json(res, 200, { fichas: (await p.leerAjuste('fichasManuales')) ?? [], repo: meta.fichasRepo() });
+  }
+  if (ruta === '/api/panel/fichas/imagen') {
+    let buf; let tipo;
+    if (req.method === 'PUT') {
+      tipo = String(req.headers['content-type'] ?? '').split(';')[0];
+      const trozos = []; let largo = 0;
+      for await (const t of req) { largo += t.length; if (largo > 10 * MB) throw error(413, 'La imagen pesa más de 10 MB'); trozos.push(t); }
+      buf = Buffer.concat(trozos);
+    } else {
+      // Desde un enlace: el servidor la descarga y la guarda (así no depende de la otra web)
+      const u = (() => { try { return new URL(String(datos.url ?? '')); } catch { return null; } })();
+      if (!u || u.protocol !== 'https:') throw error(400, 'Pega un enlace https a la imagen');
+      const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (MorvehTV)' }, signal: AbortSignal.timeout(20000) }).catch(() => null);
+      if (!r?.ok) throw error(400, 'No se pudo descargar la imagen de ese enlace');
+      tipo = String(r.headers.get('content-type') ?? '').split(';')[0];
+      buf = Buffer.from(await r.arrayBuffer());
+      if (buf.length > 10 * MB) throw error(413, 'La imagen pesa más de 10 MB');
+    }
+    const ext = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[tipo];
+    if (!ext || !buf?.length) throw error(415, 'Tiene que ser una imagen JPG, PNG o WebP');
+    const base = String(url.searchParams.get('nombre') ?? datos.nombre ?? 'imagen').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'imagen';
+    const nombre = `${base}-${randomUUID().slice(0, 8)}.${ext}`;
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `_morvehtv/fichas/${nombre}`, Body: buf, ContentType: tipo }));
+    return json(res, 200, { nombre, url: `${String(process.env.VISOR_URL_FICHAS || 'https://morvehtv.com/fichas').replace(/\/$/, '')}/${nombre}` });
+  }
+  if (ruta === '/api/panel/fichas/guardar') {
+    const f = datos.ficha ?? {};
+    const texto = (t, n) => String(t ?? '').trim().slice(0, n);
+    const lista = (x, n) => (Array.isArray(x) ? x : String(x ?? '').split(',')).map((s) => texto(s, 80)).filter(Boolean).slice(0, n);
+    const imagen = (x) => { const v = texto(x, 500); return !v ? null : /^https:\/\//.test(v) || /^[\w.-]+\.(jpe?g|png|webp)$/i.test(v) ? v : null; };
+    const numero = (x, max) => { const n = Math.floor(Number(x)); return Number.isFinite(n) && n >= 0 && n <= max ? n : null; };
+    const archivos = (Array.isArray(f.archivos) ? f.archivos : [f.archivos]).map((a) => texto(a, 200).replace(/\/$/, '').split('/').pop().replace(/\.(mp4|m4v|mkv|webm|mov|avi|ts|wmv|flv)$/i, '')).filter(Boolean).slice(0, 10);
+    if (!archivos.length) throw error(400, 'Escribe el nombre del vídeo o de la carpeta de la serie');
+    const soloCapitulos = f.ficha === false;
+    const titulo = texto(f.titulo, 150);
+    if (!titulo && !soloCapitulos) throw error(400, 'Escribe el título');
+    const temporadas = {};
+    for (const [n, eps] of Object.entries(f.temporadas ?? {})) {
+      const t = numero(n, 99);
+      if (t == null || !Array.isArray(eps)) continue;
+      const caps = eps.slice(0, 1000).map((e) => ({ numero: numero(e.numero, 9999), titulo: texto(e.titulo, 200), sinopsis: texto(e.sinopsis, 2000),
+        ...(imagen(e.imagen) && { imagen: imagen(e.imagen) }), ...(numero(e.duracion, 999) && { duracion: numero(e.duracion, 999) }) }))
+        .filter((e) => e.numero != null);
+      if (caps.length) temporadas[String(t)] = caps;
+    }
+    const todas = (await p.leerAjuste('fichasManuales')) ?? [];
+    const antes = todas.find((x) => x.id === f.id);
+    const nueva = {
+      id: antes?.id ?? randomUUID(), archivos, tipo: f.tipo === 'serie' ? 'serie' : 'pelicula', ...(soloCapitulos && { ficha: false }),
+      titulo, anio: texto(f.anio, 4).replace(/\D/g, ''), sinopsis: texto(f.sinopsis, 3000), duracion: numero(f.duracion, 999),
+      generos: lista(f.generos, 6), direccion: lista(f.direccion, 6), reparto: lista(f.reparto, 12),
+      poster: imagen(f.poster), fondo: imagen(f.fondo), web: /^https:\/\//.test(texto(f.web, 500)) ? texto(f.web, 500) : null, fuente: texto(f.fuente, 30) || null,
+      ...(Object.keys(temporadas).length && { temporadas }),
+      // «Anunciar en Telegram» al guardar: una vez (cada vez que se marca, con otra marca)
+      anunciar: f.anunciar ? new Date().toISOString() : (antes?.anunciar ?? null),
+      cambiada: new Date().toISOString(), por: c.usuario,
+    };
+    // Que ningún otro nombre quede repetido en otra ficha
+    const resto = todas.filter((x) => x.id !== nueva.id).map((x) => ({ ...x, archivos: (x.archivos ?? []).filter((a) => !archivos.some((b) => b.toLowerCase() === a.toLowerCase())) })).filter((x) => x.archivos.length);
+    const guardadas = [...resto, nueva];
+    await p.guardarAjuste('fichasManuales', guardadas);
+    alFichas(guardadas);
+    await registrar(c, ip, `${antes ? 'cambia' : 'crea'} la ficha a mano de «${titulo || archivos[0]}»`);
+    return json(res, 200, { ficha: nueva });
+  }
+  if (ruta === '/api/panel/fichas/borrar') {
+    const todas = (await p.leerAjuste('fichasManuales')) ?? [];
+    const f = todas.find((x) => x.id === datos.id);
+    if (!f) throw error(404, 'Esa ficha ya no existe');
+    const guardadas = todas.filter((x) => x.id !== datos.id);
+    await p.guardarAjuste('fichasManuales', guardadas);
+    alFichas(guardadas);
+    await registrar(c, ip, `borra la ficha a mano de «${f.titulo || f.archivos[0]}»`);
+    return json(res, 200, { ok: true });
   }
 
   // Elegir el título antes de subirlo: buscar por nombre o IMDb y su ficha con los capítulos

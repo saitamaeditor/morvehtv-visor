@@ -401,11 +401,12 @@ export async function repaso(foto) {
     if (!datos.ultimo) { datos.ultimo = masNueva || Date.now(); await guardarDatos(); estado = 'ok'; return; }
     // Avisos que se piden a mano desde fichas/fichas.json («anunciar»): una sola vez cada uno
     datos.anunciados = datos.anunciados ?? [];
-    for (const { key, marca } of meta.anunciosManuales(videos.map((v) => v.key))) {
+    for (const { clave, keys, marca } of meta.anunciosManuales(videos.map((v) => v.key))) {
       if (datos.anunciados.includes(marca)) continue;
-      const v = videos.find((x) => x.key === key);
-      const carpeta = `${key.split('/')[0]}/`;
-      const m = await mensaje(carpeta, key, [v]);
+      const vs = videos.filter((x) => keys.includes(x.key)).sort((a, b) => a.key.localeCompare(b.key, 'es', { numeric: true }));
+      const key = clave;
+      const carpeta = `${clave.split('/')[0]}/`;
+      const m = await mensaje(carpeta, clave, vs);
       let tema = datos.temas[carpeta] ?? await crearTema(carpeta);
       try { await enviar(tema, m); } catch (e) {
         if (!/thread|topic/i.test(e.message)) throw e;

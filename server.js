@@ -87,6 +87,22 @@ const s3Virtual = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(E2_BUCKET) && process
   })
   : null;
 perfiles.iniciar(s3, E2_BUCKET, acceso.NUBE);
+// Fichas a mano escritas desde el gestor: al arrancar y cada 5 minutos (por si cambian en otro servidor)
+const cargarFichasGestor = () => perfiles.leerAjuste('fichasManuales').then((l) => meta.ponerFichasGestor(l ?? [])).catch(() => {});
+cargarFichasGestor();
+setInterval(cargarFichasGestor, 300000).unref();
+// Sus imágenes viven en e2 (_morvehtv/fichas/); se guardan en memoria al pedirlas
+const imagenesFichas = new Map();
+async function imagenFichaE2(nombre) {
+  if (imagenesFichas.has(nombre)) return imagenesFichas.get(nombre);
+  try {
+    const r = await s3.send(new GetObjectCommand({ Bucket: E2_BUCKET, Key: `_morvehtv/fichas/${nombre}` }));
+    const img = { buf: Buffer.from(await r.Body.transformToByteArray()), tipo: r.ContentType || tipos[path.extname(nombre).toLowerCase()] || 'image/jpeg' };
+    if (imagenesFichas.size > 200) imagenesFichas.delete(imagenesFichas.keys().next().value);
+    imagenesFichas.set(nombre, img);
+    return img;
+  } catch { return null; }
+}
 // Render apaga el servidor a menudo: antes se guarda el progreso pendiente de cada perfil
 for (const senal of ['SIGTERM', 'SIGINT']) {
   process.once(senal, () => perfiles.guardarPendiente().finally(() => process.exit(0)));
@@ -105,6 +121,7 @@ xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; },
 // API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
 panel.iniciar({ s3, s3Virtual, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos,
   // Al poner o quitar el mantenimiento desde el gestor, las páginas abiertas se recargan al momento
+  alFichas: (lista) => meta.ponerFichasGestor(lista),
   alMantenimiento: (m) => { mantenimiento = m; mantenimientoLeido = Date.now(); avisar('mantenimiento', { activo: m.activo }); } });
 
 // ---------- Web en mantenimiento ----------
@@ -1055,7 +1072,14 @@ http
       if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Carátulas de las fichas escritas a mano (públicas: Telegram las descarga para sus avisos)
       const imagenFicha = url.pathname.match(/^\/fichas\/([\w.-]+\.(?:jpe?g|png|webp))$/i);
-      if (imagenFicha) return await servirFijo(req, res, path.join(dir, 'fichas', imagenFicha[1]), tipos[path.extname(imagenFicha[1]).toLowerCase()], 'public, max-age=86400');
+      if (imagenFicha) {
+        const local = path.join(dir, 'fichas', imagenFicha[1]);
+        if (existsSync(local)) return await servirFijo(req, res, local, tipos[path.extname(imagenFicha[1]).toLowerCase()], 'public, max-age=86400');
+        const img = await imagenFichaE2(imagenFicha[1]);
+        if (!img) return json(res, 404, { error: 'No existe' });
+        res.writeHead(200, { 'content-type': img.tipo, 'content-length': img.buf.length, 'cache-control': 'public, max-age=86400' });
+        return res.end(img.buf);
+      }
       const cuenta = PUBLICO.includes(url.pathname) ? null : await perfiles.sesion(req);
       if (!PUBLICO.includes(url.pathname) && !cuenta) {
         // Para ver qué piden las apps externas que no aciertan con las direcciones de Xtream (solo la
