@@ -368,7 +368,8 @@ function fichaManual(id) {
     titulo: f.titulo, tituloOriginal: f.tituloOriginal ?? f.titulo, sinopsis: f.sinopsis ?? '',
     anio: String(f.anio ?? ''), duracion: f.duracion ?? null, generos: f.generos ?? [], valoracion: f.valoracion ?? null,
     poster: imagen(f.poster), fondo: imagen(f.fondo), reparto: f.reparto ?? [], direccion: f.direccion ?? [],
-    creadores: f.creadores ?? [], temporadas: f.temporadas ?? null, trailer: f.trailer ?? null, web: f.web ?? null,
+    creadores: f.creadores ?? [], temporadas: f.temporadas ? Object.keys(f.temporadas).filter((n) => Number(n) > 0).length || null : null,
+    trailer: f.trailer ?? null, web: f.web ?? null,
   });
 }
 
@@ -633,7 +634,7 @@ export async function deArchivo(key) {
       sinopsis: e?.sinopsis ?? '',
       // Sin imagen propia (capítulos que la base de datos no tiene, p. ej. de una versión doblada
       // con otra numeración): el fondo de la serie, para que salga igual que los demás
-      imagen: e?.imagen ?? f.fondo ?? null,
+      imagen: e?.imagen ?? f.fondo ?? f.poster ?? null,
       fecha: e?.fecha ?? null,
       duracion: e?.duracion ?? null,
     },

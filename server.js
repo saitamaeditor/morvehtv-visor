@@ -841,8 +841,19 @@ const rutas = {
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo'), (pre) => (foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)).length : 0)),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
   '/api/catalogo': (p) => catalogo(p.get('max')),
-  '/api/tmdb-buscar': (p) => meta.buscar(p.get('q'), p.get('tipo') || undefined),
-  '/api/corregir': (p) => meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo')),
+  // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
+  '/api/tmdb-buscar': async (p, req, quien) => {
+    if (!quien.admin) throw Object.assign(new Error('Solo los administradores pueden corregir fichas'), { status: 403 });
+    const fuente = p.get('fuente') || 'tmdb';
+    if (fuente === 'tmdb') return meta.buscar(p.get('q'), p.get('tipo') || undefined);
+    const lista = await meta.buscarParaSubir(String(p.get('q') ?? ''), fuente);
+    return p.get('tipo') ? lista.filter((r) => r.tipo === p.get('tipo')) : lista;
+  },
+  '/api/corregir': (p, req, quien) => {
+    if (!quien.admin) throw Object.assign(new Error('Solo los administradores pueden corregir fichas'), { status: 403 });
+    const fuente = p.get('fuente') || 'tmdb';
+    return meta.corregir(meta.claveDe(p.get('key')), p.get('tmdbId'), p.get('tipo'), fuente !== 'tmdb' ? { fuente, id: p.get('id') } : null);
+  },
   '/api/hls': (p, req, quien) => { defensa.permitirVideo(quien.cuenta, quien.ip, p.get('key'), quien.admin); return hlsIniciar(p, quien); },
   '/api/hls-parar': (p) => hlsParar(p.get('id')),
   '/api/medio': async (p) => ({ ...(await medio(p.get('key'))), nombresAudio: await nombresAudioDe(p.get('key') ?? ''), audioNativo: AUDIO_NATIVO, videoNativo: VIDEO_NATIVO }),

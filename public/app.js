@@ -785,24 +785,28 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     }
     cuerpo.append(tec);
   }
-  if (clave && d) cuerpo.append(corrector(clave, d));
+  if (clave && d && typeof yo !== 'undefined' && yo && yo.admin) cuerpo.append(corrector(clave, d));
   return f;
 }
 
 // «¿No es esta?»: busca en TMDB y guarda el título correcto para este vídeo o serie
 function corrector(clave, d) {
   const caja = el('details', 'corrector');
-  caja.append(el('summary', null, d.encontrado ? '¿No es esta? Corregir' : '🔎 Buscar en TMDB'));
+  caja.append(el('summary', null, d.encontrado ? '¿No es esta? Corregir' : '🔎 Buscar la ficha'));
   const fila = el('div', 'chips');
   const q = el('input'); q.type = 'search'; q.placeholder = 'Título…'; q.value = d.encontrado ? '' : (d.buscado ?? '');
   const sel = el('select');
   sel.append(new Option('Película o serie', ''), new Option('Película', 'pelicula'), new Option('Serie', 'serie'));
+  // Dónde buscar: TMDB o las demás fuentes (series y programas, anime, Wikipedia)
+  const fuente = el('select');
+  [['tmdb', 'TMDB'], ['tvmaze', 'TVmaze (series y programas)'], ['anilist', 'AniList (anime)'], ['kitsu', 'Kitsu (anime)'], ['wikipedia', 'Wikipedia']]
+    .forEach(([v, t]) => fuente.append(new Option(t, v)));
   const b = el('button', 'boton', 'Buscar');
   const res = el('div', 'resultados');
-  fila.append(q, sel, b);
+  fila.append(q, sel, fuente, b);
   caja.append(fila, res);
   const elegir = async (r) => {
-    await api('/api/corregir', { key: clave, tmdbId: r.tmdbId, tipo: r.tipo });
+    await api('/api/corregir', { key: clave, tmdbId: r.tmdbId ?? '', tipo: r.tipo, fuente: r.fuente || 'tmdb', id: r.id ?? '' });
     metas.clear();
     aviso(`Guardado: ${r.titulo}`);
     if (actual >= 0) abrir(actual); else pintarCabecera(estado.prefijo);
@@ -811,13 +815,13 @@ function corrector(clave, d) {
   b.onclick = async () => {
     res.textContent = 'Buscando…';
     try {
-      const lista = await api('/api/tmdb-buscar', { q: q.value, tipo: sel.value });
+      const lista = await api('/api/tmdb-buscar', { q: q.value, tipo: sel.value, fuente: fuente.value });
       res.innerHTML = '';
       if (!lista.length) res.textContent = 'Sin resultados.';
       for (const r of lista.slice(0, 12)) {
         const o = el('button', 'resultado');
         if (r.poster) { const i = el('img'); i.src = r.poster; i.alt = ''; o.append(i); }
-        o.append(el('span', null, `${r.titulo}${r.anio ? ` (${r.anio})` : ''} · ${r.tipo === 'serie' ? 'Serie' : 'Película'}`));
+        o.append(el('span', null, `${r.titulo}${r.anio ? ` (${r.anio})` : ''} · ${r.tipo === 'serie' ? 'Serie' : 'Película'}${r.fuente && r.fuente !== 'tmdb' ? ` · ${fuente.options[fuente.selectedIndex].text.split(' (')[0]}` : ''}`));
         o.onclick = () => elegir(r);
         res.append(o);
       }
