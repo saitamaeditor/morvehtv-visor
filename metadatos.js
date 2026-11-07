@@ -343,7 +343,9 @@ function manualDe(clave) {
     } catch (e) { console.log(`fichas/fichas.json: ${e.message}`); }
     for (const f of fichasGestor) for (const a of f.archivos ?? []) manuales.set(comparable(a), f);
   }
-  return manuales.get(comparable(nombreSolo(clave))) ?? null;
+  const nombre = comparable(nombreSolo(clave));
+  // También si en la ficha se escribió sin el año («Amor de contrabando» para «… - 2014»)
+  return manuales.get(nombre) ?? manuales.get(nombre.replace(/\s+(?:19|20)\d\d$/, '')) ?? null;
 }
 // Fichas con «anunciar»: Telegram las anuncia (otra vez) una sola vez por cada valor distinto de
 // «anunciar». Sirve para repetir con su portada el aviso de un vídeo que se anunció sin ficha.
@@ -357,7 +359,7 @@ export function anunciosManuales(keys) {
     // El propio vídeo o una de sus carpetas (la de la serie); nunca la sección
     for (let i = partes.length; i >= 2; i--) {
       const clave = i === partes.length ? key : `${partes.slice(0, i).join('/')}/`;
-      const f = manuales.get(comparable(nombreSolo(clave)));
+      const f = manualDe(clave);
       if (!f?.anunciar) continue;
       const marca = `${comparable(nombreSolo(clave))}|${f.anunciar}`;
       if (!porMarca.has(marca)) porMarca.set(marca, { clave, keys: [], marca });
