@@ -1623,6 +1623,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       navegacionReproductor(caja, i);
       // Plan Básico: pausas publicitarias durante el vídeo y anuncio pequeño al pausar
       if (typeof anunciosDelReproductor === 'function') anunciosDelReproductor(caja);
+      avisoDelReproductor(caja);
       enfocarVisor();
       const d = await pedirMeta('archivo', f.key);
       if (actual === i) c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key }));
@@ -1742,6 +1743,38 @@ function actualizarFlechas(i) {
 }
 
 // En el reproductor: botones ⏮ ⏭ junto a los de 10 s y, al final de cada capítulo, la tarjeta
+// ---------- Avisos propios en el reproductor ----------
+// Mensajes de MorvehTV (Telegram, novedades, mantenimientos…) que se escriben en el gestor. Al
+// empezar a ver algo sale uno en una tarjeta pequeña abajo a la izquierda; se va sola a los 10 s
+// o con la ✕. Como mucho uno cada 10 minutos en cada aparato, y sin quitar el foco al mando.
+let avisosCargados = null;
+function avisoDelReproductor(caja) {
+  let ultimo = 0; let turno = 0;
+  try { ultimo = Number(localStorage.getItem('aviso-reproductor-hora')) || 0; turno = Number(localStorage.getItem('aviso-reproductor-turno')) || 0; } catch {}
+  if (Date.now() - ultimo < 600000) return;
+  avisosCargados = avisosCargados || api('/api/avisos-reproductor').catch(() => []);
+  const v = caja.querySelector('video');
+  if (!v) return;
+  v.addEventListener('playing', async () => {
+    const lista = await avisosCargados;
+    if (!lista?.length || !caja.isConnected) return;
+    const aviso = lista[turno % lista.length];
+    try { localStorage.setItem('aviso-reproductor-hora', String(Date.now())); localStorage.setItem('aviso-reproductor-turno', String(turno + 1)); } catch {}
+    const t = el('div', 'aviso-repro');
+    t.append(el('span', 'texto', aviso.texto));
+    if (aviso.enlace) {
+      const ir = el('a', 'boton', aviso.boton || 'Abrir');
+      ir.href = aviso.enlace; ir.target = '_blank'; ir.rel = 'noopener';
+      t.append(ir);
+    }
+    const cerrar = boton('boton cerrar', '✕', 'Cerrar el aviso');
+    cerrar.onclick = () => t.remove();
+    t.append(cerrar);
+    caja.append(t);
+    setTimeout(() => t.remove(), 10000);
+  }, { once: true });
+}
+
 // «Saltar intro»: el servidor sabe dónde está la intro de cada capítulo (la busca comparando el
 // audio de los capítulos de la temporada). Mientras suena, sale el botón; al pulsarlo, salta al
 // final de la intro. Si aún la está buscando, se vuelve a preguntar cada 30 s (unos minutos).

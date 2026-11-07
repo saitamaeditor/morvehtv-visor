@@ -89,7 +89,12 @@ const s3Virtual = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/.test(E2_BUCKET) && process
   : null;
 perfiles.iniciar(s3, E2_BUCKET, acceso.NUBE);
 // Fichas a mano escritas desde el gestor: al arrancar y cada 5 minutos (por si cambian en otro servidor)
-const cargarFichasGestor = () => perfiles.leerAjuste('fichasManuales').then((l) => meta.ponerFichasGestor(l ?? [])).catch(() => {});
+// Avisos propios del reproductor (los escribe el gestor): en memoria, al arrancar y cada 5 minutos
+let avisosReproductor = [];
+const cargarFichasGestor = () => Promise.all([
+  perfiles.leerAjuste('fichasManuales').then((l) => meta.ponerFichasGestor(l ?? [])),
+  perfiles.leerAjuste('avisosReproductor').then((l) => { avisosReproductor = l ?? []; }),
+]).catch(() => {});
 cargarFichasGestor();
 setInterval(cargarFichasGestor, 300000).unref();
 // Sus imágenes viven en e2 (_morvehtv/fichas/); se guardan en memoria al pedirlas
@@ -123,6 +128,7 @@ xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; },
 panel.iniciar({ s3, s3Virtual, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos,
   // Al poner o quitar el mantenimiento desde el gestor, las páginas abiertas se recargan al momento
   alFichas: (lista) => meta.ponerFichasGestor(lista),
+  alAvisos: (lista) => { avisosReproductor = lista; },
   alMantenimiento: (m) => { mantenimiento = m; mantenimientoLeido = Date.now(); avisar('mantenimiento', { activo: m.activo }); } });
 
 // ---------- Web en mantenimiento ----------
@@ -1030,6 +1036,8 @@ function eventos(req, res, cuenta) {
 }
 
 const rutas = {
+  // Avisos del reproductor activos (texto y enlace; sin datos de nadie)
+  '/api/avisos-reproductor': () => avisosReproductor.filter((a) => a.activo).map(({ id, texto, enlace, boton }) => ({ id, texto, enlace, boton })),
   '/api/meta': async (p) => conDuracion(p.get('key'), await meta.deArchivo(p.get('key'))),
   '/api/metas': async (p) => {
     const keys = p.getAll('key').slice(0, 30);

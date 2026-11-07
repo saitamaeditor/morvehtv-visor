@@ -54,8 +54,10 @@ let pagosEstado = () => 'desactivado';
 let pagos = null; // pagos.js (USDC)
 let alMantenimiento = () => {};
 let alFichas = () => {};
+let alAvisos = () => {};
 export function iniciar(opciones) {
   alFichas = opciones.alFichas ?? alFichas;
+  alAvisos = opciones.alAvisos ?? alAvisos;
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
   s3Virtual = opciones.s3Virtual ?? null;
   alMover = opciones.alMover ?? alMover;
@@ -286,7 +288,7 @@ export async function atender(ruta, req, res, json, ip) {
   if (!admin && !colab) throw error(403, 'Esta cuenta ya no tiene acceso al gestor');
   const secciones = admin ? null : (colab.secciones || []);
   const puede = (clave) => !secciones || secciones.some((s) => String(clave).startsWith(s));
-  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento|fichas)/;
+  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento|fichas|avisos)/;
   if (!admin && (SOLO_ADMIN.test(ruta) || datos.anuncio)) throw error(403, 'Eso solo lo pueden hacer los administradores');
   const fuera = () => error(403, 'No tienes permiso en esa sección');
 
@@ -478,6 +480,25 @@ export async function atender(ruta, req, res, json, ip) {
     alMantenimiento(m);
     await registrar(c, ip, activo ? 'pone la web en mantenimiento' : 'quita el mantenimiento');
     return json(res, 200, m);
+  }
+
+  // ---------- Avisos del reproductor ----------
+  // Mensajes propios (Telegram, novedades, mantenimientos…) que salen en una tarjeta al empezar
+  // un vídeo. No son publicidad de nadie: ni redes de anuncios ni pagos. Los ve todo el mundo.
+  if (ruta === '/api/panel/avisos' && req.method === 'GET') return json(res, 200, { avisos: (await p.leerAjuste('avisosReproductor')) ?? [] });
+  if (ruta === '/api/panel/avisos') {
+    const https = (u) => { try { return new URL(u).protocol === 'https:' ? String(u).slice(0, 500) : null; } catch { return null; } };
+    const lista = (Array.isArray(datos.avisos) ? datos.avisos : []).slice(0, 20).map((a) => ({
+      id: String(a.id || randomUUID()).slice(0, 40),
+      texto: String(a.texto ?? '').trim().slice(0, 160),
+      enlace: a.enlace ? https(a.enlace) : null,
+      boton: String(a.boton ?? '').trim().slice(0, 24) || null,
+      activo: a.activo !== false,
+    })).filter((a) => a.texto);
+    await p.guardarAjuste('avisosReproductor', lista);
+    alAvisos(lista);
+    await registrar(c, ip, `guarda los avisos del reproductor (${lista.filter((a) => a.activo).length} activos)`);
+    return json(res, 200, { avisos: lista });
   }
 
   // ---------- Fichas a mano (para lo que no está en ninguna base de datos) ----------
