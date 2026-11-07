@@ -825,7 +825,14 @@ async function repasar() {
   foto = ahora;
   if (!antes || hayCambios) huella = huellaDe(ahora);
   telegram.repaso(ahora); // por su cuenta: no frena los repasos
+  // Al arrancar (un minuto después, sin prisa): la duración de los vídeos que aún no la tienen
+  if (!antes) setTimeout(() => medirLuego([...ahora.keys()]), 60000).unref();
   if (!antes || !hayCambios) return;
+  // Cada vídeo que se acaba de subir (o se ha cambiado): su duración y su miniatura al momento,
+  // sin esperar a que alguien lo abra
+  const videosNuevos = [...nuevos, ...cambiados].filter((k) => esVideo(k));
+  medirLuego(videosNuevos);
+  for (const k of videosNuevos.slice(0, 300)) miniatura(k).catch(() => {});
   console.log(`Cambios en e2: ${nuevos.length} nuevos, ${cambiados.length} cambiados, ${borrados.length} borrados`);
   const total = nuevos.length + cambiados.length + borrados.length;
   avisar('cambios', total > MAX_AVISO
