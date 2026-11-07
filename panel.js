@@ -511,6 +511,50 @@ export async function atender(ruta, req, res, json, ip) {
     await s3.send(new PutObjectCommand({ Bucket: bucket, Key: `_morvehtv/fichas/${nombre}`, Body: buf, ContentType: tipo }));
     return json(res, 200, { nombre, url: `${String(process.env.VISOR_URL_FICHAS || 'https://morvehtv.com/fichas').replace(/\/$/, '')}/${nombre}` });
   }
+  // Los capítulos que ya hay subidos de una serie (por el nombre de su carpeta, esté en la sección
+  // que esté), con el título del archivo si lo trae y lo que diga la ficha actual (resumen…)
+  if (ruta === '/api/panel/fichas/detectar') {
+    const nombre = String(url.searchParams.get('nombre') ?? '').trim();
+    if (!nombre) throw error(400, 'Escribe primero el nombre de la carpeta de la serie');
+    const norm = (t) => String(t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const sinAnio = (t) => t.replace(/\s+(?:19|20)\d\d$/, '');
+    const buscado = norm(nombre.replace(/\/$/, '').split('/').pop());
+    const ES_VIDEO = /\.(mp4|m4v|mkv|webm|mov|avi|ts|wmv|flv)$/i;
+    const carpetas = new Map();
+    for (const k of (await foto()).keys()) {
+      if (interna(k) || !ES_VIDEO.test(k)) continue;
+      const partes = k.split('/');
+      for (let i = 1; i < partes.length - 1; i++) {
+        const n = norm(partes[i]);
+        if (n !== buscado && sinAnio(n) !== sinAnio(buscado)) continue;
+        const pre = `${partes.slice(0, i + 1).join('/')}/`;
+        if (!carpetas.has(pre)) carpetas.set(pre, []);
+        carpetas.get(pre).push(k);
+        break;
+      }
+    }
+    if (!carpetas.size) throw error(404, `No hay ninguna carpeta llamada «${nombre}» con vídeos en e2`);
+    const [carpeta, keys] = [...carpetas].sort((a, b) => b[1].length - a[1].length)[0];
+    const temporadas = {};
+    const generico = (t) => !t || /^(?:episodio|episode|cap[ií]tulo)\s*\d+$/i.test(t.trim());
+    for (const k of keys.sort((a, b) => a.localeCompare(b, 'es', { numeric: true }))) {
+      const d = meta.analizar(k);
+      if (!d?.episodio) continue;
+      const delArchivo = k.split('/').pop().match(/(?:S\d{1,2}\s*E\d{1,4}|\d{1,2}x\d{2,4})\s*-\s*(.+)\.[a-z0-9]{2,4}$/i)?.[1]?.trim();
+      const m = await meta.deArchivo(k).catch(() => null);
+      const titulo = !generico(delArchivo) ? delArchivo : !generico(m?.episodio?.titulo) ? m.episodio.titulo : '';
+      const lista = (temporadas[d.temporada] = temporadas[d.temporada] || []);
+      if (!lista.some((e) => e.numero === d.episodio)) lista.push({ numero: d.episodio, titulo, sinopsis: m?.episodio?.sinopsis ?? '' });
+    }
+    // Huecos: los números que faltan entre el 1 y el último de cada temporada
+    const faltan = [];
+    for (const [t, eps] of Object.entries(temporadas)) {
+      eps.sort((a, b) => a.numero - b.numero);
+      const hay = new Set(eps.map((e) => e.numero));
+      for (let n = 1; n <= eps.at(-1).numero; n++) if (!hay.has(n)) faltan.push(`T${t}E${n}`);
+    }
+    return json(res, 200, { carpeta, nombre: carpeta.replace(/\/$/, '').split('/').pop(), temporadas, total: Object.values(temporadas).reduce((s, x) => s + x.length, 0), faltan });
+  }
   if (ruta === '/api/panel/fichas/guardar') {
     const f = datos.ficha ?? {};
     const texto = (t, n) => String(t ?? '').trim().slice(0, n);
