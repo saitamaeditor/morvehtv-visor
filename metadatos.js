@@ -3,7 +3,9 @@
 // MorvehTV) y guarda lo encontrado en data/metadatos.json, así cada archivo nuevo se busca
 // una sola vez. Es una caché local: no toca el catálogo de MorvehTV.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Se leen al usarlas: server.js carga el .env después de importar este módulo
 const tmdbKey = () => process.env.TMDB_KEY ?? '';
@@ -270,7 +272,41 @@ async function fichaWikipedia(titulo, tipo) {
   };
 }
 
+// Fichas escritas a mano (fichas/fichas.json) para lo que no está en ninguna base de datos: un
+// documental que TMDB no tiene, por ejemplo. Valen para los vídeos (o carpetas de serie) con ese
+// nombre, estén en la carpeta que estén. Las imágenes están en fichas/ y se sirven en /fichas/…
+// con la dirección completa, para que también las pueda descargar Telegram.
+const DIR_FICHAS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fichas');
+const URL_FICHAS = () => (process.env.VISOR_URL_FICHAS || 'https://morvehtv.com/fichas').replace(/\/$/, '');
+let manuales = null;
+const nombreSolo = (clave) => clave.replace(/\/$/, '').split('/').pop().replace(/\.[a-z0-9]{2,4}$/i, '');
+function manualDe(clave) {
+  if (!manuales) {
+    manuales = new Map();
+    try {
+      for (const f of JSON.parse(readFileSync(path.join(DIR_FICHAS, 'fichas.json'), 'utf8')).fichas ?? []) {
+        for (const a of f.archivos ?? []) manuales.set(comparable(a), f);
+      }
+    } catch (e) { console.log(`fichas/fichas.json: ${e.message}`); }
+  }
+  return manuales.get(comparable(nombreSolo(clave))) ?? null;
+}
+function fichaManual(id) {
+  const f = manualDe(id);
+  if (!f) return Promise.reject(Object.assign(new Error('Sin ficha manual'), { status: 404 }));
+  const imagen = (x) => (!x ? null : /^https?:\/\//.test(x) ? x : `${URL_FICHAS()}/${encodeURIComponent(x)}`);
+  return Promise.resolve({
+    // «fuente» es el texto del botón que abre «web» (p. ej. «FilmAffinity ↗»)
+    tipo: f.tipo === 'serie' ? 'serie' : 'pelicula', fuente: f.fuente || 'MorvehTV', id,
+    titulo: f.titulo, tituloOriginal: f.tituloOriginal ?? f.titulo, sinopsis: f.sinopsis ?? '',
+    anio: String(f.anio ?? ''), duracion: f.duracion ?? null, generos: f.generos ?? [], valoracion: f.valoracion ?? null,
+    poster: imagen(f.poster), fondo: imagen(f.fondo), reparto: f.reparto ?? [], direccion: f.direccion ?? [],
+    creadores: f.creadores ?? [], temporadas: f.temporadas ?? null, trailer: f.trailer ?? null, web: f.web ?? null,
+  });
+}
+
 const RESPALDO = {
+  manual: { buscar: async () => [], ficha: fichaManual },
   tvmaze: { buscar: async (q, tipo) => (tipo === 'pelicula' ? [] : buscarTvmaze(q)), ficha: (id) => fichaTvmaze(id) },
   anilist: { buscar: buscarAnilist, ficha: fichaAnilist },
   wikipedia: { buscar: buscarWikipedia, ficha: fichaWikipedia },
@@ -483,6 +519,7 @@ const buscando = new Map(); // `${seccion}|${clave}` → promesa
 const noEncontrados = new Map(); // `${seccion}|${clave}` → hasta cuándo
 async function identificar(clave, seccion, datos) {
   if (cache.correcciones[clave]) return cache.correcciones[clave];
+  if (manualDe(clave)) return { fuente: 'manual', id: clave, tipo: manualDe(clave).tipo === 'serie' ? 'serie' : 'pelicula' };
   if (clave in cache[seccion]) return cache[seccion][clave];
   const id = `${seccion}|${clave}`;
   if (noEncontrados.get(id) > Date.now()) return null;

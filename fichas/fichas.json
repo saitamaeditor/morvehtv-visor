@@ -1,0 +1,20 @@
+{
+  "_nota": "Fichas escritas a mano para lo que no está en TMDB ni en las otras fuentes. Cada una vale para los vídeos cuyo nombre (sin carpeta ni extensión) esté en «archivos». Las imágenes van en esta carpeta y se sirven en https://morvehtv.com/fichas/…",
+  "fichas": [
+    {
+      "archivos": ["Informe Plus Toni Bou 40 de 40 - 2026"],
+      "tipo": "pelicula",
+      "titulo": "Informe+. Toni Bou, 40 de 40",
+      "anio": "2026",
+      "sinopsis": "Muestra la asombrosa longevidad deportiva y la fortaleza mental del deportista español más laureado de todos los tiempos. Hace poco más de un mes conquistó su cuadragésimo título mundial, tras adaptar su pilotaje para seguir compitiendo al máximo nivel pese a una grave lesión en su hombro derecho.",
+      "duracion": 64,
+      "generos": ["Documental"],
+      "direccion": ["Ignacio Díaz-Gomar"],
+      "reparto": ["Toni Bou", "Marc Márquez", "Jordi Tarrés", "Adam Raga", "Dougie Lampkin", "Takahisa Fujinami"],
+      "poster": "toni-bou-40-de-40-poster.jpg",
+      "fondo": "toni-bou-40-de-40-fondo.jpg",
+      "web": "https://www.filmaffinity.com/es/film259520.html",
+      "fuente": "FilmAffinity"
+    }
+  ]
+}

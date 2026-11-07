@@ -819,6 +819,7 @@ const rutas = {
 const tipos = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp',
 };
 // Librerías servidas desde node_modules (sin depender de internet ni de un CDN)
 const VENDOR = {
@@ -847,7 +848,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -993,6 +994,9 @@ http
       if (xtream.esRuta(url.pathname)) return await xtream.atender(url.pathname, req, res, json, { ip: acceso.ipDe(req), nube: acceso.NUBE });
       // Sin sesión solo se llega a la pantalla de entrar o registrarse
       if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
+      // Carátulas de las fichas escritas a mano (públicas: Telegram las descarga para sus avisos)
+      const imagenFicha = url.pathname.match(/^\/fichas\/([\w.-]+\.(?:jpe?g|png|webp))$/i);
+      if (imagenFicha) return await servirFijo(req, res, path.join(dir, 'fichas', imagenFicha[1]), tipos[path.extname(imagenFicha[1]).toLowerCase()], 'public, max-age=86400');
       const cuenta = PUBLICO.includes(url.pathname) ? null : await perfiles.sesion(req);
       if (!PUBLICO.includes(url.pathname) && !cuenta) {
         // Para ver qué piden las apps externas que no aciertan con las direcciones de Xtream (solo la
