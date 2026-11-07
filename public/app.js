@@ -2375,6 +2375,22 @@ function conectar() {
   // Pago hecho o cancelado (aquí o en otro aparato): quitar o poner los anuncios ya
   eventos.addEventListener('plan', () => { if (typeof planCambiado === 'function') planCambiado(true); });
   eventos.addEventListener('version', (e) => nuevaVersion(JSON.parse(e.data)));
+  // El servidor acaba de medir lo que dura un vídeo que estaba sin duración: se pone en su ficha
+  // guardada y en su tarjeta, sin recargar
+  eventos.addEventListener('duracion', (e) => {
+    const { key, duracion } = JSON.parse(e.data);
+    const p = metas.get(`archivo:${key}`);
+    if (!p) return;
+    p.then((d) => {
+      if (!d?.encontrado) return;
+      if (d.episodio) { if (d.episodio.duracion) return; d.episodio.duracion = duracion; } else { if (d.duracion) return; d.duracion = duracion; }
+      document.querySelectorAll('[data-key]').forEach((t) => {
+        if (t.dataset.key !== key) return;
+        const meta = t.querySelector('.meta');
+        if (meta && !/\d+ min/.test(meta.textContent)) meta.textContent = [`${duracion} min`, meta.textContent].filter(Boolean).join(' · ');
+      });
+    });
+  });
   // El gestor ha puesto la web en mantenimiento: a su pantalla (los administradores siguen dentro)
   eventos.addEventListener('mantenimiento', (e) => { if (JSON.parse(e.data).activo && !(typeof yo !== 'undefined' && yo && yo.admin)) location.reload(); });
 }

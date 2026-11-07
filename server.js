@@ -470,9 +470,13 @@ try { duraciones = JSON.parse(readFileSync(ARCHIVO_DURACIONES, 'utf8')); } catch
 let guardandoDuraciones = null;
 const claveDuracion = (key) => `${key}|${foto?.get(key)?.split(':')[0] ?? ''}`;
 const duracionDe = (key) => duraciones[claveDuracion(key)] ?? null;
+// Los que alguien tiene en pantalla sin duración: al medirlos se le avisa (la tarjeta se completa sola)
+const pedidosSinDuracion = new Map(); // key → hasta cuándo interesa
 function anotarDuracion(key, segundos) {
   if (!(segundos > 0)) return;
   duraciones[claveDuracion(key)] = Math.round(segundos);
+  if (pedidosSinDuracion.get(key) > Date.now()) avisar('duracion', { key, duracion: Math.max(1, Math.round(segundos / 60)) });
+  pedidosSinDuracion.delete(key);
   clearTimeout(guardandoDuraciones);
   guardandoDuraciones = setTimeout(() => {
     mkdir(path.dirname(ARCHIVO_DURACIONES), { recursive: true })
@@ -480,16 +484,29 @@ function anotarDuracion(key, segundos) {
       .catch((e) => console.error(`No se pudieron guardar las duraciones: ${e.message}`));
   }, 3000);
 }
-// Cola para medir sin cargar el servidor: dos a la vez, como mucho 2000 esperando
+// Colas para medir sin cargar el servidor (dos a la vez): primero lo que alguien está viendo o se
+// acaba de subir; después, sin prisa, el repaso del catálogo entero
+const porMedirYa = new Set();
 const porMedir = new Set();
+const fallosMedir = new Map(); // key → veces que no se pudo (a la tercera, se deja)
 let midiendo = 0;
-function medirLuego(keys) {
-  for (const k of keys) if (porMedir.size < 2000 && esVideo(k) && duracionDe(k) == null && !esInterna(k)) porMedir.add(k);
-  while (midiendo < 2 && porMedir.size) {
-    const k = porMedir.values().next().value;
-    porMedir.delete(k);
+function medirLuego(keys, urgente = false) {
+  for (const k of keys) {
+    if (!esVideo(k) || esInterna(k) || duracionDe(k) != null || (fallosMedir.get(k) ?? 0) >= 3) continue;
+    if (urgente) { porMedir.delete(k); if (porMedirYa.size < 2000) porMedirYa.add(k); } else if (!porMedirYa.has(k) && porMedir.size < 5000) porMedir.add(k);
+  }
+  while (midiendo < 2 && (porMedirYa.size || porMedir.size)) {
+    const cola = porMedirYa.size ? porMedirYa : porMedir;
+    const k = cola.values().next().value;
+    cola.delete(k);
     midiendo++;
-    medio(k).then((m) => anotarDuracion(k, m.duracion)).catch(() => {}).finally(() => { midiendo--; medirLuego([]); });
+    medio(k).then((m) => {
+      if (m.duracion > 0) anotarDuracion(k, m.duracion);
+      else throw new Error('el archivo no dice su duración');
+    }).catch((e) => {
+      fallosMedir.set(k, (fallosMedir.get(k) ?? 0) + 1);
+      console.warn(`No se pudo medir la duración de «${k}»: ${String(e.message).slice(0, 160)}`);
+    }).finally(() => { midiendo--; medirLuego([]); });
   }
 }
 // ---------- Miniatura de cada capítulo ----------
@@ -539,9 +556,9 @@ function conDuracion(key, r) {
   const segundos = duracionDe(key);
   if (r.episodio && !r.episodio.imagenPropia && esVideo(key)) r.episodio.imagen = urlMiniatura(key);
   if (r.episodio && !r.episodio.duracion) {
-    if (segundos) r.episodio.duracion = Math.max(1, Math.round(segundos / 60)); else medirLuego([key]);
+    if (segundos) r.episodio.duracion = Math.max(1, Math.round(segundos / 60)); else { pedidosSinDuracion.set(key, Date.now() + 1800000); medirLuego([key], true); }
   } else if (!r.episodio && !r.duracion) {
-    if (segundos) r.duracion = Math.max(1, Math.round(segundos / 60)); else medirLuego([key]);
+    if (segundos) r.duracion = Math.max(1, Math.round(segundos / 60)); else { pedidosSinDuracion.set(key, Date.now() + 1800000); medirLuego([key], true); }
   }
   return r;
 }
@@ -831,7 +848,7 @@ async function repasar() {
   // Cada vídeo que se acaba de subir (o se ha cambiado): su duración y su miniatura al momento,
   // sin esperar a que alguien lo abra
   const videosNuevos = [...nuevos, ...cambiados].filter((k) => esVideo(k));
-  medirLuego(videosNuevos);
+  medirLuego(videosNuevos, true);
   for (const k of videosNuevos.slice(0, 300)) miniatura(k).catch(() => {});
   console.log(`Cambios en e2: ${nuevos.length} nuevos, ${cambiados.length} cambiados, ${borrados.length} borrados`);
   const total = nuevos.length + cambiados.length + borrados.length;
@@ -951,7 +968,7 @@ const rutas = {
   '/api/meta-carpeta': (p) => meta.deCarpeta(p.get('prefijo'), (pre) => {
     const videos = foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)) : [];
     // Al abrir una temporada, se miden (en segundo plano) los capítulos que aún no tienen duración
-    medirLuego(videos);
+    medirLuego(videos, true);
     for (const k of videos.slice(0, 300)) if (!existsSync(archivoMiniatura(k))) miniatura(k).catch(() => {});
     return videos.length;
   }),
