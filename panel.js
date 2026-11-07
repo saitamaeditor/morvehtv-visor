@@ -15,6 +15,10 @@ import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import https from 'node:https';
 import * as meta from './metadatos.js';
+import * as enlaces from './enlaces.js';
+
+// Subidas desde enlace en marcha y recientes (en memoria: id → estado)
+const trabajosEnlace = new Map();
 
 // Subidas a través del servidor: el navegador manda cada trozo aquí (por HTTP/2, muchos a la vez
 // sobre una sola conexión) y se reenvía a e2 según va llegando, sin guardarlo. Desde el navegador
@@ -636,6 +640,48 @@ export async function atender(ruta, req, res, json, ip) {
   }
   if (ruta === '/api/panel/fuentes') return json(res, 200, meta.FUENTES_GESTOR);
   if (ruta === '/api/panel/titulo') return json(res, 200, await meta.fichaParaSubir(url.searchParams.get('tipo'), url.searchParams.get('id'), url.searchParams.get('fuente') || 'tmdb'));
+
+  // ---------- Subir desde un enlace ----------
+  // El servidor descarga el archivo del enlace y lo sube a e2 a la vez (enlaces.js). Va en segundo
+  // plano: el gestor pregunta cómo va. Como mucho 3 a la vez.
+  if (ruta === '/api/panel/subir/enlaces') {
+    const mios = [...trabajosEnlace.values()].filter((t) => admin || t.por === c.usuario).slice(-30).reverse();
+    return json(res, 200, mios.map(({ id, nombre, key, estado, bajado, total, error: e, inicio, fin }) => ({ id, nombre, key, estado, bajado, total, error: e, inicio, fin })));
+  }
+  if (ruta === '/api/panel/subir/enlace/cancelar') {
+    const t = trabajosEnlace.get(String(datos.id ?? ''));
+    if (!t || (!admin && t.por !== c.usuario)) throw error(404, 'No existe');
+    t.cancelar = true;
+    return json(res, 200, { ok: true });
+  }
+  if (ruta === '/api/panel/subir/enlace') {
+    const carpeta = carpetaValida(datos.carpeta);
+    if (carpeta.split('/').length < 2 || !puede(carpeta)) throw fuera();
+    const activos = [...trabajosEnlace.values()].filter((t) => t.estado === 'bajando').length;
+    if (activos >= 3) throw error(429, 'Ya hay 3 subidas desde enlace en marcha: espera a que acabe alguna');
+    const { r, url: final, control } = await enlaces.abrir(String(datos.url ?? '').trim());
+    if (!enlaces.esArchivo(r)) { control.abort(); throw error(400, 'Ese enlace lleva a una página web, no a un archivo. Copia el enlace de descarga directa del vídeo.'); }
+    let nombre = String(datos.nombre ?? '').trim() || enlaces.nombreDe(r, final);
+    // Sin extensión conocida: la del tipo de archivo que dice el servidor
+    const tipo = String(r.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
+    const extTipo = { 'video/mp4': 'mp4', 'video/x-matroska': 'mkv', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/x-msvideo': 'avi', 'video/mp2t': 'ts' }[tipo];
+    if (!SUBIBLES.test(nombre) && extTipo) nombre = `${nombre || 'video'}.${extTipo}`;
+    try { nombre = nombreValido(nombre); } catch { control.abort(); throw error(400, 'No se sabe el nombre del archivo: escríbelo tú (con su extensión, p. ej. «Película - 2026.mp4»)'); }
+    if (!SUBIBLES.test(nombre)) { control.abort(); throw error(400, 'Solo vídeos, subtítulos (.srt, .vtt, .ass) o imágenes: pon el nombre con su extensión (.mp4, .mkv…)'); }
+    const key = carpeta + nombre;
+    if (await existe(key)) { control.abort(); return json(res, 409, { error: `Ya hay un archivo «${nombre}» en esa carpeta: cámbiale el nombre o borra el otro antes`, existe: true }); }
+    const total = Number(r.headers.get('content-length')) || null;
+    const t = { id: randomUUID(), nombre, key, estado: 'bajando', bajado: 0, total, error: null, inicio: Date.now(), fin: null, por: c.usuario, cancelar: false };
+    trabajosEnlace.set(t.id, t);
+    if (trabajosEnlace.size > 100) trabajosEnlace.delete(trabajosEnlace.keys().next().value);
+    const ext = nombre.split('.').pop().toLowerCase();
+    enlaces.subirDesde(r, { s3, bucket, key, contentType: TIPOS[ext] ?? (tipo || 'application/octet-stream'), estado: t, control })
+      .then(() => { t.estado = 'hecho'; console.log(`Panel: ${c.usuario} sube desde un enlace «${key}» (${(t.bajado / 2 ** 20).toFixed(0)} MB)`); })
+      .catch((e) => { t.estado = t.cancelar ? 'cancelada' : 'error'; t.error = t.cancelar ? null : String(e.message).slice(0, 200); })
+      .finally(() => { t.fin = Date.now(); });
+    await registrar(c, ip, `sube desde un enlace «${nombre}»`, [key]);
+    return json(res, 200, { id: t.id, nombre, key, total });
+  }
 
   // Un trozo que llega por el servidor: se reenvía a e2 tal cual va llegando (con PUT, por eso va
   // antes de la regla de solo POST). PANEL_POR_SERVIDOR=0 lo apaga: el gestor vuelve solo a subir

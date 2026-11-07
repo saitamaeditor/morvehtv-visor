@@ -1115,7 +1115,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
