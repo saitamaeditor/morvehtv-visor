@@ -336,47 +336,6 @@ async function pintarDestacado(caja, d, carpetas) {
   caja.hidden = false;
 }
 
-// ---------- Filas «Top 10», «Más valoradas» y «Populares» ----------
-// El servidor las calcula con lo que hay en MorvehTV: lo más visto estas dos semanas (Top 10) y la
-// nota y popularidad de TMDB. Las tarjetas son las de siempre (cartel, título y año); las del
-// Top 10 llevan su número grande al lado, como en las plataformas.
-let filasTopPedidas = null;
-async function pintarFilasTop(sitio) {
-  filasTopPedidas = filasTopPedidas || api('/api/portada-filas').catch(() => null);
-  const pedido = filasTopPedidas;
-  const d = await pedido;
-  setTimeout(() => { if (filasTopPedidas === pedido) filasTopPedidas = null; }, 300000); // datos frescos cada 5 min
-  if (!d || !sitio.isConnected || estado.prefijo) return;
-  const tarjetaDe = (x, lista) => {
-    const pelis = lista.filter((y) => y.tipo === 'archivo');
-    const t = x.tipo === 'carpeta'
-      ? tarjeta({ icono: '📺', titulo: x.titulo, meta: x.anio || '', alPulsar: () => irA(x.key) })
-      : tarjeta({ icono: '🎬', titulo: x.titulo, meta: x.anio || '', alPulsar: () => abrir(pelis.indexOf(x), pelis) });
-    if (x.tipo === 'archivo') { t.dataset.key = x.key; barraVisto(t); }
-    conMeta(t, x.tipo === 'carpeta' ? 'carpeta' : 'archivo', x.key);
-    if (x.valoracion) t.append(el('span', 'nota-top', `★ ${Number(x.valoracion).toFixed(1)}`));
-    return t;
-  };
-  const ponerFila = (titulo, lista, top) => {
-    if (!lista?.length) return;
-    const f = fila(titulo, null, top ? 'top10' : '');
-    lista.forEach((x, n) => {
-      const t = tarjetaDe(x, lista);
-      if (!top) return f.c.append(t);
-      const caja = el('div', 'top-item');
-      caja.append(el('span', 'top-num', String(n + 1)), t);
-      f.c.append(caja);
-    });
-    sitio.append(f.s);
-  };
-  ponerFila('🔥 Top 10 películas en MorvehTV', d.peliculas.tendencias, true);
-  ponerFila('⭐ Películas más valoradas', d.peliculas.valoradas);
-  ponerFila('📈 Películas populares', d.peliculas.populares);
-  ponerFila('🔥 Top 10 series en MorvehTV', d.series.tendencias, true);
-  ponerFila('⭐ Series más valoradas', d.series.valoradas);
-  ponerFila('📈 Series populares', d.series.populares);
-}
-
 let catalogoPedido = null;
 function pintarInicio(carpetas, archivos) {
   const items = $('#items');
@@ -417,11 +376,6 @@ function pintarInicio(carpetas, archivos) {
       items.append(f.s);
     }
   }
-
-  // Tendencias (Top 10), Más valoradas y Populares, de películas y de series
-  const filasTop = el('div', 'filas-top');
-  items.append(filasTop);
-  pintarFilasTop(filasTop);
 
   // Últimos añadidos de cada categoría, en el mismo orden que «Mis medios»
   const sitio = el('div', 'ultimos');

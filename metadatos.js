@@ -103,8 +103,6 @@ function ficha(tmdbId, tipo) {
         duracion: d.runtime ?? d.episode_run_time?.[0] ?? null,
         generos: (d.genres ?? []).map((g) => g.name),
         valoracion: d.vote_average ? Math.round(d.vote_average * 10) / 10 : null,
-        votos: d.vote_count ?? null,
-        popularidad: d.popularity ?? null,
         poster: img(d.poster_path || en?.poster_path, 'w342'),
         fondo: img(d.backdrop_path || en?.backdrop_path, 'w1280'),
         reparto: (d.credits?.cast ?? []).slice(0, 8).map((c) => c.name),
