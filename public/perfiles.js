@@ -11,6 +11,7 @@ async function enviar(ruta, datos) {
   const d = await r.json();
   // La sesión caducó o se cerró desde otro aparato (no confundir con «contraseña actual incorrecta»)
   if (r.status === 401 && d.error === 'Inicia sesión') { location.replace('/entrar.html'); throw new Error(d.error); }
+  if (r.status === 503 && d.mantenimiento) { location.reload(); throw new Error(d.error); }
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }

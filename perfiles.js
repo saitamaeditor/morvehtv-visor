@@ -70,6 +70,8 @@ const error = (status, message) => Object.assign(new Error(message), { status })
 // Otros datos de MorvehTV que viven en el mismo archivo (los temas de Telegram…)
 export const leerAjuste = async (clave) => (await descargar())[clave] ?? null;
 export const guardarAjuste = (clave, valor) => cambiar((d) => { d[clave] = valor; });
+// Lo mismo con la caché de unos segundos: para lo que se mira en cada petición (el mantenimiento)
+export const ajusteReciente = async (clave) => (await leer())[clave] ?? null;
 
 // ---------- Cuentas ----------
 // La contraseña se guarda con scrypt, nunca en claro. La sesión es una cookie firmada con el

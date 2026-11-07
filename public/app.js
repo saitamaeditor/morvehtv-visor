@@ -31,6 +31,8 @@ async function api(ruta, params) {
   const d = await r.json();
   // Sin sesión (caducó, o se cerró desde otro aparato): a la pantalla de entrar
   if (r.status === 401) { location.replace('/entrar.html'); throw new Error(d.error); }
+  // Web en mantenimiento: al recargar sale su pantalla
+  if (r.status === 503 && d.mantenimiento) { location.reload(); throw new Error(d.error); }
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
@@ -2366,6 +2368,8 @@ function conectar() {
   // Pago hecho o cancelado (aquí o en otro aparato): quitar o poner los anuncios ya
   eventos.addEventListener('plan', () => { if (typeof planCambiado === 'function') planCambiado(true); });
   eventos.addEventListener('version', (e) => nuevaVersion(JSON.parse(e.data)));
+  // El gestor ha puesto la web en mantenimiento: a su pantalla (los administradores siguen dentro)
+  eventos.addEventListener('mantenimiento', (e) => { if (JSON.parse(e.data).activo && !(typeof yo !== 'undefined' && yo && yo.admin)) location.reload(); });
 }
 // La versión con la que se cargó esta página (la del «app.js?v=…» que puso el servidor): así, aunque
 // la primera conexión llegue ya con la versión nueva, se nota que esta página es vieja

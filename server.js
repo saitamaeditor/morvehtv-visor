@@ -103,7 +103,50 @@ xtream.iniciar({ foto: async () => { if (!foto) await repasar(); return foto; },
   // XTREAM_SOLO_VIP=1 vuelven a ser solo para VIP (en ellos no se pueden poner anuncios)
   permitido: async (c) => process.env.XTREAM_SOLO_VIP !== '1' || !pagos.activo || (await perfiles.planDe(c)).tipo === 'premium' });
 // API del panel de gestión (otra web: «MorvehTV Gestor»), solo administradores (ver panel.js)
-panel.iniciar({ s3, s3Virtual, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos });
+panel.iniciar({ s3, s3Virtual, bucket: E2_BUCKET, nube: acceso.NUBE, perfiles, foto: async () => { if (!foto) await repasar(); return foto; }, alMover: telegram.ignorar, pagosEstado: () => pagos.estado, pagos,
+  // Al poner o quitar el mantenimiento desde el gestor, las páginas abiertas se recargan al momento
+  alMantenimiento: (m) => { mantenimiento = m; mantenimientoLeido = Date.now(); avisar('mantenimiento', { activo: m.activo }); } });
+
+// ---------- Web en mantenimiento ----------
+// Se pone y se quita desde el gestor (se guarda en el archivo de cuentas de e2). Mientras dura,
+// quien no es administrador solo ve la pantalla de mantenimiento: ni catálogo, ni vídeos, ni
+// registros. Los administradores entran por /entrar.html?admin y lo usan todo con normalidad.
+let mantenimiento = { activo: false };
+let mantenimientoLeido = 0;
+async function enMantenimiento() {
+  if (Date.now() - mantenimientoLeido > 10000) {
+    mantenimientoLeido = Date.now();
+    try { mantenimiento = (await perfiles.ajusteReciente('mantenimiento')) ?? { activo: false }; } catch {} // si e2 falla, se queda como estaba
+  }
+  return mantenimiento;
+}
+function paginaMantenimiento(res, m) {
+  const mensaje = m.mensaje ? escHtml(m.mensaje) : 'Estamos haciendo mejoras en MorvehTV. Volvemos en un rato: esta página se abrirá sola en cuanto terminemos.';
+  const tg = telegram.invitacion();
+  const pagina = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MorvehTV · En mantenimiento</title><meta name="robots" content="noindex"><link rel="icon" href="/icono.svg">
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{display:grid;place-items:center;padding:24px 16px;background:#0b0c10 radial-gradient(ellipse at 50% 0%,rgba(139,92,246,.28),transparent 60%);color:#f1f2f4;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;text-align:center}
+main{max-width:460px}img{width:96px;height:96px}
+h1{margin:18px 0 10px;font-size:28px}p{margin:0 0 14px;color:#b9bec8}
+.estado{display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.07);font-size:14px;color:#d4d7dd}
+.estado i{width:9px;height:9px;border-radius:50%;background:#f5a524;animation:p 1.6s infinite}@keyframes p{50%{opacity:.3}}
+a{color:#c4b5fd}.tg{display:inline-block;margin-top:18px;padding:11px 20px;border-radius:10px;background:#229ed9;color:#fff;font-weight:700;text-decoration:none}
+.admin{position:fixed;bottom:12px;right:14px;font-size:12px;color:#5c6270;text-decoration:none}
+</style></head><body><main>
+<img src="/icono.svg" alt="">
+<h1>Web en mantenimiento</h1>
+<p>${mensaje}</p>
+<span class="estado"><i></i>Comprobando cada poco si ya hemos vuelto…</span>
+${tg ? `<br><a class="tg" href="${escHtml(tg)}" target="_blank" rel="noopener">Avisos en Telegram</a>` : ''}
+</main><a class="admin" href="/entrar.html?admin">Administración</a>
+<script>
+setInterval(function(){fetch('/api/salud',{cache:'no-store'}).then(function(r){return r.json()}).then(function(d){if(d&&d.mantenimiento===false)location.href='/'}).catch(function(){})},20000);
+</script></body></html>`;
+  return enviar(res, 503, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'retry-after': '600' }, pagina);
+}
+const json503 = (res) => json(res, 503, { error: 'MorvehTV está en mantenimiento: vuelve en un rato', mantenimiento: true });
 const esImagen = (key) => /\.(jpe?g|png|gif|webp|avif|bmp|svg)$/i.test(key);
 
 function firmar(key, { segundos = 4 * 3600 } = {}) {
@@ -985,13 +1028,18 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
       // (apagados: ninguna app de IPTV puede entrar; con XTREAM_ACTIVO=1 vuelven a funcionar)
       if (xtream.esRuta(url.pathname) && process.env.XTREAM_ACTIVO !== '1') return json(res, 404, { error: 'No disponible' });
       if (xtream.esRuta(url.pathname)) return await xtream.atender(url.pathname, req, res, json, { ip: acceso.ipDe(req), nube: acceso.NUBE });
+      // En mantenimiento: nada de registros y, en vez de la pantalla de entrar, la de mantenimiento
+      // (salvo /entrar.html?admin, por donde entran los administradores)
+      const mant = await enMantenimiento();
+      if (mant.activo && url.pathname === '/api/registro') return json503(res);
+      if (mant.activo && url.pathname === '/entrar.html' && !url.searchParams.has('admin')) return paginaMantenimiento(res, mant);
       // Sin sesión solo se llega a la pantalla de entrar o registrarse
       if (perfiles.SIN_SESION.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Carátulas de las fichas escritas a mano (públicas: Telegram las descarga para sus avisos)
@@ -1006,6 +1054,12 @@ http
         if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/')) return json(res, 401, { error: 'Inicia sesión' });
         res.writeHead(302, { location: '/entrar.html', 'cache-control': 'no-store' });
         return res.end();
+      }
+      // Con sesión pero sin ser administrador, durante el mantenimiento no se ve nada (salvo
+      // cerrar sesión, que va antes, y los iconos)
+      if (mant.activo && cuenta && !PUBLICO.includes(url.pathname) && !(await perfiles.esAdmin(cuenta))) {
+        if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/hls/') || url.pathname.startsWith('/vendor/')) return json503(res);
+        return paginaMantenimiento(res, mant);
       }
 
       if (url.pathname === '/api/eventos') return eventos(req, res, cuenta);

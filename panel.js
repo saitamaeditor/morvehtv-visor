@@ -52,10 +52,12 @@ const ORIGENES = String(process.env.PANEL_ORIGENES ?? 'https://saitamaeditor.git
 let s3; let s3Virtual = null; let bucket; let foto; let nube; let p; let alMover = () => {};
 let pagosEstado = () => 'desactivado';
 let pagos = null; // pagos.js (USDC)
+let alMantenimiento = () => {};
 export function iniciar(opciones) {
   ({ s3, bucket, foto, nube, perfiles: p } = opciones);
   s3Virtual = opciones.s3Virtual ?? null;
   alMover = opciones.alMover ?? alMover;
+  alMantenimiento = opciones.alMantenimiento ?? alMantenimiento;
   pagosEstado = opciones.pagosEstado ?? pagosEstado;
   pagos = opciones.pagos ?? null;
   // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
@@ -282,7 +284,7 @@ export async function atender(ruta, req, res, json, ip) {
   if (!admin && !colab) throw error(403, 'Esta cuenta ya no tiene acceso al gestor');
   const secciones = admin ? null : (colab.secciones || []);
   const puede = (clave) => !secciones || secciones.some((s) => String(clave).startsWith(s));
-  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|trabajo)/;
+  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|trabajo|mantenimiento)/;
   if (!admin && (SOLO_ADMIN.test(ruta) || datos.anuncio)) throw error(403, 'Eso solo lo pueden hacer los administradores');
   const fuera = () => error(403, 'No tienes permiso en esa sección');
 
@@ -430,6 +432,19 @@ export async function atender(ruta, req, res, json, ip) {
     await p.guardarAjuste('anuncios', lista);
     await registrar(c, ip, `guarda los anuncios (${lista.length})`);
     return json(res, 200, { anuncios: lista });
+  }
+
+  // Web en mantenimiento: nadie entra salvo los administradores
+  if (ruta === '/api/panel/mantenimiento' && req.method === 'GET') {
+    return json(res, 200, (await p.leerAjuste('mantenimiento')) ?? { activo: false });
+  }
+  if (ruta === '/api/panel/mantenimiento') {
+    const activo = datos.activo === true;
+    const m = { activo, mensaje: String(datos.mensaje ?? '').trim().slice(0, 300), desde: activo ? new Date().toISOString() : null, por: c.usuario };
+    await p.guardarAjuste('mantenimiento', m);
+    alMantenimiento(m);
+    await registrar(c, ip, activo ? 'pone la web en mantenimiento' : 'quita el mantenimiento');
+    return json(res, 200, m);
   }
 
   // Elegir el título antes de subirlo: buscar por nombre o IMDb y su ficha con los capítulos
