@@ -1742,6 +1742,33 @@ function actualizarFlechas(i) {
 }
 
 // En el reproductor: botones ⏮ ⏭ junto a los de 10 s y, al final de cada capítulo, la tarjeta
+// «Saltar intro»: el servidor sabe dónde está la intro de cada capítulo (la busca comparando el
+// audio de los capítulos de la temporada). Mientras suena, sale el botón; al pulsarlo, salta al
+// final de la intro. Si aún la está buscando, se vuelve a preguntar cada 30 s (unos minutos).
+function prepararIntro(caja, key, sigue) {
+  let intro = null;
+  let b = null;
+  let intentos = 0;
+  const pedir = () => api('/api/intro', { key }).then((r) => {
+    if (!sigue()) return;
+    if (r.inicio != null) intro = r;
+    else if (r.pendiente && ++intentos <= 8) setTimeout(pedir, 30000);
+  }).catch(() => {});
+  pedir();
+  const quitar = () => { if (b) { b.remove(); b = null; } };
+  caja.alTiempo = (t) => {
+    if (!intro || !sigue()) return quitar();
+    const dentro = t >= intro.inicio - 1 && t < intro.fin - 3;
+    if (dentro && !b) {
+      b = boton('boton saltar-intro', `${icono('siguiente')}<span>Saltar intro</span>`, 'Saltar intro');
+      b.onclick = () => { quitar(); caja.irA(intro.fin); };
+      caja.append(b);
+      // Con el mando, el foco va al botón: OK salta la intro
+      if (esTele) b.focus({ preventScroll: true });
+    } else if (!dentro) quitar();
+  };
+}
+
 // «Siguiente episodio» (en los últimos 30 s se ofrece; al acabar, cuenta 10 s y sigue sola).
 // En películas no hay tarjeta (solo los botones ⏮ ⏭).
 function navegacionReproductor(caja, i) {
@@ -1810,6 +1837,7 @@ function navegacionReproductor(caja, i) {
   }
   // La tarjeta «Siguiente episodio» es solo para series: en películas no sale
   if (!serie) return;
+  prepararIntro(caja, f.key, sigue);
   caja.alProgreso = (t, total) => {
     if (total > 90 && total - t <= 30 && t > 0) mostrar(false);
     // Si se vuelve atrás, la tarjeta se va (y puede volver a salir)

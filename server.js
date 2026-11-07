@@ -18,6 +18,7 @@ import * as meta from './metadatos.js';
 import * as acceso from './acceso.js';
 import * as perfiles from './perfiles.js';
 import * as telegram from './telegram.js';
+import * as intros from './intros.js';
 import * as xtream from './xtream.js';
 import * as panel from './panel.js';
 import * as defensa from './defensa.js';
@@ -550,6 +551,75 @@ function miniatura(key) {
 }
 const urlMiniatura = (key) => `/api/miniatura?key=${encodeURIComponent(key)}&v=${encodeURIComponent(foto?.get(key)?.split(':')[0] ?? '')}`;
 
+// ---------- «Saltar intro» ----------
+// La intro de cada capítulo se busca comparando la huella de audio del principio de los capítulos
+// de la misma temporada (intros.js). Se hace una vez por temporada, en segundo plano (al subir
+// capítulos, al abrir la temporada o al ver uno), y se guarda en data/intros.json
+// («key|tamaño» → { inicio, fin } en segundos, o 0 si ese capítulo no tiene intro).
+const ARCHIVO_INTROS = path.join(dir, 'data', 'intros.json');
+let introsGuardadas = {};
+try { introsGuardadas = JSON.parse(readFileSync(ARCHIVO_INTROS, 'utf8')); } catch {}
+let estadoIntros = 'comprobando';
+let hayHuellas = false;
+intros.hayChromaprint().then((si) => { hayHuellas = si; estadoIntros = si ? 'ok' : 'sin chromaprint en ffmpeg'; });
+let guardandoIntros = null;
+function guardarIntros() {
+  clearTimeout(guardandoIntros);
+  guardandoIntros = setTimeout(() => {
+    mkdir(path.dirname(ARCHIVO_INTROS), { recursive: true }).then(() => writeFile(ARCHIVO_INTROS, JSON.stringify(introsGuardadas)))
+      .catch((e) => console.error(`No se pudieron guardar las intros: ${e.message}`));
+  }, 2000);
+}
+const introDe = (key) => introsGuardadas[claveDuracion(key)];
+const huellasEnMemoria = new Map(); // «key|tamaño» → huella (las últimas 400)
+const temporadasPorMirar = new Set();
+let mirandoIntros = false;
+// La carpeta del capítulo (la temporada o la de la serie) y sus vídeos, en orden de capítulo
+const carpetaDe = (key) => key.replace(/[^/]+$/, '');
+const capitulosDe = (carpeta) => (foto ? [...foto.keys()] : [])
+  .filter((k) => k.startsWith(carpeta) && !k.slice(carpeta.length).includes('/') && esVideo(k))
+  .sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
+function buscarIntrosLuego(keys) {
+  if (!hayHuellas) return;
+  for (const k of keys) {
+    if (!esVideo(k) || esInterna(k) || introDe(k) !== undefined) continue;
+    const c = carpetaDe(k);
+    if (c.split('/').length > 2) temporadasPorMirar.add(c); // nunca la raíz de una sección
+  }
+  if (!mirandoIntros && temporadasPorMirar.size) mirarTemporada();
+}
+async function mirarTemporada() {
+  mirandoIntros = true;
+  const carpeta = temporadasPorMirar.values().next().value;
+  temporadasPorMirar.delete(carpeta);
+  try {
+    const caps = capitulosDe(carpeta);
+    if (caps.length >= 2 && caps.some((k) => introDe(k) === undefined)) {
+      const huellas = [];
+      for (const k of caps) {
+        const id = claveDuracion(k);
+        let h = huellasEnMemoria.get(id);
+        if (!h) {
+          // El principio del capítulo (las intros suelen estar en los primeros minutos)
+          const dur = duracionDe(k) || 0;
+          const ventana = dur ? Math.min(600, Math.max(300, dur * 0.4)) : 600;
+          h = await intros.huella(await firmar(k, { segundos: 900 }), ventana).catch((e) => { console.warn(`Intro: no se pudo escuchar «${k}» (${e.message.slice(0, 120)})`); return null; });
+          if (h) { huellasEnMemoria.set(id, h); if (huellasEnMemoria.size > 400) huellasEnMemoria.delete(huellasEnMemoria.keys().next().value); }
+        }
+        huellas.push(h);
+      }
+      const res = intros.introsDeTemporada(huellas);
+      caps.forEach((k, i) => { if (huellas[i]) introsGuardadas[claveDuracion(k)] = res[i] ?? 0; });
+      guardarIntros();
+      const con = res.filter(Boolean).length;
+      console.log(`Intro: «${carpeta}» → ${con} de ${caps.length} capítulos con intro`);
+      for (const [i, k] of caps.entries()) if (res[i]) avisar('intro', { key: k, ...res[i] });
+    }
+  } catch (e) { console.warn(`Intro: «${carpeta}» (${e.message})`); }
+  mirandoIntros = false;
+  if (temporadasPorMirar.size) setTimeout(mirarTemporada, 1000);
+}
+
 // Completa la ficha con la duración real (en minutos, como la de las bases de datos)
 function conDuracion(key, r) {
   if (!r?.encontrado || !key) return r;
@@ -849,6 +919,7 @@ async function repasar() {
   // sin esperar a que alguien lo abra
   const videosNuevos = [...nuevos, ...cambiados].filter((k) => esVideo(k));
   medirLuego(videosNuevos, true);
+  buscarIntrosLuego(videosNuevos);
   for (const k of videosNuevos.slice(0, 300)) miniatura(k).catch(() => {});
   console.log(`Cambios en e2: ${nuevos.length} nuevos, ${cambiados.length} cambiados, ${borrados.length} borrados`);
   const total = nuevos.length + cambiados.length + borrados.length;
@@ -969,6 +1040,7 @@ const rutas = {
     const videos = foto ? [...foto.keys()].filter((k) => k.startsWith(pre) && esVideo(k)) : [];
     // Al abrir una temporada, se miden (en segundo plano) los capítulos que aún no tienen duración
     medirLuego(videos, true);
+    buscarIntrosLuego(videos);
     for (const k of videos.slice(0, 300)) if (!existsSync(archivoMiniatura(k))) miniatura(k).catch(() => {});
     return videos.length;
   }),
@@ -1035,7 +1107,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -1172,7 +1244,7 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, intros: estadoIntros, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
@@ -1216,6 +1288,13 @@ http
       if (url.pathname === '/api/eventos') return eventos(req, res, cuenta);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       if (pagos.RUTAS.includes(url.pathname)) return await pagos.atender(url.pathname, req, res, json, cuenta);
+      if (url.pathname === '/api/intro') {
+        const key = url.searchParams.get('key') ?? '';
+        if (!esVideo(key) || prohibido(key)) return json(res, 404, { error: 'No existe' });
+        const i = introDe(key);
+        if (i === undefined) buscarIntrosLuego([key]);
+        return json(res, 200, i ? { inicio: i.inicio, fin: i.fin } : { inicio: null, pendiente: i === undefined && hayHuellas });
+      }
       if (url.pathname === '/api/miniatura') {
         const key = url.searchParams.get('key') ?? '';
         if (!esVideo(key) || prohibido(key) || esInterna(key)) return json(res, 404, { error: 'No existe' });

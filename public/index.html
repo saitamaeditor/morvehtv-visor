@@ -340,6 +340,14 @@
     background: rgba(16,18,22,.92); border: 1px solid rgba(255,255,255,.18); box-shadow: 0 10px 40px rgba(0,0,0,.6);
     animation: entra-siguiente .25s ease-out; }
   #visor.cine .siguiente { position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom)); }
+  /* «Saltar intro», abajo a la derecha mientras suena la intro */
+  .saltar-intro { position: absolute; right: 16px; bottom: 96px; z-index: 4; display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 20px; border-radius: 8px; font-size: 16px; font-weight: 700; color: #fff; cursor: pointer;
+    background: rgba(16,18,22,.82); border: 2px solid rgba(255,255,255,.75); box-shadow: 0 8px 30px rgba(0,0,0,.5); animation: entra-siguiente .25s ease-out; }
+  .saltar-intro:hover, .saltar-intro:focus-visible { background: #fff; color: #000; border-color: #fff; outline: none; }
+  #visor.cine .saltar-intro { position: fixed; right: max(24px, env(safe-area-inset-right)); bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .tele #visor .saltar-intro { bottom: 18vh; right: 4vw; padding: 1.6vh 1.6vw; font-size: 22px; }
+  .tele #visor .saltar-intro:focus { background: #fff; color: #000; }
   .siguiente .info { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
   .siguiente small { color: #7aa7ff; font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .siguiente b { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
