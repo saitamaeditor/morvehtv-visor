@@ -1621,6 +1621,15 @@
   #pestanas .pestana { flex: none; }
   header .logo { flex: 1 1 0; min-width: 0; }
   header .logo > span:not(#directo), header .logo::before { flex: none; }
+  /* Botón de la cuenta (inicial, nombre y VIP) y «Salir» de la app, más pequeños */
+  #mi-cuenta { padding: 2px 10px 2px 2px; gap: 6px; font-size: 12.5px; font-weight: 600; min-height: 0; }
+  #mi-cuenta .inicial { width: 26px; height: 26px; font-size: 12.5px; }
+  #mi-cuenta .txt { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mi-cuenta .insignia { margin-left: 2px; font-size: 8.5px; padding: 1px 5px; letter-spacing: .04em; }
+  #salir-app { padding: 4px 10px; font-size: 12.5px; gap: 4px; min-height: 0; }
+  #salir-app .icono { width: 15px; height: 15px; }
+  .tele #mi-cuenta .inicial { width: 4.4vh; height: 4.4vh; font-size: 2.2vh; }
+  .tele #mi-cuenta, .tele #salir-app { font-size: 1.9vh; }
   /* Plataformas de streaming de películas: etiqueta en píldora y logotipos cuadrados redondeados */
   .plataformas-inicio { margin: clamp(6px, 1vw, 14px) 0 clamp(22px, 2.6vw, 38px); }
   .etiqueta-plataformas { border-color: rgba(0,163,255,.45); background: linear-gradient(90deg, rgba(0,163,255,.16), rgba(121,40,202,.12)); color: #fff;
