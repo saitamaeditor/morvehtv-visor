@@ -1948,6 +1948,13 @@ async function abrirEnlace(f, i, c, opcion = 0) {
     return enfocarVisor();
   }
   if (!bien) { falloEnlace(c, motivo(d), otraVez, () => { incrustar(c, d.url, otraVez, d.servidor); servidores(); }); return servidores(); }
+  // App antigua con un servidor que no funciona aislado (Byse…): en vez de su página de error,
+  // se explica qué pasa y se ofrecen los otros servidores
+  if (!sinAislarPermitido && !SERVIDORES_AISLADOS.includes(d.servidor)) {
+    falloEnlace(c, `Para ver ${d.servidor} actualiza la app de MorvehTV (te lo ofrece al abrirla) o prueba otro servidor.`, otraVez,
+      () => { incrustar(c, d.url, otraVez, d.servidor); servidores(); });
+    return servidores();
+  }
   incrustar(c, d.url, otraVez, d.servidor);
   servidores();
 }
@@ -1967,7 +1974,9 @@ document.addEventListener('click', () => { try { if (window.MorvehApp && window.
 // navegador (si el reproductor intenta llevarte a otra web, el navegador pregunta antes de salir)
 // y en la app que bloquea las navegaciones que no vienen de un toque tuyo (sinAislar, 1.0.20+).
 const sinAislarPermitido = !window.MorvehApp || typeof window.MorvehApp.sinAislar === 'function';
-const SERVIDORES_AISLADOS = ['Genérico', 'YouTube', 'Vimeo', 'Dailymotion'];
+// (YouTube, Vimeo y Dailymotion funcionan aislados; el resto, también los servidores que no se
+// reconocen, van sin aislar: los enlaces los pone solo la administración desde el gestor)
+const SERVIDORES_AISLADOS = ['YouTube', 'Vimeo', 'Dailymotion'];
 window.addEventListener('beforeunload', (e) => { if (document.querySelector('iframe.incrustado.libre')) { e.preventDefault(); e.returnValue = ''; } });
 function incrustar(c, url, otraVez, servidor = 'Genérico') {
   c.innerHTML = '';
