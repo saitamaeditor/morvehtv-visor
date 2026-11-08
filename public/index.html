@@ -1632,6 +1632,13 @@
   .icono-plataforma.activa { border-color: #fff; box-shadow: 0 0 0 3px var(--acento), 0 8px 22px rgba(0,0,0,.5); }
   .cabecera-plataforma { display: flex; align-items: center; gap: 16px; }
   .cabecera-plataforma .logo-plataforma { border-radius: 20%; box-shadow: 0 8px 22px rgba(0,0,0,.5); }
+  /* «Sin plataforma»: la nube de MorvehTV sobre el degradado de la marca, con el nombre y cuántos */
+  .icono-plataforma.sin-plataforma { background: linear-gradient(150deg, #0e2a45, #2a1450); border-color: rgba(0,163,255,.35);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 4px; }
+  .icono-plataforma.sin-plataforma img { width: 44%; height: auto; object-fit: contain; }
+  .icono-plataforma.sin-plataforma .nombre-esp { padding: 0; font-size: clamp(9.5px, .8vw, 12.5px); line-height: 1.1; }
+  .icono-plataforma.sin-plataforma small { font-size: clamp(9px, .7vw, 11px); font-weight: 700; color: #9fd8ff; }
+  .cabecera-plataforma .logo-plataforma.especial { padding: 10px; object-fit: contain; background: linear-gradient(150deg, #0e2a45, #2a1450); }
   .tele .pie { display: none; }
 </style>
 <link rel="stylesheet" href="intro.css">

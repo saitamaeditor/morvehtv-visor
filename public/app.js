@@ -486,7 +486,12 @@ function iconoPlataforma(p, tipoPlat, cuantos) {
   const que = tipoPlat === 'series' ? (cuantos === 1 ? 'serie' : 'series') : (cuantos === 1 ? 'película' : 'películas');
   b.title = `${p.nombre} · ${cuantos} ${que}`;
   b.setAttribute('aria-label', b.title);
-  if (p.logo) {
+  if (p.especial) {
+    // «Sin plataforma»: lo que solo está en MorvehTV (con la nube del logo y cuántos hay)
+    b.classList.add('sin-plataforma');
+    const im = el('img'); im.src = '/icono.svg'; im.alt = '';
+    b.append(im, el('span', 'nombre-esp', 'Sin plataforma'), el('small', null, String(cuantos)));
+  } else if (p.logo) {
     const im = el('img'); im.src = p.logo; im.alt = ''; im.loading = 'lazy';
     im.onerror = () => { im.remove(); b.append(el('span', null, p.nombre)); };
     b.append(im);
@@ -541,7 +546,8 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const plat = ((d && d.plataformas) || []).find((p) => p.nombre === nombrePlat);
   // Cabecera con el logotipo de la plataforma
   const cab = el('div', 'biblioteca cabecera-plataforma');
-  if (plat && plat.logo) { const im = el('img', 'logo-plataforma'); im.src = plat.logo; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
+  const logoCab = plat && (plat.especial ? '/icono.svg' : plat.logo);
+  if (logoCab) { const im = el('img', `logo-plataforma${plat.especial ? ' especial' : ''}`); im.src = logoCab; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
   cab.append(el('h1', null, nombrePlat));
   // Solo películas o solo series (lo que se eligió en la portada)
   let tipoVisto = tipoInicial === 'series' ? 'series' : 'peliculas';
