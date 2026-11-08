@@ -1265,6 +1265,82 @@
   .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(120deg, rgba(79,140,255,.9), rgba(142,78,198,.9) 52%, rgba(224,69,155,.9)); }
   .menu-audio button.activo::after { color: #c9a6ff; }
   .tele .item:focus .mini { box-shadow: 0 0 0 .45vh #fff, var(--halo); }
+
+  /* ---------- Aurora, acabado profesional ----------
+     Más contención: el degradado solo en lo principal (reproducir, lo elegido), el resto en
+     blanco y grises de cristal; títulos con la letra más apretada, menú en píldoras, carteles
+     con un filo de luz y un brillo que entra al pasar por encima, y movimiento suave. */
+  :root { --cristal: rgba(255,255,255,.06); --cristal-borde: rgba(255,255,255,.09); --suave: #9d98b3; --curva: cubic-bezier(.2,.8,.2,1); }
+  h1, h2, h3, .fila-titulo, .destacado h1, .biblioteca h1, #cabecera .ficha h2 { letter-spacing: -.022em; }
+  /* Cabecera más alta y limpia */
+  header { padding-top: 12px; padding-bottom: 12px; }
+  .logo > span:not(#directo) { letter-spacing: -.035em; }
+  /* Menú: píldoras de cristal; la activa, blanca y destacada */
+  .pestana { margin: 0 2px; padding: 7px 14px; border-radius: 999px; color: #bdb8d2; font-weight: 600; transition: background .2s var(--curva), color .2s; }
+  .pestana:hover, .pestana:focus { background: var(--cristal); color: #fff; }
+  .pestana.activa { background: rgba(255,255,255,.1); color: #fff; font-weight: 700; box-shadow: inset 0 0 0 1px var(--cristal-borde); }
+  .pestana.activa::after { display: none; }
+  @media (max-width: 600px) { .pestana { padding: 6px 10px; margin: 0; } }
+  /* Botones secundarios de cristal; el principal con el degradado y un brillo interior */
+  .boton { background: var(--cristal); border-color: var(--cristal-borde); font-weight: 600; }
+  .boton:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.18); }
+  .boton.reproducir, .destacado .boton.reproducir { font-weight: 800; letter-spacing: .01em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 10px 30px rgba(142,78,198,.38); }
+  .destacado .boton { padding: 12px 28px; }
+  /* Portada: el título del destacado más imponente; los puntos, finos */
+  .destacado h1 { font-weight: 900; line-height: .98; text-shadow: 0 4px 30px rgba(0,0,0,.55); }
+  .destacado-etiqueta { color: #fff; opacity: .9; letter-spacing: .18em; }
+  .destacado-datos { color: #e3dff0; }
+  .destacado-puntos .punto { width: 8px; height: 8px; background: rgba(255,255,255,.3); transition: width .3s var(--curva), background .3s; }
+  .destacado-puntos .punto.activo { width: 28px; border-radius: 4px; }
+  /* Filas: título sobrio y «Ver todo» discreto que se enciende al pasar */
+  .fila { margin-bottom: clamp(18px, 2.2vw, 34px); }
+  .fila-titulo { font-weight: 800; font-size: clamp(17px, 1.5vw, 24px); }
+  .fila-titulo a::before { width: 3px; height: .85em; }
+  .ver-todo { background: transparent; border: 1px solid var(--cristal-borde); color: #cfc9e6; font-weight: 600; transition: all .2s var(--curva); }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: #fff; border-color: #fff; color: #0a0914; }
+  .tarjeta-ver-todo .mini { border: 1px solid var(--cristal-borde) !important; background: linear-gradient(160deg, rgba(79,140,255,.16), rgba(142,78,198,.12) 50%, rgba(224,69,155,.16)); }
+  .tarjeta-ver-todo:hover .mini { background: linear-gradient(160deg, rgba(79,140,255,.3), rgba(142,78,198,.24) 50%, rgba(224,69,155,.3)); }
+  /* Carteles: filo de luz, fondo de cristal mientras carga la imagen y un brillo al pasar */
+  .item .mini { position: relative; background-color: #15132a; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); transition: box-shadow .3s var(--curva); }
+  .item .mini::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; z-index: 1;
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.14) 48%, transparent 62%); background-size: 250% 100%; background-position: 100% 0;
+    transition: opacity .3s, background-position .7s var(--curva); }
+  .item:hover .mini::before { opacity: 1; background-position: 0 0; }
+  .item:hover .mini { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 18px 40px rgba(0,0,0,.55), 0 8px 30px rgba(142,78,198,.3); }
+  .item:focus .mini { box-shadow: 0 0 0 3px #fff, 0 18px 40px rgba(0,0,0,.55); }
+  @media (hover: hover) and (pointer: fine) {
+    .carrusel .item:not(.episodio), .rejilla .item:not(.episodio) { transition: transform .35s var(--curva); }
+    .carrusel .item:not(.episodio):hover { transform: translateY(-6px); }
+    .rejilla .item:not(.episodio):hover { transform: translateY(-6px); }
+  }
+  .item .nombre { font-weight: 650; letter-spacing: -.005em; }
+  .item .meta { color: var(--suave); }
+  .item .nuevo { background: #fff; color: #0a0914; font-weight: 800; }
+  /* Categorías y orden: cristal; la elegida, blanca */
+  .chip-cat { background: var(--cristal); border-color: var(--cristal-borde); font-weight: 600; }
+  .chip-cat:hover, .chip-cat:focus { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.2); color: #fff; }
+  .chip-cat.activa { background: #fff; border-color: #fff; color: #0a0914; }
+  .boton.activo { background: #fff; border-color: #fff; color: #0a0914; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+  .servidores .boton.activo { background: var(--marca); border-color: transparent; color: #fff; }
+  /* Sección: nombre grande en blanco, con una línea de la marca debajo */
+  .biblioteca h1 { background: none; color: #fff; -webkit-background-clip: border-box; background-clip: border-box; font-weight: 900; position: relative; padding-bottom: 10px; }
+  .biblioteca h1::after { content: ''; position: absolute; left: 0; bottom: 0; width: 48px; height: 3px; border-radius: 3px; background: var(--marca); }
+  /* Ficha: chips de cristal y el título con más presencia */
+  #cabecera .ficha h2 { font-weight: 900; line-height: 1.02; }
+  #cabecera .chip { background: var(--cristal); border: 1px solid var(--cristal-borde); color: #e8e4f5; }
+  #cabecera .ficha p { color: #ddd8ec; line-height: 1.6; }
+  /* Ventanas y cajas de la cuenta, con el mismo cristal */
+  .cuenta-caja { background: rgba(19,17,31,.92); border-color: var(--cristal-borde); border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05); }
+  .aviso { background: rgba(28,25,48,.96); border: 1px solid var(--cristal-borde); border-radius: 999px; padding: 10px 18px; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+  /* Entrada suave del contenido al cambiar de página */
+  @keyframes aparecer-aurora { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  #items > *, .fila { animation: aparecer-aurora .45s var(--curva) both; }
+  .tele #items > *, .tele .fila { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #items > *, .fila { animation: none; }
+    .item .mini::before { display: none; }
+  }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MorvehTV · Películas y series en todas tus pantallas</title>
 <meta name="description" content="MorvehTV: películas y series en HD en la web, el móvil, la tele y el iPhone, con tu propia lista de «Seguir viendo» y favoritos.">
-<meta name="theme-color" content="#0b0b10">
+<meta name="theme-color" content="#0a0914">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icono-192.png">
@@ -173,6 +173,19 @@
   .cebo { position: absolute !important; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
   .cf-turnstile { margin: 0 0 12px; }
   @media (prefers-reduced-motion: reduce) { .insignia::before { animation: none; } .plataforma { transition: none; } }
+  /* Estilo «Aurora» (el mismo de dentro): noche azul-violeta y el degradado del logo */
+  :root { --fondo: #0a0914; --marca: linear-gradient(120deg, #4f8cff 0%, #8e4ec6 52%, #e0459b 100%); }
+  body { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1, h2 { letter-spacing: -.025em; }
+  .marca span, h1.titulo span { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .tarjeta { background: rgba(19,17,31,.88); border-color: rgba(255,255,255,.09); box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05); }
+  .pestanas { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 999px; }
+  .pestana { border-radius: 999px; }
+  .pestana.activa { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+  input { border-radius: 12px; }
+  input:focus { border-color: #a066ff; box-shadow: 0 0 0 3px rgba(160,102,255,.28); }
+  .enviar { background: var(--marca); border-radius: 999px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 10px 30px rgba(142,78,198,.38); transition: filter .2s; }
+  .enviar:hover, .enviar:focus { filter: brightness(1.12); }
 </style>
 <!--TURNSTILE--><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><!--/TURNSTILE-->
 </head>
