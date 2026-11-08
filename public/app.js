@@ -337,6 +337,46 @@ function fila(titulo, irAlPulsar, clase = '') {
   return { s, c };
 }
 
+// ---------- Listas de la portada ----------
+// Tarjeta con el póster, la nota y si es película o serie arriba, y el título y el año debajo;
+// en el Top 10, su número grande al lado
+function tarjetaLista(x, lista, puesto) {
+  const pelis = lista.filter((y) => y.tipo === 'archivo');
+  const t = tarjeta({
+    icono: x.tipo === 'carpeta' ? '📺' : '🎬', titulo: x.titulo, miniatura: x.poster,
+    meta: [x.anio, x.temporadas && `${x.temporadas} temporada${x.temporadas > 1 ? 's' : ''}`].filter(Boolean).join(' · '),
+    alPulsar: x.tipo === 'carpeta' ? () => irA(x.key) : () => abrir(pelis.indexOf(x), pelis),
+    nuevo: nuevas.has(x.tipo === 'carpeta' ? x.ultimo : x.key),
+  });
+  t.classList.add('tarjeta-lista');
+  const mini = t.querySelector('.mini');
+  mini.classList.add('cartel');
+  if (x.valoracion) mini.append(el('span', 'nota-cartel', `★ ${Number(x.valoracion).toFixed(1)}`));
+  mini.append(el('span', 'tipo-cartel', x.serie ? 'Serie' : 'Película'));
+  if (puesto) { t.classList.add('top'); t.prepend(el('span', 'puesto', String(puesto))); }
+  if (x.tipo === 'archivo') { t.dataset.key = x.key; barraVisto(t); }
+  return t;
+}
+async function pintarListas(sitio) {
+  const d = await api('/api/listas-portada').catch(() => null);
+  if (!d || !sitio.isConnected) return;
+  const filas = [
+    ['Tendencias de películas', d.peliculas.tendencias, true],
+    ['Películas mejor valoradas', d.peliculas.valoradas],
+    ['Películas populares', d.peliculas.populares],
+    ['Tendencias de series', d.series.tendencias, true],
+    ['Series mejor valoradas', d.series.valoradas],
+    ['Series populares', d.series.populares],
+  ];
+  for (const [nombreFila, lista, top] of filas) {
+    if (!lista || lista.length < 3) continue;
+    const f = fila(nombreFila, null, top ? 'top10' : '');
+    f.s.classList.add(top ? 'fila-top' : 'fila-lista');
+    lista.forEach((x, n) => f.c.append(tarjetaLista(x, lista, top ? n + 1 : 0)));
+    sitio.append(f.s);
+  }
+}
+
 // ---------- Destacado de la portada ----------
 // Un cartel grande con el fondo de lo último que has subido (con ficha de TMDB): título, datos,
 // sinopsis y «▶ Reproducir» / «ℹ Más información». Cambia solo cada 9 s (se para mientras el
@@ -443,6 +483,10 @@ function pintarInicio(carpetas, archivos) {
   }
 
   // Últimos añadidos de cada categoría, en el mismo orden que «Mis medios»
+  // Tendencias (Top 10), mejor valoradas y populares, de películas y de series
+  const listasSitio = el('div', 'listas-portada');
+  items.append(listasSitio);
+  pintarListas(listasSitio);
   const sitio = el('div', 'ultimos');
   items.append(sitio);
   // Solo los 20 últimos de cada categoría: con mucho contenido el catálogo entero pesaría demasiado

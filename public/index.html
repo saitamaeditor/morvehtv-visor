@@ -1566,6 +1566,35 @@
   .tele .ficha.heroe .chips.acciones .boton { height: 7.4vh; font-size: 2.6vh; padding: 0 2.4vw; }
   .tele .ficha.heroe .sinopsis { font-size: 2.7vh; }
   .tele .compartir { font-size: 2.2vh; }
+
+  /* ================= Listas de la portada (Top 10, mejor valoradas, populares) =================
+     Pósteres 2:3 con la nota arriba a la izquierda y «Película»/«Serie» a la derecha; debajo,
+     título y año siempre a la vista. En el Top 10, un número enorme con contorno al lado. */
+  .listas-portada .fila-titulo { display: flex; align-items: center; gap: 10px; }
+  .listas-portada .fila-titulo::before { content: ''; width: 4px; height: .9em; border-radius: 3px; background: var(--marca); }
+  .tarjeta-lista .mini { position: relative; }
+  .tarjeta-lista .nota-cartel, .tarjeta-lista .tipo-cartel { position: absolute; top: 7px; z-index: 2; height: 21px; display: inline-flex; align-items: center;
+    padding: 0 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; line-height: 1; pointer-events: none;
+    background: rgba(11,12,14,.78); border: 1px solid rgba(255,255,255,.14); color: #fff; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .tarjeta-lista .nota-cartel { left: 7px; color: #ffd60a; }
+  .tarjeta-lista .tipo-cartel { right: 7px; background: rgba(0,163,255,.85); border-color: transparent; }
+  .carrusel .tarjeta-lista .nombre, .carrusel .tarjeta-lista .meta { display: block !important; position: static !important; opacity: 1 !important; transform: none !important;
+    padding: 0 2px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .carrusel .tarjeta-lista .nombre { margin-top: 8px; font-size: 13px; font-weight: 700; color: #fff; }
+  .carrusel .tarjeta-lista .meta { font-size: 11.5px; color: var(--suave); }
+  .tarjeta-lista.con-imagen .mini::after { display: none !important; }
+  /* Top 10: el número grande encima del póster, arriba a la izquierda (la nota baja un poco) */
+  .carrusel.top10 .item.top { position: relative; }
+  .carrusel.top10 .puesto { position: absolute; z-index: 3; left: 8px; top: 2px; font-size: clamp(46px, 4.2vw, 72px); font-weight: 900; line-height: 1;
+    letter-spacing: -.05em; color: #fff; -webkit-text-stroke: 2px rgba(11,12,14,.85); paint-order: stroke fill; pointer-events: none;
+    font-family: "Arial Black", Inter, system-ui, sans-serif; text-shadow: 0 4px 18px rgba(0,0,0,.75); }
+  .carrusel.top10 .tarjeta-lista .nota-cartel { top: auto; bottom: 7px; }
+  .carrusel.top10 .item.top:hover .puesto, .carrusel.top10 .item.top:focus .puesto { color: #5cc8ff; }
+  @media (max-width: 600px) { .carrusel.top10 .puesto { font-size: 44px; } }
+  .tele .carrusel .tarjeta-lista .nombre { font-size: 2.2vh; }
+  .tele .carrusel .tarjeta-lista .meta { font-size: 1.8vh; }
+  .tele .tarjeta-lista .nota-cartel, .tele .tarjeta-lista .tipo-cartel { height: 3vh; font-size: 1.5vh; }
+  .tele .carrusel.top10 .puesto { font-size: 8vh; }
   .tele .pie { display: none; }
 </style>
 <link rel="stylesheet" href="intro.css">

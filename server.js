@@ -1068,6 +1068,69 @@ async function catalogoEntero() {
   };
 }
 
+// ---------- Listas de la portada: tendencias, mejor valoradas y populares ----------
+// Con las fichas de TMDB de todo el catálogo (películas: vídeos sueltos; series: carpetas), por
+// separado para películas y series. Se hacen una vez por cada estado del contenido (huella), en
+// segundo plano, y mientras se rehacen se sirven las anteriores.
+const listas = { huella: null, datos: null, haciendo: null };
+const VACIAS = { peliculas: { tendencias: [], valoradas: [], populares: [] }, series: { tendencias: [], valoradas: [], populares: [] } };
+async function hacerListas() {
+  const h = huella;
+  const c = await catalogo(0);
+  const titulos = c.carpetas.flatMap((x) => x.titulos);
+  const con = [];
+  let n = 0;
+  // De 4 en 4: las fichas ya conocidas salen de la caché; las nuevas, de TMDB sin saturarlo
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (n < titulos.length) {
+      const t = titulos[n++];
+      const m = await (t.tipo === 'carpeta' ? meta.deCarpeta(t.key) : meta.deArchivo(t.key)).catch(() => null);
+      if (m?.encontrado && m.poster && !m.episodio) con.push({ t, m });
+    }
+  }));
+  // Un mismo título en dos secciones: solo una vez (el más nuevo)
+  const vistos = new Map();
+  for (const x of con) {
+    const id = `${x.t.tipo}:${x.m.fuente || ''}:${x.m.tmdbId ?? x.m.id ?? x.m.titulo}`;
+    const otro = vistos.get(id);
+    if (!otro || otro.t.fecha < x.t.fecha) vistos.set(id, x);
+  }
+  const tarjeta = ({ t, m }) => ({
+    tipo: t.tipo, key: t.key, fecha: t.fecha, tamano: t.tamano, ultimo: t.ultimo,
+    titulo: m.titulo, poster: m.poster, anio: m.anio || '', valoracion: m.valoracion ?? null,
+    temporadas: m.temporadas ?? null, serie: m.tipo === 'serie',
+  });
+  const este = new Date().getFullYear();
+  const pop = (x) => x.m.popularidad ?? 0;
+  const hacer = (lista) => {
+    const porPopularidad = [...lista].sort((a, b) => pop(b) - pop(a) || b.t.fecha - a.t.fecha);
+    // Tendencias: lo más popular de estos dos años (si no llega a 10, lo más popular sin más)
+    const recientes = porPopularidad.filter((x) => Number(x.m.anio) >= este - 1);
+    const tendencias = [...recientes, ...porPopularidad.filter((x) => !recientes.includes(x))].slice(0, 10);
+    const enTendencias = new Set(tendencias);
+    return {
+      tendencias: tendencias.map(tarjeta),
+      // Mejor valoradas: con votos suficientes para que la nota signifique algo
+      valoradas: lista.filter((x) => x.m.valoracion && (x.m.votos ?? 100) >= 30)
+        .sort((a, b) => b.m.valoracion - a.m.valoracion || pop(b) - pop(a)).slice(0, 20).map(tarjeta),
+      populares: porPopularidad.filter((x) => !enTendencias.has(x)).slice(0, 20).map(tarjeta),
+    };
+  };
+  const todos = [...vistos.values()];
+  listas.datos = { peliculas: hacer(todos.filter((x) => x.t.tipo === 'archivo')), series: hacer(todos.filter((x) => x.t.tipo === 'carpeta')) };
+  listas.huella = h;
+  return listas.datos;
+}
+async function listasPortada() {
+  if (listas.datos && listas.huella === huella) return listas.datos;
+  if (!listas.haciendo) listas.haciendo = hacerListas().catch((e) => { console.error(`Listas de la portada: ${e.message}`); return null; }).finally(() => { listas.haciendo = null; });
+  if (listas.datos) return listas.datos;
+  // La primera vez se espera (como mucho 25 s; si no, vacías y estarán en la próxima visita)
+  return (await Promise.race([listas.haciendo, new Promise((ok) => setTimeout(() => ok(null), 25000))])) ?? VACIAS;
+}
+// Se preparan poco después de arrancar, para que la primera visita ya las tenga
+setTimeout(() => listasPortada().catch(() => {}), 90000).unref();
+
 // Conexiones abiertas de cada cuenta: al pagar (o cancelar) se les avisa para que la web y la
 // app quiten o pongan los anuncios en el momento, en todos sus aparatos
 const oyentesCuenta = new Map(); // id de cuenta → Set de conexiones
@@ -1108,6 +1171,7 @@ const rutas = {
     return videos.length;
   }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
+  '/api/listas-portada': () => listasPortada(),
   // Con «seccion»: el catálogo completo de esa sección (todas sus películas y series, también las
   // de sus subcarpetas que solo agrupan), para verla entera de una vez
   '/api/catalogo': async (p) => {
