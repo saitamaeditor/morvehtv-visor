@@ -1048,7 +1048,7 @@ async function plataformas() {
   return { preparando: !indicePlat.datos || !!indicePlat.construyendo, plataformas: indicePlat.datos ?? [] };
 }
 // (se empieza solo a los 2 minutos de arrancar, para que esté listo cuando alguien entre)
-setTimeout(() => plataformas().catch(() => {}), 120000).unref();
+// (las plataformas ya no salen en la portada: el índice no se prepara al arrancar)
 
 async function catalogoEntero() {
   let objetos;

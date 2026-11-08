@@ -459,29 +459,7 @@ function pintarInicio(carpetas, archivos) {
   items.append(destacado);
   // (La fila de botones de categorías ya no sale: a cada categoría se llega por el «Ver todo ›»
   // de su fila de novedades)
-  // Plataformas (Netflix, Prime Video…) con su logotipo, en dos filas: las que tienen películas y
-  // las que tienen series. Cada icono abre esa plataforma con ese tipo ya elegido.
-  const plats = el('div', 'plataformas-inicio');
-  plats.hidden = true;
-  items.append(plats);
-  pedirPlataformas().then((d) => {
-    if (!d || !plats.isConnected || !d.plataformas.length) return;
-    for (const [tipoPlat, titulo, campo] of [['peliculas', 'Plataformas de streaming · Películas', 'peliculas'], ['series', 'Plataformas de streaming · Series', 'series']]) {
-      const conAlgo = d.plataformas.filter((p) => p[campo] > 0);
-      if (!conAlgo.length) continue;
-      const s = el('section', 'fila-plataformas');
-      s.append(el('h2', 'etiqueta-plataformas', titulo));
-      const fila = el('nav', 'iconos-plataformas');
-      fila.setAttribute('aria-label', titulo);
-      for (const p of conAlgo.filter((x) => !x.especial)) fila.append(iconoPlataforma(p, tipoPlat, p[campo]));
-      // Lo que no está en ninguna plataforma, aparte al final (con una raya que lo separa)
-      const sin = conAlgo.find((x) => x.especial);
-      if (sin) { if (fila.children.length) fila.append(el('span', 'separador-plataformas')); fila.append(iconoPlataforma(sin, tipoPlat, sin[campo])); }
-      s.append(fila);
-      plats.append(s);
-    }
-    plats.hidden = !plats.children.length;
-  });
+  // (Las filas de plataformas ya no salen en la portada)
   // Plan Básico: un anuncio debajo de las categorías
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);
