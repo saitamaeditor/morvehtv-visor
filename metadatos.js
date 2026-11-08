@@ -101,7 +101,38 @@ export const PLATAFORMAS = [
   ['Mitele', /mitele/i],
   ['Rakuten TV', /rakuten/i],
   ['Pluto TV', /pluto/i],
+  ['Fubo', /fubo/i],
+  ['Hayu', /hayu/i],
 ];
+
+// Logotipo de cada plataforma: el que publica TMDB en su lista de plataformas de España (el de la
+// principal, no el de «con anuncios» o «Kids»). Se piden una vez a la semana.
+const logos = new Map();
+let logosHasta = 0;
+let logosPedidos = null;
+export function logosPlataformas() {
+  if (Date.now() < logosHasta) return Promise.resolve(Object.fromEntries(logos));
+  if (!logosPedidos) {
+    logosPedidos = (async () => {
+      const region = REGION_PLATAFORMAS();
+      const todas = [];
+      for (const tipo of ['movie', 'tv']) {
+        const { results = [] } = await pedir(`/watch/providers/${tipo}`, { watch_region: region }).catch(() => ({}));
+        todas.push(...results);
+      }
+      // La principal antes: la de más prioridad en España y, a igualdad, la de nombre más corto
+      const prio = (p) => p.display_priorities?.[region] ?? p.display_priority ?? 999;
+      todas.sort((a, b) => prio(a) - prio(b) || a.provider_name.length - b.provider_name.length);
+      for (const p of todas) {
+        const n = plataformaDe(p.provider_name);
+        if (n && p.logo_path && !logos.has(n)) logos.set(n, img(p.logo_path, 'w154'));
+      }
+      logosHasta = Date.now() + (logos.size ? 7 * 86400000 : 600000);
+      return Object.fromEntries(logos);
+    })().finally(() => { logosPedidos = null; });
+  }
+  return logosPedidos;
+}
 const REGION_PLATAFORMAS = () => process.env.TMDB_REGION || 'ES';
 function plataformaDe(nombre) {
   return (PLATAFORMAS.find(([, re]) => re.test(String(nombre))) || [])[0] || null;

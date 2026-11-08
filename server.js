@@ -1007,9 +1007,18 @@ async function construirPlataformas() {
   };
   await Promise.all(Array.from({ length: 4 }, trabajar));
   const orden = meta.PLATAFORMAS.map(([n]) => n);
+  const logos = await meta.logosPlataformas().catch(() => ({}));
   return [...por]
     .sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0]))
-    .map(([nombre, lista]) => ({ nombre, total: lista.length, titulos: lista.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)) }));
+    .map(([nombre, lista]) => ({
+      nombre,
+      logo: logos[nombre] ?? null,
+      total: lista.length,
+      // (para las dos filas de la portada: plataformas con películas y con series)
+      peliculas: lista.filter((t) => t.tipo !== 'carpeta').length,
+      series: lista.filter((t) => t.tipo === 'carpeta').length,
+      titulos: lista.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)),
+    }));
 }
 async function plataformas() {
   if (indicePlat.huella !== huella && !indicePlat.construyendo) {
