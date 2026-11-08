@@ -16,6 +16,7 @@ import http from 'node:http';
 import https from 'node:https';
 import * as meta from './metadatos.js';
 import * as enlaces from './enlaces.js';
+import { analizarEnlaces } from './enlaces-video.js';
 
 // Subidas desde enlace en marcha y recientes (en memoria: id → estado)
 const trabajosEnlace = new Map();
@@ -709,6 +710,28 @@ export async function atender(ruta, req, res, json, ip) {
     if (!puede(clave)) throw fuera();
     return json(res, 200, meta.corregir(clave, Number(datos.tmdbId), datos.tipo, datos.fuente && datos.fuente !== 'tmdb' ? { fuente: String(datos.fuente), id: datos.id } : null,
       { internacional: datos.internacional === true }));
+  }
+
+  // Enlaces de vídeo de otros servidores (Voe, Streamwish, Filelions…): se pega la lista de
+  // enlaces o códigos <iframe>, enlaces-video.js los reconoce y limpia, y se guarda un «.url» en
+  // la carpeta (la web lo abre con su fila «Servidor» para cambiar de uno a otro). Con «vista»
+  // solo dice lo que ha reconocido, sin guardar nada.
+  if (ruta === '/api/panel/enlaces-video') {
+    const lista = analizarEnlaces(String(datos.texto ?? '').slice(0, 50000)).slice(0, 12);
+    if (datos.vista) return json(res, 200, { enlaces: lista.map(({ servidor, id, url: u }) => ({ servidor, id, url: u })) });
+    if (!lista.length) throw error(400, 'No hay ningún enlace válido (tienen que empezar por https:// o ser un código <iframe>)');
+    const carpeta = carpetaValida(datos.carpeta);
+    if (carpeta.split('/').length < 2 || !puede(carpeta)) throw fuera();
+    const nombre = nombreValido(`${String(datos.nombre ?? '').trim().replace(/\.(url|strm)$/i, '')}.url`);
+    if (nombre === '.url') throw error(400, 'Escribe el nombre del título');
+    const key = carpeta + nombre;
+    if (!datos.reemplazar && await existe(key)) return json(res, 409, { error: `Ya hay «${nombre}» en esa carpeta`, existe: true });
+    // Formato de acceso directo de Windows (el primero) y los de reserva debajo, uno por línea
+    const cuerpo = `[InternetShortcut]\r\nURL=${lista[0].url}\r\n${lista.slice(1).map((x) => `${x.url}\r\n`).join('')}`;
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: cuerpo, ContentType: 'text/plain; charset=utf-8' }));
+    console.log(`Panel: ${c.usuario} guarda enlaces de vídeo «${key}»`);
+    await registrar(c, ip, `guarda enlaces de vídeo «${nombre}»`, [key]);
+    return json(res, 200, { key, enlaces: lista.length });
   }
 
   // Crear carpetas (una o varias: «SERIES/Nueva/Temporada 1/»…)
