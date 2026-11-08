@@ -985,8 +985,8 @@
   html.en-portada { scroll-padding-top: 120px; }
   /* Sin cartel destacado (aún no ha llegado o no hay fichas), las categorías bajan para no
      quedar debajo de la cabecera */
-  .destacado[hidden] + .categorias-chips { padding-top: clamp(64px, 9vh, 96px); }
-  @media (max-width: 600px) { .destacado[hidden] + .categorias-chips { padding-top: max(96px, calc(env(safe-area-inset-top) + 88px)); } }
+  .destacado[hidden] + .categorias-chips, .destacado[hidden] + .plataformas-inicio, .destacado[hidden] + .plataformas-inicio[hidden] + * { padding-top: clamp(64px, 9vh, 96px); }
+  @media (max-width: 600px) { .destacado[hidden] + .categorias-chips, .destacado[hidden] + .plataformas-inicio, .destacado[hidden] + .plataformas-inicio[hidden] + * { padding-top: max(96px, calc(env(safe-area-inset-top) + 88px)); } }
   @media (max-width: 600px) { html.en-portada { scroll-padding-top: 100px; } }
   .chip-cat { transition: background .15s, color .15s, transform .15s; }
   .tele .chip-cat { font-size: 2.4vh; padding: 1vh 1.6vw; }

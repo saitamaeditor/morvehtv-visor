@@ -442,17 +442,8 @@ function pintarInicio(carpetas, archivos) {
   const destacado = el('section', 'destacado');
   destacado.hidden = true;
   items.append(destacado);
-  // Categorías: una línea de botones con su nombre (sin mosaicos de biblioteca ni recuentos)
-  const cats = el('nav', 'categorias-chips');
-  cats.setAttribute('aria-label', 'Categorías');
-  for (const { cat, suyas } of categoriasDe(carpetas)) {
-    const b = el('button', 'chip-cat', cat.nombre);
-    b.title = suyas.map(nombre).join(', ');
-    b.dataset.carpetas = suyas.join('|');
-    b.onclick = () => irA(suyas[0]);
-    cats.append(b);
-  }
-  items.append(cats);
+  // (La fila de botones de categorías ya no sale: a cada categoría se llega por el «Ver todo ›»
+  // de su fila de novedades)
   // Plataformas (Netflix, Prime Video…) con su logotipo, en dos filas: las que tienen películas y
   // las que tienen series. Cada icono abre esa plataforma con ese tipo ya elegido.
   const plats = el('div', 'plataformas-inicio');
@@ -2225,7 +2216,7 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
   || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .icono-plataforma, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, .servidores button, #vcontenido > iframe.incrustado';
 
@@ -2296,7 +2287,7 @@ function moverFoco(dir) {
   // carátulas (al llegar al final no salta a otra fila), ni de las categorías de arriba
   const horizontal = dir === 'izq' || dir === 'der';
   // (en la cuadrícula de una sección, ← → no se escapan al menú de arriba: siguen por las tarjetas)
-  const fila = horizontal && a.closest && (a.closest('.controles, .carrusel, .categorias-chips, .destacado-botones') || (a.matches('#items > .item') && $('#items')));
+  const fila = horizontal && a.closest && (a.closest('.controles, .carrusel, .categorias-chips, .iconos-plataformas, .destacado-botones') || (a.matches('#items > .item') && $('#items')));
   const opciones = [];
   for (const c of cands) {
     if (fila && !fila.contains(c)) continue;
@@ -2418,7 +2409,7 @@ if (esTele) {
     const a = document.activeElement;
     if (++intentos > 50 || (a && a !== document.body)) return clearInterval(vigia);
     if (actual >= 0 || document.documentElement.classList.contains('con-cuenta')) return;
-    const primero = document.querySelector('.destacado:not([hidden]) .boton.reproducir') || (intentos > 15 && document.querySelector('.chip-cat, .cat:not(.vacia), #items .item'));
+    const primero = document.querySelector('.destacado:not([hidden]) .boton.reproducir') || (intentos > 15 && document.querySelector('.icono-plataforma, .chip-cat, .cat:not(.vacia), #items .item'));
     if (primero) { primero.focus({ preventScroll: true }); clearInterval(vigia); }
   }, 300);
 }
