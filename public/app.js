@@ -361,6 +361,93 @@ function fila(titulo, irAlPulsar, clase = '') {
   return { s, c };
 }
 
+// ---------- Buscador (botón «Buscar», Ctrl K) ----------
+// Busca al momento en todo el catálogo (películas y series) por su nombre; cada resultado lleva
+// su póster, título y año (de TMDB). Una película abre su ficha; una serie, su página.
+let catalogoBusqueda = null;
+const sinAcentos = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const nombreLimpio = (key) => nombre(key).replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[._]+/g, ' ').replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+-\s+(19|20)\d\d\s*$/, '').replace(/\s+/g, ' ').trim();
+function botonBuscar() {
+  const b = el('button', 'boton', '');
+  b.id = 'buscar-boton';
+  b.title = 'Buscar (Ctrl K)';
+  b.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="txt">Buscar</span><kbd>Ctrl K</kbd>';
+  b.onclick = abrirBuscador;
+  return b;
+}
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K') && typeof yo !== 'undefined' && yo) { e.preventDefault(); abrirBuscador(); }
+});
+function abrirBuscador() {
+  if ($('#buscador')) return $('#buscador input').focus();
+  const explorar = $('#menu-explorar'); if (explorar) explorar.remove();
+  const capa = el('div', 'buscador');
+  capa.id = 'buscador';
+  const caja = el('div', 'buscador-caja');
+  const fila = el('div', 'buscador-fila');
+  fila.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
+  const q = el('input');
+  q.type = 'search'; q.placeholder = 'Busca una película o serie…'; q.autocomplete = 'off'; q.spellcheck = false;
+  const cerrarB = el('button', 'buscador-cerrar', 'Esc');
+  fila.append(q, cerrarB);
+  const res = el('div', 'buscador-resultados');
+  caja.append(fila, res);
+  capa.append(caja);
+  document.body.append(capa);
+  document.documentElement.classList.add('con-buscador');
+  const cerrarTodo = () => { capa.remove(); document.documentElement.classList.remove('con-buscador'); };
+  cerrarB.onclick = cerrarTodo;
+  capa.addEventListener('pointerdown', (e) => { if (e.target === capa) cerrarTodo(); });
+  capa.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); cerrarTodo(); }
+    // ↓ ↑ entre los resultados
+    const lista = [...res.querySelectorAll('.resultado')];
+    const i = lista.indexOf(document.activeElement);
+    if (e.key === 'ArrowDown' && lista.length) { e.preventDefault(); e.stopPropagation(); (lista[i + 1] || lista[0]).focus(); }
+    if (e.key === 'ArrowUp' && lista.length) { e.preventDefault(); e.stopPropagation(); (i <= 0 ? q : lista[i - 1]).focus(); }
+  });
+  catalogoBusqueda = catalogoBusqueda || api('/api/catalogo', { max: 0 }).then((d) => d.carpetas.flatMap((c) => c.titulos.map((t) => ({ ...t, buscar: sinAcentos(nombreLimpio(t.key)) })))).catch(() => { catalogoBusqueda = null; return []; });
+  let turno = 0;
+  const pintarRes = async () => {
+    const n = ++turno;
+    const terminos = sinAcentos(q.value).split(/\s+/).filter(Boolean);
+    res.innerHTML = '';
+    if (!terminos.length) { res.append(el('div', 'buscador-vacio', 'Escribe el nombre de una película o serie')); return; }
+    const todos = await catalogoBusqueda;
+    if (n !== turno) return;
+    const vistos = new Set();
+    const hallados = todos.filter((t) => terminos.every((x) => t.buscar.includes(x)) && !vistos.has(t.buscar) && vistos.add(t.buscar))
+      .sort((a, b) => (a.buscar.startsWith(terminos[0]) ? 0 : 1) - (b.buscar.startsWith(terminos[0]) ? 0 : 1) || new Date(b.fecha) - new Date(a.fecha))
+      .slice(0, 12);
+    if (!hallados.length) { res.append(el('div', 'buscador-vacio', `No hay nada con «${q.value.trim()}»`)); return; }
+    const pelis = hallados.filter((x) => x.tipo !== 'carpeta');
+    for (const x of hallados) {
+      const serie = x.tipo === 'carpeta';
+      const r = el('button', 'resultado');
+      const img = el('div', 'resultado-cartel', serie ? '📺' : '🎬');
+      const texto = el('div', 'resultado-texto');
+      const t = el('b', null, nombreLimpio(x.key));
+      const sub = el('small', null, serie ? 'Serie' : 'Película');
+      texto.append(t, sub);
+      r.append(img, texto);
+      r.onclick = () => { cerrarTodo(); if (serie) irA(x.key); else abrir(pelis.indexOf(x), pelis); };
+      res.append(r);
+      pedirMeta(serie ? 'carpeta' : 'archivo', x.key).then((d) => {
+        if (!d?.encontrado || !d.titulo || !r.isConnected) return;
+        t.textContent = d.titulo;
+        sub.textContent = [d.anio, serie || d.tipo === 'serie' ? 'Serie' : 'Película', d.valoracion && `★ ${Number(d.valoracion).toFixed(1)}`].filter(Boolean).join(' · ');
+        const p = d.temporada?.poster ?? d.poster;
+        if (p) { const im = el('img'); im.src = p; im.alt = ''; im.loading = 'lazy'; im.onerror = () => im.remove(); img.textContent = ''; img.append(im); }
+      });
+    }
+  };
+  let espera = null;
+  q.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(pintarRes, 120); });
+  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const p = res.querySelector('.resultado'); if (p) p.click(); } });
+  pintarRes();
+  setTimeout(() => q.focus(), 0);
+}
+
 // ---------- Listas de la portada ----------
 // Tarjeta con el póster, la nota y si es película o serie arriba, y el título y el año debajo;
 // en el Top 10, su número grande al lado
@@ -2454,7 +2541,7 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
   || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .icono-plataforma, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '.destacado .boton, #pestanas button:not([hidden]), .menu-explorar button, #buscar-boton, .buscador input, .buscador .resultado, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .icono-plataforma, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, .servidores button, #vcontenido > iframe.incrustado';
 

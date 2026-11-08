@@ -1667,6 +1667,66 @@
   }
   .tele #items.vista-carteles { grid-template-columns: repeat(auto-fill, minmax(13vw, 1fr)); }
   .tele .vista-carteles .item .nombre { font-size: 2.2vh; } .tele .vista-carteles .item .meta { font-size: 1.8vh; }
+  /* ================= Menú de arriba como las webs de cine =================
+     Inicio · Películas · Series · Explorar ▾ · Favoritos (texto limpio; la activa con una raya
+     cian debajo), la cuenta en una píldora azul con el plan encima del nombre y «Buscar» (Ctrl K) */
+  #pestanas .pestana { background: none !important; box-shadow: none !important; border-radius: 0; padding: 8px 2px; margin: 0 clamp(8px, 1.1vw, 16px); color: #c7c7cc;
+    font-size: clamp(13.5px, 1vw, 15px); font-weight: 600; position: relative; display: inline-flex; align-items: center; gap: 5px; }
+  #pestanas .pestana:hover, #pestanas .pestana:focus { color: #fff; }
+  #pestanas .pestana.activa { color: #fff; font-weight: 700; }
+  #pestanas .pestana.activa::after { content: ''; display: block !important; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px;
+    background: #00a3ff; transform: none; width: auto; }
+  #pestanas .pestana .flechita { font-size: .8em; opacity: .8; }
+  .menu-explorar { position: fixed; z-index: 30; min-width: 240px; max-height: min(70vh, 520px); overflow: auto; padding: 8px; border-radius: 14px;
+    background: rgba(18,19,22,.97); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 24px 60px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 2px; }
+  .menu-explorar button { text-align: left; background: none; border: 0; color: #e5e5ea; font: 600 14px/1.3 inherit; font-family: inherit; padding: 10px 12px; border-radius: 9px; cursor: pointer; }
+  .menu-explorar button:hover, .menu-explorar button:focus { background: rgba(255,255,255,.08); color: #fff; outline: none; }
+  .menu-explorar button.activa { color: #5cc8ff; }
+  /* Cuenta: píldora azul, el plan pequeño encima del nombre */
+  #mi-cuenta { background: linear-gradient(110deg, #0a84ff, #0060df) !important; border: 1px solid rgba(255,255,255,.18) !important; color: #fff;
+    padding: 3px 14px 3px 3px; gap: 8px; box-shadow: 0 6px 20px rgba(0,132,255,.3); }
+  #mi-cuenta.vip { background: linear-gradient(110deg, #00a3ff, #7928ca) !important; }
+  #mi-cuenta:hover, #mi-cuenta:focus { filter: brightness(1.08); }
+  #mi-cuenta .inicial { background: rgba(255,255,255,.18) !important; color: #fff; box-shadow: none !important; }
+  #mi-cuenta .txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.12; max-width: 18ch; }
+  #mi-cuenta .plan-cuenta { font-size: 9.5px; font-weight: 700; opacity: .85; letter-spacing: .02em; white-space: nowrap; }
+  #mi-cuenta .nombre-cuenta { font-size: 12.5px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #mi-cuenta .insignia { display: none; }
+  /* Buscar */
+  #buscar-boton { flex: none; margin-left: 8px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); color: #fff; font-size: 13px; font-weight: 700; }
+  #buscar-boton .icono { width: 17px; height: 17px; }
+  #buscar-boton kbd { font: 700 10px/1 inherit; font-family: inherit; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); color: #c7c7cc; }
+  #buscar-boton:hover, #buscar-boton:focus { background: rgba(255,255,255,.1); }
+  #mi-cuenta + #buscar-boton + #salir-app, #buscar-boton + #salir-app { margin-left: 8px; }
+  @media (max-width: 900px) { #buscar-boton kbd { display: none; } }
+  @media (max-width: 1100px) { #pestanas .pestana { margin: 0 8px; } #mi-cuenta .txt { max-width: 13ch; } }
+  @media (max-width: 600px) {
+    #buscar-boton { padding: 7px; margin-left: 4px; } #buscar-boton .txt { display: none; }
+    #mi-cuenta { padding: 2px; } #mi-cuenta .txt { display: none; }
+    #pestanas .pestana { margin: 0 7px; font-size: 13px; }
+  }
+  .tele #buscar-boton kbd { display: none; }
+  /* Ventana del buscador */
+  .buscador { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.6); display: flex; justify-content: center; align-items: flex-start;
+    padding: clamp(60px, 12vh, 120px) 16px 16px; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .buscador-caja { width: min(640px, 100%); max-height: calc(100vh - 140px); display: flex; flex-direction: column; border-radius: 18px; overflow: hidden;
+    background: rgba(18,19,22,.98); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 30px 80px rgba(0,0,0,.7); }
+  .buscador-fila { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.08); color: var(--suave); }
+  .buscador-fila .icono { width: 20px; height: 20px; flex: none; }
+  .buscador-fila input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #fff; font-size: 17px; padding: 4px 0; }
+  .buscador-cerrar { flex: none; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); color: #c7c7cc; border-radius: 7px; font-size: 11px; font-weight: 700; padding: 4px 8px; cursor: pointer; }
+  .buscador-resultados { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+  .buscador-vacio { padding: 18px 12px; color: var(--suave); font-size: 14px; text-align: center; }
+  .resultado { display: flex; align-items: center; gap: 14px; padding: 8px; border-radius: 12px; background: none; border: 0; color: #fff; text-align: left; cursor: pointer; font-family: inherit; }
+  .resultado:hover, .resultado:focus { background: rgba(255,255,255,.07); outline: none; }
+  .resultado:focus { box-shadow: inset 0 0 0 2px #00a3ff; }
+  .resultado-cartel { width: 46px; aspect-ratio: 2 / 3; flex: none; border-radius: 8px; overflow: hidden; background: #18191d; display: grid; place-items: center; font-size: 20px; }
+  .resultado-cartel img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .resultado-texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .resultado-texto b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .resultado-texto small { font-size: 12.5px; color: var(--suave); }
+  .con-buscador body { overflow: hidden; }
   /* Plataformas de streaming de películas: etiqueta en píldora y logotipos cuadrados redondeados */
   .plataformas-inicio { margin: clamp(6px, 1vw, 14px) 0 clamp(22px, 2.6vw, 38px); }
   .etiqueta-plataformas { border-color: rgba(0,163,255,.45); background: linear-gradient(90deg, rgba(0,163,255,.16), rgba(121,40,202,.12)); color: #fff;

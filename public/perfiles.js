@@ -45,9 +45,19 @@ function pintarBotonCuenta() {
     $('header').insertBefore(b, $('#salir-app'));
   }
   b.hidden = !yo;
+  // «Buscar» (Ctrl K) al lado de la cuenta
+  if (!$('#buscar-boton') && typeof botonBuscar === 'function') b.after(botonBuscar());
+  $('#buscar-boton') && ($('#buscar-boton').hidden = !yo);
   b.innerHTML = '';
-  if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
-  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'VIP'));
+  if (yo) {
+    // El plan encima del nombre («VIP», «Plan Básico»…), en dos líneas
+    const vip = typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium';
+    const plan = typeof planInfo !== 'undefined' && planInfo ? (planInfo.admin ? 'Administrador' : vip ? '⭐ VIP' : 'Plan Básico') : 'Mi cuenta';
+    const txt = el('span', 'txt');
+    txt.append(el('small', 'plan-cuenta', plan), el('span', 'nombre-cuenta', yo.nombre || yo.usuario));
+    b.append(el('span', 'inicial', inicial(yo)), txt);
+    b.classList.toggle('vip', vip);
+  }
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -257,33 +267,85 @@ const VISTAS_PERFIL = {
   favoritos: { titulo: '★ Favoritos', corto: '★ Favoritos' },
 };
 
+// Menú de arriba: Inicio, Películas, Series, «Explorar ▾» (las demás secciones y «Seguir viendo»)
+// y Favoritos
 function pintarPestanas() {
   let nav = $('#pestanas');
   if (!nav) {
     nav = el('nav');
     nav.id = 'pestanas';
-    const inicio = el('button', 'pestana', '⌂ Inicio');
-    inicio.dataset.vista = '';
-    inicio.onclick = () => irA('');
-    nav.append(inicio);
-    for (const [id, v] of Object.entries(VISTAS_PERFIL)) {
-      const b = el('button', 'pestana', v.corto);
-      b.dataset.vista = id;
-      b.onclick = () => irA(estado.prefijo === `:${id}` ? '' : `:${id}`);
-      nav.append(b);
-    }
+    const boton = (texto, alPulsar, datos = {}) => {
+      const b = el('button', 'pestana', texto);
+      Object.assign(b.dataset, datos);
+      b.onclick = alPulsar;
+      return b;
+    };
+    const inicio = boton('Inicio', () => irA(''), { vista: '' });
+    const pelis = boton('Películas', () => {}, { seccion: ':-' });
+    const series = boton('Series', () => {}, { seccion: ':-' });
+    const explorar = boton('Explorar', () => abrirExplorar(explorar), { explorar: '1' });
+    explorar.append(el('span', 'flechita', '▾'));
+    explorar.setAttribute('aria-haspopup', 'menu');
+    const favoritos = boton('Favoritos', () => irA(estado.prefijo === ':favoritos' ? '' : ':favoritos'), { vista: 'favoritos' });
+    nav.append(inicio, pelis, series, explorar, favoritos);
     $('#directo').after(nav);
+    // Películas y Series: la primera carpeta de cada tipo; las demás secciones, en «Explorar»
+    api('/api/catalogo', { max: 1 }).then((d) => {
+      const cats = categoriasDe(d.carpetas.map((x) => x.carpeta));
+      const de = (id) => cats.find((c) => c.principal && c.cat.tmdb === id && /^(pelicula|serie)$/.test(c.cat.tmdb) && c.cat.nombre === (id === 'pelicula' ? 'Películas' : 'Series'));
+      for (const [b, c] of [[pelis, de('pelicula')], [series, de('serie')]]) {
+        // (si no hay carpeta de ese tipo, el botón no sale)
+        if (!c) { b.hidden = true; continue; }
+        b.dataset.seccion = c.suyas[0];
+        b.onclick = () => irA(c.suyas[0]);
+      }
+      nav._otras = cats.filter((c) => c.suyas[0] !== pelis.dataset.seccion && c.suyas[0] !== series.dataset.seccion);
+      marcarPestanas();
+    }).catch(() => {});
   }
   nav.hidden = !yo;
   marcarPestanas();
+}
+// «Explorar ▾»: un desplegable con las demás secciones y «Seguir viendo»
+function abrirExplorar(boton) {
+  let m = $('#menu-explorar');
+  if (m) { m.remove(); return; }
+  m = el('div', 'menu-explorar');
+  m.id = 'menu-explorar';
+  m.setAttribute('role', 'menu');
+  const opcion = (texto, ir, activa) => {
+    const b = el('button', activa ? 'activa' : '', texto);
+    b.setAttribute('role', 'menuitem');
+    b.onclick = () => { m.remove(); ir(); };
+    m.append(b);
+  };
+  opcion('▶ Seguir viendo', () => irA(':seguir'), estado.prefijo === ':seguir');
+  for (const c of ($('#pestanas')._otras || [])) opcion(`${c.cat.icono} ${c.cat.nombre}`, () => irA(c.suyas[0]), estado.prefijo.startsWith(c.suyas[0]));
+  const r = boton.getBoundingClientRect();
+  m.style.left = `${Math.max(8, Math.min(r.left, innerWidth - 260))}px`;
+  m.style.top = `${r.bottom + 8}px`;
+  document.body.append(m);
+  const primero = m.querySelector('button');
+  if (primero && (esTele || document.documentElement.classList.contains('usa-mando'))) primero.focus();
+  // Se cierra al pulsar fuera, con Esc o al bajar
+  setTimeout(() => {
+    const fuera = (e) => { if (!m.contains(e.target) && e.target !== boton && !boton.contains(e.target)) cerrarM(); };
+    const tecla = (e) => { if (e.key === 'Escape') { cerrarM(); boton.focus(); } };
+    const cerrarM = () => { m.remove(); document.removeEventListener('pointerdown', fuera); document.removeEventListener('keydown', tecla); removeEventListener('scroll', cerrarM); };
+    document.addEventListener('pointerdown', fuera);
+    document.addEventListener('keydown', tecla);
+    addEventListener('scroll', cerrarM, { passive: true, once: true });
+  });
 }
 // La pestaña activa: Inicio, «Seguir viendo», «Favoritos» o la sección en la que se está
 function marcarPestanas() {
   const nav = $('#pestanas');
   if (!nav) return;
   let activa = null;
+  const otras = nav._otras || [];
   nav.querySelectorAll('button').forEach((b) => {
-    const si = b.dataset.seccion ? estado.prefijo.startsWith(b.dataset.seccion)
+    const si = b.dataset.explorar ? (estado.prefijo === ':seguir' || otras.some((c) => estado.prefijo.startsWith(c.suyas[0])))
+      : b.dataset.seccion ? estado.prefijo.startsWith(b.dataset.seccion)
       : b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo;
     b.classList.toggle('activa', si);
     if (si) activa = b;
