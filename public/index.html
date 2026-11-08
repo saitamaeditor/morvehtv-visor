@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MorvehTV</title>
-<meta name="theme-color" content="#0b0c0e">
+<meta name="theme-color" content="#0f1115">
 <!-- Para añadirla a la pantalla de inicio del móvil como si fuera una app -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
@@ -17,6 +17,18 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MorvehTV">
 <script src="polyfills.js"></script>
+<!--ADSENSE-->
+<!-- ===================================================================== -->
+<!-- PEGA TU SCRIPT DE ADSENSE AQUÍ -->
+<!-- Ya configurado con el ID de editor del cliente. Si algún día cambia,
+     sustituye la línea <script async ...> de abajo por la que da AdSense
+     (Anuncios > Obtener código). Debe aparecer UNA sola vez en la página.
+     NO borres las marcas ADSENSE de justo encima y debajo de este bloque:
+     el servidor las usa para no mostrar anuncios a las cuentas VIP, a los
+     administradores ni dentro de la app de Android. -->
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4674524691998401" crossorigin="anonymous"></script>
+<!-- ===================================================================== -->
+<!--/ADSENSE-->
 <style>
   :root {
     --fondo: #0f1115; --panel: #171a21; --panel2: #1f232c; --borde: #2a2f3a;
@@ -421,6 +433,10 @@
   .anuncio-propio.promo { background: linear-gradient(110deg, rgba(79,140,255,.18), rgba(255,178,36,.12)); border-color: rgba(255,178,36,.35); }
   .anuncio-propio .boton { flex: none; }
   .anuncio ins.adsbygoogle { min-height: 90px; }
+  /* Bloque fijo de Google AdSense al pie del catálogo (ver el final del body) */
+  .adsense-bloque { display: flex; flex-direction: column; gap: 6px; padding: 0 16px 16px; }
+  .adsense-bloque ins.adsbygoogle { min-height: 90px; }
+  @media (max-width: 600px) { .adsense-bloque { padding: 0 12px 12px; } }
   .tele .anuncio-propio { padding: 2vh 2vw; } .tele .anuncio-propio .texto b { font-size: 22px; } .tele .anuncio-propio .texto span { font-size: 17px; }
   /* Anuncio antes del vídeo: centrado sobre el reproductor, 5 s y luego «Ver el vídeo» */
   .anuncio-previo { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 16px;
@@ -889,13 +905,8 @@
   .destacado-puntos .punto.activo { background: #fff; width: 26px; border-radius: 6px; }
   /* Filas: título con «Ver todo ›» y flechas a los lados */
   .fila-titulo a { display: inline-flex; align-items: baseline; gap: 10px; }
-  /* «Ver todo ›» siempre a la vista, como un botón junto al nombre de la fila */
-  .ver-todo { font-size: .62em; font-weight: 700; color: #fff; margin-left: 12px; padding: 4px 12px; border-radius: 999px;
-    border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.06); vertical-align: middle; transition: background .15s, color .15s; }
-  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: #fff; color: #0a0a0c; }
-  /* La tarjeta del final de cada fila: «Ver todo», a juego con las carátulas */
-  .tarjeta-ver-todo .mini { background: linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.03)); font-size: 3.4em; font-weight: 300;
-    display: flex; align-items: center; justify-content: center; border: 1px dashed rgba(255,255,255,.3); }
+  .ver-todo { font-size: .7em; font-weight: 700; color: var(--acento); opacity: 0; transform: translateX(-6px); transition: opacity .2s, transform .2s; }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo, .fila:hover .ver-todo { opacity: 1; transform: none; }
   .carrusel-caja { position: relative; }
   .flecha-fila { position: absolute; top: 0; bottom: 14px; z-index: 3; width: clamp(34px, 3.2vw, 56px); border: 0; padding: 0; cursor: pointer;
     background: rgba(11,12,16,.55); color: #fff; font-size: clamp(30px, 3vw, 48px); line-height: 1; opacity: 0; transition: opacity .2s, background .2s; }
@@ -1014,8 +1025,6 @@
   .tele .icono-plataforma { width: 13vh; }
   .tele .iconos-plataformas.pequenos .icono-plataforma { width: 9vh; }
   .chip-cat.activa { background: #fff; color: #0a0a0c; border-color: #fff; }
-  /* Orden del catálogo completo de una sección (ocupa toda la fila de la rejilla) */
-  .orden-seccion { grid-column: 1 / -1; margin: 0 0 4px; }
   .vista-plataforma .iconos-plataformas, .vista-plataforma .filtro-tipo { margin: 0 0 14px; }
   .cabecera-plataforma .logo-plataforma { width: clamp(48px, 4.6vw, 72px); aspect-ratio: 1; border-radius: 22%; object-fit: cover; }
   /* Filas */
@@ -1198,571 +1207,6 @@
     .controles .boton.audio .nombre-idioma { display: none; }
     .controles .boton.audio { padding: 0 6px; }
   }
-
-  /* ================= Estilo propio de MorvehTV: «Aurora» =================
-     La identidad sale del logo: el degradado azul → violeta → magenta de la nube. Fondo de noche
-     azul-violeta con un resplandor suave arriba, todo redondeado (botones en píldora, carteles con
-     esquinas amables), el botón principal con el degradado de la marca y los carteles que se elevan
-     con un halo de color al pasar por encima. Sin fuentes externas (así ninguna otra web sabe
-     quién entra): letra del sistema, más marcada. */
-  :root {
-    --fondo: #0a0914; --panel: #13111f; --panel2: #1c1930; --borde: #2a2640; --texto: #f3f1fa; --suave: #a7a2bd;
-    --acento: #a066ff; --m-azul: #4f8cff; --m-violeta: #8e4ec6; --m-magenta: #e0459b;
-    --marca: linear-gradient(120deg, var(--m-azul) 0%, var(--m-violeta) 52%, var(--m-magenta) 100%);
-    --halo: 0 14px 38px rgba(142,78,198,.42);
-  }
-  body { background: var(--fondo); font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", Roboto, sans-serif;
-    -webkit-font-smoothing: antialiased; }
-  /* Resplandor de aurora fijo detrás de todo (no se mueve: no gasta en las teles) */
-  body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-    background: radial-gradient(60% 45% at 12% -8%, rgba(79,140,255,.16), transparent 70%),
-      radial-gradient(50% 40% at 88% -6%, rgba(224,69,155,.14), transparent 70%),
-      radial-gradient(70% 50% at 50% 110%, rgba(142,78,198,.10), transparent 70%); }
-  ::selection { background: rgba(160,102,255,.45); color: #fff; }
-  html { scrollbar-color: #3a3458 transparent; }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-thumb { background: #3a3458; border-radius: 10px; border: 2px solid var(--fondo); }
-  ::-webkit-scrollbar-track { background: transparent; }
-  /* Cabecera de cristal con una línea fina de la marca debajo (en la portada, al bajar) */
-  header { background: rgba(10,9,20,.82); box-shadow: none; border-bottom: 0; }
-  .en-portada.bajado header { background: rgba(10,9,20,.92); box-shadow: none; }
-  header::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--marca); opacity: .55; pointer-events: none; }
-  .en-portada:not(.bajado) header::after { opacity: 0; }
-  @media (max-width: 600px) { header { position: relative; } }
-  .logo .tv { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  /* Menú: la pestaña activa con una rayita de la marca debajo */
-  .pestana { position: relative; }
-  .pestana.activa::after { content: ''; position: absolute; left: 50%; bottom: -3px; width: 18px; height: 3px; border-radius: 3px; transform: translateX(-50%); background: var(--marca); }
-  /* Botones en píldora */
-  .boton, select { border-radius: 999px; }
-  .boton { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); transition: background .2s, border-color .2s, box-shadow .2s, transform .15s, filter .2s; }
-  .boton:hover { border-color: rgba(160,102,255,.7); background: rgba(160,102,255,.12); }
-  .boton.activo { background: var(--marca); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(142,78,198,.35); }
-  .boton.reproducir, .destacado .boton.reproducir { background: var(--marca); border-color: transparent; color: #fff; border-radius: 999px; box-shadow: var(--halo); }
-  .boton.reproducir:hover, .boton.reproducir:focus, .destacado .boton.reproducir:hover, .destacado .boton.reproducir:focus {
-    background: var(--marca); border-color: transparent; filter: brightness(1.12); }
-  .destacado .boton { border-radius: 999px; }
-  .destacado .boton.info, #cabecera .boton:not(.reproducir) { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; color: #fff; }
-  .destacado .boton.info:hover, .destacado .boton.info:focus, #cabecera .boton:not(.reproducir):hover { background: rgba(255,255,255,.2); }
-  .boton.reproducir:focus, .destacado .boton:focus, #cabecera .boton:focus { outline: 3px solid #fff; outline-offset: 3px; }
-  /* Portada: el destacado se funde con el fondo de noche; su etiqueta y sus puntos con la marca */
-  .destacado::after { background: linear-gradient(90deg, rgba(10,9,20,.94) 0%, rgba(10,9,20,.6) 38%, rgba(10,9,20,0) 70%),
-      linear-gradient(0deg, var(--fondo) 0%, rgba(10,9,20,.55) 22%, rgba(10,9,20,0) 50%); }
-  .destacado-etiqueta { color: #d9c7ff; }
-  .destacado-etiqueta::before { background: var(--marca); }
-  .destacado-puntos .punto.activo { background: var(--marca); }
-  /* Filas: el título con una barrita de la marca delante */
-  .fila-titulo a::before { content: ''; align-self: center; width: 4px; height: .95em; border-radius: 3px; background: var(--marca); flex: none; }
-  .fila-titulo a:hover, .fila-titulo a:focus { color: #fff; }
-  .ver-todo { background: rgba(160,102,255,.14); border: 1px solid rgba(160,102,255,.4); }
-  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: var(--marca); border-color: transparent; color: #fff; }
-  .tarjeta-ver-todo .mini { background: linear-gradient(135deg, rgba(79,140,255,.22), rgba(142,78,198,.18) 50%, rgba(224,69,155,.22)); }
-  .flecha-fila:hover { background: rgba(10,9,20,.8); }
-  /* Carteles: esquinas redondeadas; al pasar el ratón se elevan con el halo de la marca y, con
-     el mando o el teclado, llevan un marco blanco */
-  .item .mini { border-radius: 12px; }
-  .item .visto { border-radius: 0 0 12px 12px; }
-  .item:hover .mini { box-shadow: 0 0 0 2px rgba(160,102,255,.75), var(--halo); }
-  .item:focus .mini { box-shadow: 0 0 0 3px #fff, var(--halo); }
-  .item .nuevo { background: var(--marca); border-radius: 8px 8px 0 0; }
-  @media (hover: hover) and (pointer: fine) {
-    .carrusel .item:not(.episodio) { transition: transform .22s ease; }
-    .carrusel .item:not(.episodio):hover { transform: translateY(-4px); }
-    .rejilla .item:not(.episodio):hover { transform: translateY(-4px) scale(1.03); }
-  }
-  /* Categorías y chips: píldoras; la elegida con la marca */
-  .chip-cat { border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.05); }
-  .chip-cat:hover, .chip-cat:focus, .chip-cat.activa { background: var(--marca); border-color: transparent; color: #fff; }
-  #cabecera .chip { border-radius: 999px; }
-  /* El nombre grande de la sección, de blanco a lila y rosa */
-  .biblioteca h1 { background: linear-gradient(120deg, #fff 35%, #d9c7ff 70%, #ff9ccf); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  #migas a:hover { color: #d9c7ff; }
-  /* El reproductor, con el mismo degradado de la marca */
-  .repro { --g1: var(--m-azul); --g2: var(--m-magenta); --deg: var(--marca); }
-  .sigla, .menu-audio .guardar-audios, #visor.cine #salircine:hover, #visor.cine #salircine:focus { background: var(--marca); }
-  .gran-play, #visor.cine .gran-play, .gran-play:hover, .gran-play:focus, #visor.cine .gran-play:hover, #visor.cine .gran-play:focus { background: var(--marca); }
-  .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(120deg, rgba(79,140,255,.9), rgba(142,78,198,.9) 52%, rgba(224,69,155,.9)); }
-  .menu-audio button.activo::after { color: #c9a6ff; }
-  .tele .item:focus .mini { box-shadow: 0 0 0 .45vh #fff, var(--halo); }
-
-  /* ---------- Aurora, acabado profesional ----------
-     Más contención: el degradado solo en lo principal (reproducir, lo elegido), el resto en
-     blanco y grises de cristal; títulos con la letra más apretada, menú en píldoras, carteles
-     con un filo de luz y un brillo que entra al pasar por encima, y movimiento suave. */
-  :root { --cristal: rgba(255,255,255,.06); --cristal-borde: rgba(255,255,255,.09); --suave: #9d98b3; --curva: cubic-bezier(.2,.8,.2,1); }
-  h1, h2, h3, .fila-titulo, .destacado h1, .biblioteca h1, #cabecera .ficha h2 { letter-spacing: -.022em; }
-  /* Cabecera más alta y limpia */
-  header { padding-top: 12px; padding-bottom: 12px; }
-  .logo > span:not(#directo) { letter-spacing: -.035em; }
-  /* Menú: píldoras de cristal; la activa, blanca y destacada */
-  .pestana { margin: 0 2px; padding: 7px 14px; border-radius: 999px; color: #bdb8d2; font-weight: 600; transition: background .2s var(--curva), color .2s; }
-  .pestana:hover, .pestana:focus { background: var(--cristal); color: #fff; }
-  .pestana.activa { background: rgba(255,255,255,.1); color: #fff; font-weight: 700; box-shadow: inset 0 0 0 1px var(--cristal-borde); }
-  .pestana.activa::after { display: none; }
-  @media (max-width: 600px) { .pestana { padding: 6px 10px; margin: 0; } }
-  /* Botones secundarios de cristal; el principal con el degradado y un brillo interior */
-  .boton { background: var(--cristal); border-color: var(--cristal-borde); font-weight: 600; }
-  .boton:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.18); }
-  .boton.reproducir, .destacado .boton.reproducir { font-weight: 800; letter-spacing: .01em;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 10px 30px rgba(142,78,198,.38); }
-  .destacado .boton { padding: 12px 28px; }
-  /* Portada: el título del destacado más imponente; los puntos, finos */
-  .destacado h1 { font-weight: 900; line-height: .98; text-shadow: 0 4px 30px rgba(0,0,0,.55); }
-  .destacado-etiqueta { color: #fff; opacity: .9; letter-spacing: .18em; }
-  .destacado-datos { color: #e3dff0; }
-  .destacado-puntos .punto { width: 8px; height: 8px; background: rgba(255,255,255,.3); transition: width .3s var(--curva), background .3s; }
-  .destacado-puntos .punto.activo { width: 28px; border-radius: 4px; }
-  /* Filas: título sobrio y «Ver todo» discreto que se enciende al pasar */
-  .fila { margin-bottom: clamp(18px, 2.2vw, 34px); }
-  .fila-titulo { font-weight: 800; font-size: clamp(17px, 1.5vw, 24px); }
-  .fila-titulo a::before { width: 3px; height: .85em; }
-  .ver-todo { background: transparent; border: 1px solid var(--cristal-borde); color: #cfc9e6; font-weight: 600; transition: all .2s var(--curva); }
-  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: #fff; border-color: #fff; color: #0a0914; }
-  .tarjeta-ver-todo .mini { border: 1px solid var(--cristal-borde) !important; background: linear-gradient(160deg, rgba(79,140,255,.16), rgba(142,78,198,.12) 50%, rgba(224,69,155,.16)); }
-  .tarjeta-ver-todo:hover .mini { background: linear-gradient(160deg, rgba(79,140,255,.3), rgba(142,78,198,.24) 50%, rgba(224,69,155,.3)); }
-  /* Carteles: filo de luz, fondo de cristal mientras carga la imagen y un brillo al pasar */
-  .item .mini { position: relative; background-color: #15132a; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); transition: box-shadow .3s var(--curva); }
-  .item .mini::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; z-index: 1;
-    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.14) 48%, transparent 62%); background-size: 250% 100%; background-position: 100% 0;
-    transition: opacity .3s, background-position .7s var(--curva); }
-  .item:hover .mini::before { opacity: 1; background-position: 0 0; }
-  .item:hover .mini { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 18px 40px rgba(0,0,0,.55), 0 8px 30px rgba(142,78,198,.3); }
-  .item:focus .mini { box-shadow: 0 0 0 3px #fff, 0 18px 40px rgba(0,0,0,.55); }
-  @media (hover: hover) and (pointer: fine) {
-    .carrusel .item:not(.episodio), .rejilla .item:not(.episodio) { transition: transform .35s var(--curva); }
-    .carrusel .item:not(.episodio):hover { transform: translateY(-6px); }
-    .rejilla .item:not(.episodio):hover { transform: translateY(-6px); }
-  }
-  .item .nombre { font-weight: 650; letter-spacing: -.005em; }
-  .item .meta { color: var(--suave); }
-  .item .nuevo { background: #fff; color: #0a0914; font-weight: 800; }
-  /* Categorías y orden: cristal; la elegida, blanca */
-  .chip-cat { background: var(--cristal); border-color: var(--cristal-borde); font-weight: 600; }
-  .chip-cat:hover, .chip-cat:focus { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.2); color: #fff; }
-  .chip-cat.activa { background: #fff; border-color: #fff; color: #0a0914; }
-  .boton.activo { background: #fff; border-color: #fff; color: #0a0914; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
-  .servidores .boton.activo { background: var(--marca); border-color: transparent; color: #fff; }
-  /* Sección: nombre grande en blanco, con una línea de la marca debajo */
-  .biblioteca h1 { background: none; color: #fff; -webkit-background-clip: border-box; background-clip: border-box; font-weight: 900; position: relative; padding-bottom: 10px; }
-  .biblioteca h1::after { content: ''; position: absolute; left: 0; bottom: 0; width: 48px; height: 3px; border-radius: 3px; background: var(--marca); }
-  /* Ficha: chips de cristal y el título con más presencia */
-  #cabecera .ficha h2 { font-weight: 900; line-height: 1.02; }
-  #cabecera .chip { background: var(--cristal); border: 1px solid var(--cristal-borde); color: #e8e4f5; }
-  #cabecera .ficha p { color: #ddd8ec; line-height: 1.6; }
-  /* Ventanas y cajas de la cuenta, con el mismo cristal */
-  .cuenta-caja { background: rgba(19,17,31,.92); border-color: var(--cristal-borde); border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05); }
-  .aviso { background: rgba(28,25,48,.96); border: 1px solid var(--cristal-borde); border-radius: 999px; padding: 10px 18px; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
-  /* Entrada suave del contenido al cambiar de página */
-  @keyframes aparecer-aurora { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  #items > *, .fila { animation: aparecer-aurora .45s var(--curva) both; }
-  .tele #items > *, .tele .fila { animation: none; }
-  @media (prefers-reduced-motion: reduce) {
-    #items > *, .fila { animation: none; }
-    .item .mini::before { display: none; }
-  }
-
-  /* ================= Sistema de diseño «Cine» (premium, modo oscuro) =================
-     Negro carbón cinematográfico, superficies elevadas de cristal con borde blanco al 10 %,
-     un solo acento cian → violeta para lo importante (reproducir, lo elegido, el progreso),
-     jerarquía clara de letra (Display, H1-H4, cuerpo y datos en gris apagado) y focos bien
-     marcados para el teclado y el mando de la tele. */
-  :root {
-    --fondo: #0b0c0e; --fondo2: #121316; --panel: #121316; --panel2: #18191d; --borde: rgba(255,255,255,.1);
-    --texto: #f5f5f7; --suave: #8e8e93; --acento: #00a3ff; --acento2: #7928ca;
-    --m-azul: #00a3ff; --m-violeta: #4b6bff; --m-magenta: #7928ca;
-    --marca: linear-gradient(110deg, #00a3ff 0%, #7928ca 100%);
-    --cristal: rgba(255,255,255,.04); --cristal-borde: rgba(255,255,255,.1);
-    --halo: 0 16px 40px rgba(0,163,255,.22);
-    --r-xl: 12px; --r-2xl: 16px; --curva: cubic-bezier(.16,1,.3,1);
-  }
-  body { font-family: Inter, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
-    font-feature-settings: "cv11", "ss01"; letter-spacing: -.003em; }
-  body::before { background: radial-gradient(55% 40% at 8% -10%, rgba(0,163,255,.09), transparent 70%),
-    radial-gradient(45% 35% at 95% -8%, rgba(121,40,202,.10), transparent 70%); }
-  ::selection { background: rgba(0,163,255,.4); }
-  html { scrollbar-color: #2a2b31 transparent; }
-  ::-webkit-scrollbar-thumb { background: #2a2b31; }
-  /* Foco visible (teclado y mando): anillo cian, sin saltos de diseño */
-  :focus-visible { outline: 3px solid var(--acento); outline-offset: 3px; }
-  .item:focus-visible { outline: none; }
-  /* Cabecera flotante de cristal */
-  header { background: rgba(11,12,14,.72); box-shadow: inset 0 -1px 0 rgba(255,255,255,.06); }
-  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
-    header, .en-portada.bajado header { -webkit-backdrop-filter: saturate(160%) blur(16px); backdrop-filter: saturate(160%) blur(16px); }
-  }
-  .en-portada.bajado header { background: rgba(11,12,14,.78); }
-  header::after { background: linear-gradient(90deg, transparent, rgba(0,163,255,.5), rgba(121,40,202,.5), transparent); opacity: .7; }
-  .logo .tv { background: var(--marca); -webkit-background-clip: text; background-clip: text; }
-  .pestana { color: #c7c7cc; }
-  .pestana.activa { background: rgba(255,255,255,.1); }
-  /* Jerarquía de letra */
-  .destacado h1 { font-size: clamp(34px, 5vw, 76px); font-weight: 800; letter-spacing: -.035em; line-height: .96; }
-  .biblioteca h1 { font-size: clamp(30px, 3.4vw, 56px); font-weight: 800; letter-spacing: -.03em; }
-  .fila-titulo { font-size: clamp(17px, 1.45vw, 23px); font-weight: 700; letter-spacing: -.02em; }
-  .fila-titulo a::before { display: none; }
-  .item .meta, .destacado-datos, #cabecera .ficha p.suave { color: var(--suave); }
-  /* Botones: CTA con el degradado; secundarios de cristal */
-  .boton { border-radius: var(--r-xl); background: var(--cristal); border-color: var(--cristal-borde); transition: background .3s var(--curva), border-color .3s, box-shadow .3s, filter .3s; }
-  .boton:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
-  .boton.reproducir, .destacado .boton.reproducir { background: var(--marca); border-radius: var(--r-xl); color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 12px 32px rgba(0,163,255,.28); }
-  .boton.reproducir:hover, .boton.reproducir:focus, .destacado .boton.reproducir:hover, .destacado .boton.reproducir:focus { background: var(--marca); filter: brightness(1.1); }
-  .destacado .boton, #cabecera .boton:not(.reproducir), .destacado .boton.info { border-radius: var(--r-xl); }
-  .destacado .boton.info, #cabecera .boton:not(.reproducir) { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.14);
-    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
-  .boton.activo, .chip-cat.activa { background: #fff; border-color: #fff; color: #0b0c0e; }
-  .servidores .boton.activo { background: var(--marca); color: #fff; border-color: transparent; }
-  select, input[type=text], input[type=search], input[type=password] { border-radius: var(--r-xl); }
-  /* Destacado: 85 % de la pantalla, degradado suave hacia el fondo e insignias */
-  .destacado { min-height: clamp(380px, 85vh, 900px); }
-  @media (max-width: 600px) { .destacado { min-height: clamp(380px, 70vh, 640px); } }
-  .destacado::after { background: linear-gradient(90deg, rgba(11,12,14,.9) 0%, rgba(11,12,14,.55) 36%, rgba(11,12,14,0) 68%),
-      linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,14,.6) 20%, rgba(11,12,14,0) 52%); }
-  .destacado-etiqueta { color: #c7c7cc; font-size: 12px; letter-spacing: .2em; }
-  .destacado-etiqueta::before { background: var(--marca); }
-  .destacado-insignias { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
-  .insignia { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
-    letter-spacing: .03em; color: #fff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
-  .insignia.calidad { background: var(--marca); border-color: transparent; }
-  .insignia.nota { color: #ffd60a; }
-  .insignia.nota b { color: #fff; }
-  .destacado-sinopsis { color: #d1d1d6; max-width: 56ch; }
-  .destacado-puntos .punto.activo { background: #fff; }
-  /* Filas y «Ver todo» */
-  .ver-todo { border-radius: 8px; color: var(--suave); border-color: transparent; background: transparent; padding: 3px 8px; }
-  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: transparent; color: var(--acento); border-color: transparent; }
-  .tarjeta-ver-todo .mini { background: linear-gradient(160deg, rgba(0,163,255,.14), rgba(121,40,202,.16)); }
-  .tarjeta-ver-todo:hover .mini { background: linear-gradient(160deg, rgba(0,163,255,.26), rgba(121,40,202,.28)); }
-  /* Tarjetas 2:3 (y 16:9 las apaisadas): al pasar, crecen un 5 % con una sombra luminosa y
-     aparecen sus datos dentro del cartel (sin mover nada alrededor) */
-  .item .mini { border-radius: var(--r-xl); background-color: var(--panel2); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
-  .item .visto { border-radius: 0 0 var(--r-xl) var(--r-xl); }
-  .item .mini::before { display: none; } /* sin el destello: más sobrio */
-  .item:hover .mini { box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), 0 20px 44px rgba(0,0,0,.6), var(--halo); }
-  .item:focus .mini, .item:focus-visible .mini { box-shadow: 0 0 0 3px var(--acento), 0 20px 44px rgba(0,0,0,.6), var(--halo); }
-  .usa-mando .item:focus .mini, .tele .item:focus .mini { box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--acento), var(--halo); }
-  @media (hover: hover) and (pointer: fine) {
-    .carrusel .item:not(.episodio), .rejilla .item:not(.episodio) { transition: transform .3s var(--curva); will-change: transform; }
-    .carrusel .item:not(.episodio):hover, .rejilla .item:not(.episodio):hover { transform: scale(1.05); z-index: 2; }
-  }
-  .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .nombre, .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .meta,
-  .rejilla .item.con-imagen:not(.episodio) .nombre, .rejilla .item.con-imagen:not(.episodio) .meta {
-    display: block; position: absolute; left: 0; right: 0; z-index: 2; margin: 0; padding: 0 12px; text-align: left; pointer-events: none;
-    opacity: 0; transform: translateY(6px); transition: opacity .3s var(--curva), transform .3s var(--curva); }
-  .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .nombre, .rejilla .item.con-imagen:not(.episodio) .nombre {
-    bottom: 30px; font-size: 13.5px; font-weight: 700; line-height: 1.25; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .meta, .rejilla .item.con-imagen:not(.episodio) .meta {
-    bottom: 12px; font-size: 11.5px; font-weight: 600; color: #d1d1d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .item.con-imagen:not(.episodio) .mini::after { content: ''; display: block; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
-    background: linear-gradient(0deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.55) 32%, rgba(0,0,0,0) 58%); opacity: 0; transition: opacity .3s var(--curva); z-index: 1; }
-  .item.con-imagen:not(.episodio):hover .mini::after, .item.con-imagen:not(.episodio):focus .mini::after { opacity: 1; }
-  .item.con-imagen:not(.episodio):hover .nombre, .item.con-imagen:not(.episodio):hover .meta,
-  .item.con-imagen:not(.episodio):focus .nombre, .item.con-imagen:not(.episodio):focus .meta { opacity: 1 !important; transform: none !important; }
-  .tele .item.con-imagen:not(.episodio) .nombre { font-size: 2.2vh !important; bottom: 4.6vh; }
-  .tele .item.con-imagen:not(.episodio) .meta { font-size: 1.7vh !important; bottom: 1.8vh; }
-  .item .nuevo { background: var(--marca); color: #fff; border-radius: 6px 6px 0 0; z-index: 3; }
-  /* Chips */
-  .chip-cat { background: var(--cristal); border-color: var(--cristal-borde); }
-  .chip-cat:hover, .chip-cat:focus { background: rgba(255,255,255,.12); color: #fff; }
-  .chip-cat.activa { background: #fff; color: #0b0c0e; }
-  #cabecera .chip { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.12); border-radius: 8px; }
-  .biblioteca h1::after { background: var(--marca); }
-  /* Reproductor: progreso y botón principal en cian → violeta; contenedor 16:9 limpio */
-  .repro { --g1: #00a3ff; --g2: #7928ca; --deg: var(--marca); }
-  .controles .grupo .boton:hover, .controles .grupo .boton:focus { box-shadow: 0 6px 24px rgba(0,163,255,.4); }
-  .controles .grupo.izq .boton:first-child { box-shadow: 0 6px 22px rgba(0,163,255,.35); }
-  .controles input[type=range]::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(0,163,255,.45), 0 0 16px rgba(0,163,255,.7); }
-  .controles input[type=range]::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(0,163,255,.45); }
-  .controles input[type=range]::-moz-range-progress { background: var(--marca); }
-  @keyframes latido-play { 0%, 100% { box-shadow: 0 10px 40px rgba(0,163,255,.45), 0 0 0 0 rgba(0,163,255,.35); } 50% { box-shadow: 0 10px 40px rgba(121,40,202,.5), 0 0 0 18px rgba(0,163,255,0); } }
-  .sigla { box-shadow: 0 2px 10px rgba(0,163,255,.3); }
-  .controles .boton.audio:hover .sigla, .controles .boton.audio:focus .sigla, .menu-audio button:hover .sigla, .menu-audio button:focus .sigla { color: #005c99; }
-  .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(110deg, rgba(0,163,255,.9), rgba(121,40,202,.9)); }
-  .menu-audio button.activo::after { color: #5cc8ff; }
-  #visor.cine .controles, .menu-audio { background: rgba(18,19,22,.86); border-color: rgba(255,255,255,.1); border-radius: var(--r-2xl); }
-  .servidores { gap: 6px; }
-  .servidores .boton { border-radius: 10px; }
-  /* Cajas y avisos */
-  .cuenta-caja { background: rgba(18,19,22,.94); border-radius: var(--r-2xl); }
-  .aviso { background: rgba(24,25,29,.96); border-radius: var(--r-xl); }
-  /* Pie de página discreto */
-  .pie { margin: clamp(40px, 6vw, 80px) 0 0; padding: 28px clamp(16px, 4vw, 48px) calc(28px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(255,255,255,.06);
-    color: var(--suave); font-size: 12.5px; line-height: 1.6; display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; justify-content: space-between; }
-  .pie .pie-marca { font-weight: 800; color: #fff; letter-spacing: -.02em; font-size: 14px; }
-  .pie .pie-marca span { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .pie p { margin: 0; max-width: 70ch; }
-  .pie a { color: #c7c7cc; text-decoration: none; }
-  .pie a:hover, .pie a:focus-visible { color: #fff; text-decoration: underline; }
-
-  /* ================= Ficha «héroe» (película y serie) =================
-     El fondo de la película a lo grande a la derecha, fundido hacia la izquierda y hacia abajo;
-     a la izquierda, título enorme, eslogan, la línea de datos, los botones grandes, la sinopsis
-     de 3 líneas con «Ver más» y la caja de compartir */
-  .ficha.heroe { background: transparent; border: 0; border-radius: 0; padding: 0; max-width: none; }
-  .ficha.heroe .cuerpo { max-width: 780px; gap: 14px; }
-  .ficha.heroe.con-fondo img.cartel { display: none; }
-  #vcontenido.solo-ficha { padding: 0; justify-content: flex-start; align-items: stretch; }
-  #vcontenido.solo-ficha > .ficha.heroe:not(.con-fondo) { padding: clamp(70px, 9vh, 110px) clamp(18px, 6vw, 110px) 40px; }
-  #vcontenido .ficha.heroe.con-fondo { flex: 1 0 auto; min-height: 100%; align-items: center;
-    padding: clamp(80px, 12vh, 150px) clamp(18px, 6vw, 110px) clamp(32px, 6vh, 70px);
-    background: linear-gradient(90deg, var(--fondo) 0%, rgba(11,12,14,.94) 26%, rgba(11,12,14,.55) 54%, rgba(11,12,14,.12) 100%),
-      linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,14,0) 36%), var(--fondo-img) right top / cover no-repeat, var(--fondo); }
-  /* La barra de arriba del visor flota sobre la ficha, transparente */
-  #visor:not(.cine):has(#vcontenido.solo-ficha) { background: var(--fondo); }
-  #visor:not(.cine):has(#vcontenido.solo-ficha) .barra { position: absolute; top: 0; left: 0; right: 0; z-index: 3; border: 0;
-    background: linear-gradient(180deg, rgba(11,12,14,.85), rgba(11,12,14,0)); padding: 14px clamp(14px, 3vw, 40px) 26px; }
-  #visor:not(.cine):has(#vcontenido.solo-ficha) #vtitulo, #visor:not(.cine):has(#vcontenido.solo-ficha) #vmeta { visibility: hidden; }
-  #visor:not(.cine):has(#vcontenido.solo-ficha) #vfav { display: none; }
-  .volver-ficha { align-self: flex-start; margin-bottom: clamp(8px, 3vh, 36px); border-radius: 999px !important; padding: 8px 18px; font-weight: 700;
-    background: rgba(11,12,14,.35) !important; border: 1px solid rgba(255,255,255,.22) !important; color: #fff; }
-  .volver-ficha:hover, .volver-ficha:focus { background: rgba(255,255,255,.14) !important; }
-  .ficha.heroe .chips.acciones .boton .icono { width: 1.25em; height: 1.25em; }
-  .ficha.heroe .chips.acciones .boton.trailer { letter-spacing: .04em; }
-  .ficha:not(.heroe) .volver-ficha { display: none; }
-  #visor:not(.cine):has(#vcontenido.solo-ficha) #vcerrar { border-radius: 999px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.18); }
-  /* Título, eslogan y datos */
-  .titulo-heroe { margin: 0; font-size: clamp(36px, 5.6vw, 92px) !important; font-weight: 800 !important; letter-spacing: -.045em; line-height: .95 !important;
-    color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,.55); text-wrap: balance; }
-  .ficha.heroe .original { font-size: 14px; margin-top: -4px; }
-  .ficha.heroe .eslogan { margin: 0; display: block !important; font-style: italic; color: #c7c7cc; font-size: clamp(14px, 1.2vw, 19px); }
-  .ficha.heroe .chips.datos { gap: 10px 16px; font-size: clamp(14px, 1.1vw, 17px); color: #d1d1d6; font-weight: 500; }
-  .nota-pct { font-weight: 800; }
-  .nota-pct.alta { color: #30d158; } .nota-pct.media { color: #ffd60a; } .nota-pct.baja { color: #ff6b6b; }
-  .dato.duracion::before { content: '◷ '; opacity: .85; }
-  .ficha.heroe .chips.datos .chip { font-size: .86em; font-weight: 600; color: #fff; padding: 3px 12px; border-radius: 999px;
-    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); }
-  /* Botones grandes */
-  .ficha.heroe .chips.acciones { gap: 12px; margin-top: 6px; }
-  .ficha.heroe .chips.acciones .boton { height: clamp(46px, 4.4vw, 58px); padding: 0 clamp(18px, 1.8vw, 30px); font-size: clamp(15px, 1.15vw, 18px); font-weight: 700;
-    border-radius: 12px; gap: 10px; }
-  .ficha.heroe .chips.acciones .boton.reproducir { font-weight: 800; min-width: clamp(150px, 13vw, 220px); justify-content: center; }
-  .ficha.heroe .chips.acciones .boton:not(.reproducir) { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); color: #fff; }
-  .ficha.heroe .chips.acciones .boton:not(.reproducir):hover, .ficha.heroe .chips.acciones .boton:not(.reproducir):focus { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.35); }
-  .ficha.heroe .chips.acciones .boton.trailer { background: rgba(0,163,255,.16); border-color: rgba(0,163,255,.55); }
-  .ficha.heroe .chips.acciones .boton.trailer:hover, .ficha.heroe .chips.acciones .boton.trailer:focus { background: rgba(0,163,255,.3); border-color: #00a3ff; }
-  .ficha.heroe .chips.acciones .boton.fuente { height: auto; padding: 8px 12px; font-size: 13px; font-weight: 600; background: transparent; border-color: transparent; color: var(--suave); }
-  /* Sinopsis: 3 líneas hasta «Ver más»; el reparto y la dirección, al desplegar */
-  .ficha.heroe .sinopsis { margin: 4px 0 0; font-size: clamp(15px, 1.25vw, 19px); line-height: 1.6; color: #e5e5ea; max-width: 68ch; }
-  .ficha.heroe:not(.entera) .sinopsis { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .ficha.heroe:not(.entera) .linea { display: none; }
-  .ficha.heroe .linea { font-size: 14px; color: #c7c7cc; }
-  .ficha.heroe .linea b { color: #fff; }
-  .ficha.heroe .ver-mas { display: inline-flex; align-self: flex-start; justify-self: start; margin-top: -6px; padding: 2px 0; background: none; border: 0;
-    color: var(--acento); font: 700 14px/1.4 inherit; font-family: inherit; cursor: pointer; }
-  .ficha.heroe .ver-mas:hover, .ficha.heroe .ver-mas:focus { color: #5cc8ff; text-decoration: underline; }
-  /* Compartir */
-  .compartir { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; max-width: 560px; padding: 12px 12px 12px 20px;
-    border-radius: 16px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); font-size: 14px; font-weight: 700; color: #e5e5ea; }
-  .compartir-boton { width: 46px; height: 46px; padding: 0 !important; justify-content: center; border-radius: 12px !important; }
-  .compartir-boton .icono { width: 20px; height: 20px; }
-  /* Datos del archivo, plegados */
-  .detalles-tecnicos { margin-top: 4px; max-width: 780px; }
-  .detalles-tecnicos summary { cursor: pointer; color: var(--suave); font-size: 13px; font-weight: 600; }
-  .detalles-tecnicos summary:hover { color: #fff; }
-  .detalles-tecnicos .tecnico { margin-top: 8px; border-top-color: rgba(255,255,255,.08); }
-  /* Serie: la cabecera usa el mismo diseño (el fondo lo pone #cabecera) */
-  #cabecera .ficha.heroe .cuerpo { max-width: 820px; }
-  /* Móvil: el fondo arriba, el texto debajo; botones a lo ancho */
-  @media (max-width: 600px) {
-    .ficha.heroe { display: flex; flex-direction: column; }
-    .ficha.heroe .cuerpo { display: flex; }
-    .ficha.heroe .cuerpo > * { grid-column: auto; }
-    #vcontenido .ficha.heroe.con-fondo { padding: 42vh 16px 28px;
-      background: linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,14,.75) 28%, rgba(11,12,14,0) 62%) center top / 100% 52vh no-repeat,
-        var(--fondo-img) center top / cover no-repeat, var(--fondo);
-      background-size: 100% 52vh, auto 52vh, auto; }
-    #vcontenido.solo-ficha > .ficha.heroe:not(.con-fondo) { padding: 70px 16px 28px; }
-    .titulo-heroe { font-size: clamp(32px, 10vw, 44px) !important; }
-    .ficha.heroe .chips.acciones { display: grid; grid-template-columns: 1fr 1fr; }
-    .ficha.heroe .chips.acciones .boton { justify-content: center; }
-    .ficha.heroe .chips.acciones .boton.reproducir { grid-column: 1 / -1; }
-    .ficha.heroe .chips.acciones .boton.fuente { grid-column: 1 / -1; }
-  }
-  /* Tele: más grande, para el sofá */
-  .tele .titulo-heroe { font-size: 9vh !important; }
-  .tele .ficha.heroe .eslogan { font-size: 2.6vh; }
-  .tele .ficha.heroe .chips.datos { font-size: 2.6vh; }
-  .tele .ficha.heroe .chips.acciones .boton { height: 7.4vh; font-size: 2.6vh; padding: 0 2.4vw; }
-  .tele .ficha.heroe .sinopsis { font-size: 2.7vh; }
-  .tele .compartir { font-size: 2.2vh; }
-
-  /* ================= Listas de la portada (Top 10, mejor valoradas, populares) =================
-     Pósteres 2:3 con la nota arriba a la izquierda y «Película»/«Serie» a la derecha; debajo,
-     título y año siempre a la vista. En el Top 10, un número enorme con contorno al lado. */
-  .listas-portada .fila-titulo { display: flex; align-items: center; gap: 10px; }
-  .listas-portada .fila-titulo::before { content: ''; width: 4px; height: .9em; border-radius: 3px; background: var(--marca); }
-  .tarjeta-lista .mini { position: relative; }
-  .tarjeta-lista .nota-cartel, .tarjeta-lista .tipo-cartel { position: absolute; top: 7px; z-index: 2; height: 21px; display: inline-flex; align-items: center;
-    padding: 0 7px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: .02em; line-height: 1; pointer-events: none;
-    background: rgba(11,12,14,.78); border: 1px solid rgba(255,255,255,.14); color: #fff; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .tarjeta-lista .nota-cartel { left: 7px; color: #ffd60a; }
-  .tarjeta-lista .tipo-cartel { right: 7px; background: rgba(0,163,255,.85); border-color: transparent; }
-  .carrusel .tarjeta-lista .nombre, .carrusel .tarjeta-lista .meta { display: block !important; position: static !important; opacity: 1 !important; transform: none !important;
-    padding: 0 2px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .carrusel .tarjeta-lista .nombre { margin-top: 8px; font-size: 13px; font-weight: 700; color: #fff; }
-  .carrusel .tarjeta-lista .meta { font-size: 11.5px; color: var(--suave); }
-  .tarjeta-lista.con-imagen .mini::after { display: none !important; }
-  /* Top 10: el número grande encima del póster, arriba a la izquierda (la nota baja un poco) */
-  .carrusel.top10 .item.top { position: relative; }
-  .carrusel.top10 .puesto { position: absolute; z-index: 3; left: 8px; top: 2px; font-size: clamp(46px, 4.2vw, 72px); font-weight: 900; line-height: 1;
-    letter-spacing: -.05em; color: #fff; -webkit-text-stroke: 2px rgba(11,12,14,.85); paint-order: stroke fill; pointer-events: none;
-    font-family: "Arial Black", Inter, system-ui, sans-serif; text-shadow: 0 4px 18px rgba(0,0,0,.75); }
-  .carrusel.top10 .tarjeta-lista .nota-cartel { top: auto; bottom: 7px; }
-  .carrusel.top10 .item.top:hover .puesto, .carrusel.top10 .item.top:focus .puesto { color: #5cc8ff; }
-  @media (max-width: 600px) { .carrusel.top10 .puesto { font-size: 44px; } }
-  .tele .carrusel .tarjeta-lista .nombre { font-size: 2.2vh; }
-  .tele .carrusel .tarjeta-lista .meta { font-size: 1.8vh; }
-  .tele .tarjeta-lista .nota-cartel, .tele .tarjeta-lista .tipo-cartel { height: 3vh; font-size: 1.5vh; }
-  .tele .carrusel.top10 .puesto { font-size: 8vh; }
-  /* Menú de arriba con las secciones de e2: en una fila que se desliza si no cabe */
-  .secciones-menu { display: contents; }
-  #pestanas { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; align-items: center; white-space: nowrap; padding-right: 28px;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
-  #pestanas .pestana { flex: none; }
-  header .logo { flex: 1 1 0; min-width: 0; }
-  header .logo > span:not(#directo), header .logo::before { flex: none; }
-  /* Botón de la cuenta (inicial, nombre y VIP) y «Salir» de la app, más pequeños */
-  #mi-cuenta { padding: 2px 10px 2px 2px; gap: 6px; font-size: 12.5px; font-weight: 600; min-height: 0; }
-  #mi-cuenta .inicial { width: 26px; height: 26px; font-size: 12.5px; }
-  #mi-cuenta .txt { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #mi-cuenta .insignia { margin-left: 2px; font-size: 8.5px; padding: 1px 5px; letter-spacing: .04em; }
-  #salir-app { padding: 4px 10px; font-size: 12.5px; gap: 4px; min-height: 0; }
-  #salir-app .icono { width: 15px; height: 15px; }
-  .tele #mi-cuenta .inicial { width: 4.4vh; height: 4.4vh; font-size: 2.2vh; }
-  .tele #mi-cuenta, .tele #salir-app { font-size: 1.9vh; }
-  /* ================= Página de una sección (Películas, Series…) =================
-     Título grande con subtítulo, las plataformas de ese tipo y una cuadrícula de carteles 2:3 con
-     la nota y «Película»/«Serie» arriba, y el título y el año debajo; «Cargar más» al final */
-  #items.vista-carteles { grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 10.4vw, 175px), 1fr)); gap: clamp(16px, 1.6vw, 26px) clamp(12px, 1.2vw, 20px); }
-  .vista-carteles > .biblioteca, .vista-carteles > .plataformas-inicio, .vista-carteles > .orden-seccion, .vista-carteles > .cargar-mas-seccion,
-  .vista-carteles > .vacio, .vista-carteles > :not(.item) { grid-column: 1 / -1; }
-  .vista-carteles > .biblioteca { flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 4px; }
-  .vista-carteles > .biblioteca h1 { padding-bottom: 0; }
-  .vista-carteles > .biblioteca h1::after { display: none; }
-  .biblioteca-sub { margin: 0; color: var(--suave); font-size: clamp(13px, 1vw, 15px); }
-  .vista-carteles > .plataformas-inicio { margin: 8px 0 4px; }
-  .vista-carteles .item .mini { aspect-ratio: 2 / 3; }
-  .vista-carteles .item.con-imagen .nombre, .vista-carteles .item.con-imagen .meta { display: block !important; position: static !important; opacity: 1 !important;
-    transform: none !important; padding: 0 2px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .vista-carteles .item .nombre { margin-top: 8px; font-size: 14px; font-weight: 700; color: #fff; -webkit-line-clamp: 1; }
-  .vista-carteles .item .meta { font-size: 12px; color: var(--suave); }
-  .vista-carteles .item .resumen { display: none !important; }
-  .vista-carteles .item.con-imagen .mini::after { display: none !important; }
-  .vista-carteles .nota-cartel, .vista-carteles .tipo-cartel { position: absolute; top: 8px; z-index: 2; height: 22px; display: inline-flex; align-items: center;
-    padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 800; line-height: 1; pointer-events: none;
-    background: rgba(11,12,14,.78); border: 1px solid rgba(255,255,255,.14); color: #fff; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .vista-carteles .nota-cartel { left: 8px; color: #5cc8ff; }
-  .vista-carteles .tipo-cartel { right: 8px; }
-  /* (la ☆ de favoritos, abajo a la derecha para no tapar las etiquetas) */
-  .vista-carteles .item .estrella { top: 38px; bottom: auto; right: 8px; width: 30px; height: 30px; font-size: 16px; }
-  .cargar-mas-seccion { justify-self: center; margin: 18px auto 8px; padding: 12px 34px !important; font-size: 15px; font-weight: 800; color: #fff !important;
-    background: var(--marca) !important; border-color: transparent !important; border-radius: 12px !important; box-shadow: 0 10px 28px rgba(0,163,255,.28); }
-  .cargar-mas-seccion:hover, .cargar-mas-seccion:focus { filter: brightness(1.1); }
-  @media (max-width: 600px) {
-    #items.vista-carteles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
-    .vista-carteles .item .nombre { font-size: 12.5px; }
-    .vista-carteles .nota-cartel, .vista-carteles .tipo-cartel { height: 19px; font-size: 9.5px; padding: 0 6px; top: 6px; }
-    .vista-carteles .nota-cartel { left: 6px; } .vista-carteles .tipo-cartel { right: 6px; }
-    .vista-carteles .item .estrella { top: 30px; right: 6px; width: 26px; height: 26px; font-size: 14px; }
-  }
-  .tele #items.vista-carteles { grid-template-columns: repeat(auto-fill, minmax(13vw, 1fr)); }
-  .tele .vista-carteles .item .nombre { font-size: 2.2vh; } .tele .vista-carteles .item .meta { font-size: 1.8vh; }
-  /* ================= Menú de arriba como las webs de cine =================
-     Inicio · Películas · Series · Explorar ▾ · Favoritos (texto limpio; la activa con una raya
-     cian debajo), la cuenta en una píldora azul con el plan encima del nombre y «Buscar» (Ctrl K) */
-  #pestanas .pestana { background: none !important; box-shadow: none !important; border-radius: 0; padding: 8px 2px; margin: 0 clamp(8px, 1.1vw, 16px); color: #c7c7cc;
-    font-size: clamp(13.5px, 1vw, 15px); font-weight: 600; position: relative; display: inline-flex; align-items: center; gap: 5px; }
-  #pestanas .pestana:hover, #pestanas .pestana:focus { color: #fff; }
-  #pestanas .pestana.activa { color: #fff; font-weight: 700; }
-  #pestanas .pestana.activa::after { content: ''; display: block !important; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px;
-    background: #00a3ff; transform: none; width: auto; }
-  #pestanas .pestana .flechita { font-size: .8em; opacity: .8; }
-  .menu-explorar { position: fixed; z-index: 30; min-width: 240px; max-height: min(70vh, 520px); overflow: auto; padding: 8px; border-radius: 14px;
-    background: rgba(18,19,22,.97); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 24px 60px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 2px; }
-  .menu-explorar button { text-align: left; background: none; border: 0; color: #e5e5ea; font: 600 14px/1.3 inherit; font-family: inherit; padding: 10px 12px; border-radius: 9px; cursor: pointer; }
-  .menu-explorar button:hover, .menu-explorar button:focus { background: rgba(255,255,255,.08); color: #fff; outline: none; }
-  .menu-explorar button.activa { color: #5cc8ff; }
-  /* Cuenta: píldora azul, el plan pequeño encima del nombre */
-  #mi-cuenta { background: linear-gradient(110deg, #0a84ff, #0060df) !important; border: 1px solid rgba(255,255,255,.18) !important; color: #fff;
-    padding: 3px 14px 3px 3px; gap: 8px; box-shadow: 0 6px 20px rgba(0,132,255,.3); }
-  #mi-cuenta.vip { background: linear-gradient(110deg, #00a3ff, #7928ca) !important; }
-  #mi-cuenta:hover, #mi-cuenta:focus { filter: brightness(1.08); }
-  #mi-cuenta .inicial { background: rgba(255,255,255,.18) !important; color: #fff; box-shadow: none !important; }
-  #mi-cuenta .txt { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.12; max-width: 18ch; }
-  #mi-cuenta .plan-cuenta { font-size: 9.5px; font-weight: 700; opacity: .85; letter-spacing: .02em; white-space: nowrap; }
-  #mi-cuenta .nombre-cuenta { font-size: 12.5px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #mi-cuenta .insignia { display: none; }
-  /* Buscar */
-  #buscar-boton { flex: none; margin-left: 8px; display: inline-flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; border-radius: 12px;
-    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.12); color: #fff; font-size: 13px; font-weight: 700; }
-  #buscar-boton .icono { width: 17px; height: 17px; }
-  #buscar-boton kbd { font: 700 10px/1 inherit; font-family: inherit; padding: 4px 6px; border-radius: 6px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); color: #c7c7cc; }
-  #buscar-boton:hover, #buscar-boton:focus { background: rgba(255,255,255,.1); }
-  #mi-cuenta + #buscar-boton + #salir-app, #buscar-boton + #salir-app { margin-left: 8px; }
-  @media (max-width: 900px) { #buscar-boton kbd { display: none; } }
-  @media (max-width: 1100px) { #pestanas .pestana { margin: 0 8px; } #mi-cuenta .txt { max-width: 13ch; } }
-  @media (max-width: 600px) {
-    #buscar-boton { padding: 7px; margin-left: 4px; } #buscar-boton .txt { display: none; }
-    #mi-cuenta { padding: 2px; } #mi-cuenta .txt { display: none; }
-    #pestanas .pestana { margin: 0 7px; font-size: 13px; }
-  }
-  .tele #buscar-boton kbd { display: none; }
-  /* Ventana del buscador */
-  .buscador { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.6); display: flex; justify-content: center; align-items: flex-start;
-    padding: clamp(60px, 12vh, 120px) 16px 16px; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .buscador-caja { width: min(640px, 100%); max-height: calc(100vh - 140px); display: flex; flex-direction: column; border-radius: 18px; overflow: hidden;
-    background: rgba(18,19,22,.98); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 30px 80px rgba(0,0,0,.7); }
-  .buscador-fila { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,.08); color: var(--suave); }
-  .buscador-fila .icono { width: 20px; height: 20px; flex: none; }
-  .buscador-fila input { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #fff; font-size: 17px; padding: 4px 0; }
-  .buscador-cerrar { flex: none; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.14); color: #c7c7cc; border-radius: 7px; font-size: 11px; font-weight: 700; padding: 4px 8px; cursor: pointer; }
-  .buscador-resultados { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
-  .buscador-vacio { padding: 18px 12px; color: var(--suave); font-size: 14px; text-align: center; }
-  .resultado { display: flex; align-items: center; gap: 14px; padding: 8px; border-radius: 12px; background: none; border: 0; color: #fff; text-align: left; cursor: pointer; font-family: inherit; }
-  .resultado:hover, .resultado:focus { background: rgba(255,255,255,.07); outline: none; }
-  .resultado:focus { box-shadow: inset 0 0 0 2px #00a3ff; }
-  .resultado-cartel { width: 46px; aspect-ratio: 2 / 3; flex: none; border-radius: 8px; overflow: hidden; background: #18191d; display: grid; place-items: center; font-size: 20px; }
-  .resultado-cartel img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .resultado-texto { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .resultado-texto b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .resultado-texto small { font-size: 12.5px; color: var(--suave); }
-  .con-buscador body { overflow: hidden; }
-  /* Bloque de Google AdSense al final del catálogo, encima del pie */
-  .adsense-bloque { display: flex; flex-direction: column; gap: 6px; margin: clamp(24px, 3vw, 40px) 0 0; padding: 0; }
-  .adsense-bloque ins.adsbygoogle { min-height: 90px; border-radius: 12px; overflow: hidden; }
-  .tele .adsense-bloque { display: none; }
-  /* El menú, en su propia fila debajo del logo, la cuenta y «Buscar»: todas las secciones a la
-     vista (si no caben en una línea, pasan a la siguiente; nada escondido ni deslizable) */
-  header #pestanas { order: 2; flex: 1 1 100%; min-width: 0; flex-wrap: wrap; align-items: center; overflow: visible; padding: 0; margin: -2px 0 0;
-    -webkit-mask-image: none; mask-image: none; white-space: nowrap; gap: 2px clamp(14px, 1.6vw, 26px); }
-  header #pestanas .pestana { margin: 0; padding: 7px 2px; }
-  header .logo { flex: 1 1 auto; }
-  .destacado[hidden] + * { padding-top: calc(var(--alto-cabecera, 96px) + 14px) !important; }
-  html.en-portada { scroll-padding-top: calc(var(--alto-cabecera, 96px) + 16px); }
-  .destacado-texto { padding-top: calc(var(--alto-cabecera, 96px) + 10px); }
-  @media (max-width: 600px) {
-    header #pestanas { gap: 0 13px; }
-    header #pestanas .pestana { font-size: 12.5px; padding: 6px 1px; margin: 0; }
-  }
-  /* Plataformas de streaming de películas: etiqueta en píldora y logotipos cuadrados redondeados */
-  .plataformas-inicio { margin: clamp(6px, 1vw, 14px) 0 clamp(22px, 2.6vw, 38px); }
-  .etiqueta-plataformas { border-color: rgba(0,163,255,.45); background: linear-gradient(90deg, rgba(0,163,255,.16), rgba(121,40,202,.12)); color: #fff;
-    letter-spacing: .04em; box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
-  .iconos-plataformas { gap: clamp(12px, 1.6vw, 26px); padding: 6px 4px 12px; }
-  .icono-plataforma { width: clamp(68px, 6.6vw, 112px); border-radius: 20%; border: 1px solid rgba(255,255,255,.08);
-    box-shadow: 0 8px 22px rgba(0,0,0,.5); transition: transform .3s var(--curva), box-shadow .3s, border-color .3s; }
-  .icono-plataforma:hover, .icono-plataforma:focus { transform: translateY(-4px) scale(1.06); border-color: rgba(255,255,255,.85); box-shadow: 0 14px 30px rgba(0,0,0,.55), 0 0 0 3px rgba(0,163,255,.35); }
-  .icono-plataforma.activa { border-color: #fff; box-shadow: 0 0 0 3px var(--acento), 0 8px 22px rgba(0,0,0,.5); }
-  .cabecera-plataforma { display: flex; align-items: center; gap: 16px; }
-  .cabecera-plataforma .logo-plataforma { border-radius: 20%; box-shadow: 0 8px 22px rgba(0,0,0,.5); }
-  /* «Sin plataforma»: la nube de MorvehTV sobre el degradado de la marca, con el nombre y cuántos */
-  .icono-plataforma.sin-plataforma { background: linear-gradient(150deg, #0e2a45, #2a1450); border-color: rgba(0,163,255,.35);
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 4px; }
-  .icono-plataforma.sin-plataforma img { width: 44%; height: auto; object-fit: contain; }
-  .icono-plataforma.sin-plataforma .nombre-esp { padding: 0; font-size: clamp(9.5px, .8vw, 12.5px); line-height: 1.1; }
-  .icono-plataforma.sin-plataforma small { font-size: clamp(9px, .7vw, 11px); font-weight: 700; color: #9fd8ff; }
-  .cabecera-plataforma .logo-plataforma.especial { padding: 10px; object-fit: contain; background: linear-gradient(150deg, #0e2a45, #2a1450); }
-  .tele .pie { display: none; }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
@@ -1781,10 +1225,27 @@
   <div id="cabecera" hidden></div>
   <div id="items" class="rejilla"></div>
   <button class="boton" id="mas" hidden>Cargar más</button>
-  <footer class="pie">
-    <div class="pie-marca">Morveh<span>TV</span></div>
-  </footer>
 </main>
+<!--ADSENSE-->
+<!-- ===================================================================== -->
+<!-- BLOQUE DE ANUNCIO DE ADSENSE: si cambia, REEMPLAZA ESTAS DOS LÍNEAS   -->
+<!--   data-ad-client  -> ID de editor del cliente                          -->
+<!--   data-ad-slot    -> ID del bloque de anuncios                         -->
+<!-- O pega aquí el bloque <ins> + <script> que te da AdSense, SIN volver   -->
+<!-- a pegar el <script async src=".../adsbygoogle.js">: ya está en <head>. -->
+<!-- NO borres las marcas ADSENSE de encima y debajo (las usa el servidor). -->
+<!-- ===================================================================== -->
+<aside class="adsense-bloque" aria-label="Publicidad">
+  <span class="etiqueta-anuncio">Publicidad</span>
+  <ins class="adsbygoogle"
+       style="display:block"
+       data-ad-client="ca-pub-4674524691998401"
+       data-ad-slot="5877611157"
+       data-ad-format="auto"
+       data-full-width-responsive="true"></ins>
+  <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+</aside>
+<!--/ADSENSE-->
 
 <div id="visor">
   <div class="barra">

@@ -45,19 +45,9 @@ function pintarBotonCuenta() {
     $('header').insertBefore(b, $('#salir-app'));
   }
   b.hidden = !yo;
-  // «Buscar» (Ctrl K) al lado de la cuenta
-  if (!$('#buscar-boton') && typeof botonBuscar === 'function') b.after(botonBuscar());
-  $('#buscar-boton') && ($('#buscar-boton').hidden = !yo);
   b.innerHTML = '';
-  if (yo) {
-    // El plan encima del nombre («VIP», «Plan Básico»…), en dos líneas
-    const vip = typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium';
-    const plan = typeof planInfo !== 'undefined' && planInfo ? (planInfo.admin ? 'Administrador' : vip ? '⭐ VIP' : 'Plan Básico') : 'Mi cuenta';
-    const txt = el('span', 'txt');
-    txt.append(el('small', 'plan-cuenta', plan), el('span', 'nombre-cuenta', yo.nombre || yo.usuario));
-    b.append(el('span', 'inicial', inicial(yo)), txt);
-    b.classList.toggle('vip', vip);
-  }
+  if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
+  if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'VIP'));
 }
 
 function campo(etiqueta, tipo, auto) {
@@ -267,50 +257,26 @@ const VISTAS_PERFIL = {
   favoritos: { titulo: '★ Favoritos', corto: '★ Favoritos' },
 };
 
-// Menú de arriba: Inicio, todas las secciones de e2, «Seguir viendo» y «Favoritos»
-// y Favoritos
 function pintarPestanas() {
   let nav = $('#pestanas');
   if (!nav) {
     nav = el('nav');
     nav.id = 'pestanas';
-    const boton = (texto, alPulsar, datos = {}) => {
-      const b = el('button', 'pestana', texto);
-      Object.assign(b.dataset, datos);
-      b.onclick = alPulsar;
-      return b;
-    };
-    const inicio = boton('Inicio', () => irA(''), { vista: '' });
-    // Todas las secciones de e2 (cada carpeta de primer nivel), en el orden de la portada
-    const secciones = el('span', 'secciones-menu');
-    const seguir = boton('Seguir viendo', () => irA(estado.prefijo === ':seguir' ? '' : ':seguir'), { vista: 'seguir' });
-    const favoritos = boton('Favoritos', () => irA(estado.prefijo === ':favoritos' ? '' : ':favoritos'), { vista: 'favoritos' });
-    nav.append(inicio, secciones, seguir, favoritos);
-    // (en su propia fila, debajo del logo y la cuenta, para que se vean todas las secciones)
-    $('header .logo').after(nav);
-    api('/api/catalogo', { max: 1 }).then((d) => {
-      for (const { cat, suyas } of categoriasDe(d.carpetas.map((x) => x.carpeta))) {
-        secciones.append(boton(cat.nombre, () => irA(suyas[0]), { seccion: suyas[0] }));
-      }
-      marcarPestanas();
-    }).catch(() => {});
+    const inicio = el('button', 'pestana', '⌂ Inicio');
+    inicio.dataset.vista = '';
+    inicio.onclick = () => irA('');
+    nav.append(inicio);
+    for (const [id, v] of Object.entries(VISTAS_PERFIL)) {
+      const b = el('button', 'pestana', v.corto);
+      b.dataset.vista = id;
+      b.onclick = () => irA(estado.prefijo === `:${id}` ? '' : `:${id}`);
+      nav.append(b);
+    }
+    $('#directo').after(nav);
   }
   nav.hidden = !yo;
-  marcarPestanas();
-}
-// La pestaña activa: Inicio, «Seguir viendo», «Favoritos» o la sección en la que se está
-function marcarPestanas() {
-  const nav = $('#pestanas');
-  if (!nav) return;
-  let activa = null;
-  nav.querySelectorAll('button').forEach((b) => {
-    const si = b.dataset.seccion ? estado.prefijo.startsWith(b.dataset.seccion)
-      : b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo;
-    b.classList.toggle('activa', si);
-    if (si) activa = b;
-  });
-  // (en el móvil, la activa se desliza a la vista si el menú no cabe)
-  if (activa && nav.scrollWidth > nav.clientWidth) activa.scrollIntoView({ block: 'nearest', inline: 'center' });
+  nav.querySelectorAll('button').forEach((b) => b.classList.toggle('activa',
+    b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo));
 }
 
 function pintarVistaPerfil(vista) {
@@ -374,44 +340,9 @@ async function cargarPlan() {
   try { planInfo = await api('/api/pago/info'); } catch (e) { planInfo = null; }
   // Sin pagos no hay planes: nadie lleva la marca de VIP
   document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.activo && planInfo.plan === 'premium'));
-  cargarAdsense();
   pintarBotonCuenta();
   avisoRenovar();
   return planInfo;
-}
-// Google AdSense (ca-pub-4674524691998401): solo para quien no es VIP (el VIP es sin anuncios) y no
-// dentro de la app de Android (las normas de AdSense no permiten sus anuncios en una app)
-function cargarAdsense() {
-  const vip = !!(planInfo && planInfo.activo && planInfo.plan === 'premium');
-  if (vip || window.MorvehApp || document.getElementById('adsense')) return;
-  const s = document.createElement('script');
-  s.id = 'adsense';
-  s.async = true;
-  s.crossOrigin = 'anonymous';
-  s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4674524691998401';
-  document.head.append(s);
-  ponerBloqueAdsense();
-}
-// Bloque de anuncio de AdSense (data-ad-slot 5877611157) al final del catálogo, encima del pie,
-// con la etiqueta «Publicidad». Solo una vez por página (se queda al cambiar de sección).
-function ponerBloqueAdsense() {
-  if (document.getElementById('adsense-bloque')) return;
-  const pie = document.querySelector('main .pie');
-  if (!pie) return;
-  const caja = el('aside', 'adsense-bloque');
-  caja.id = 'adsense-bloque';
-  caja.setAttribute('aria-label', 'Publicidad');
-  caja.append(el('span', 'etiqueta-anuncio', 'Publicidad'));
-  const ins = document.createElement('ins');
-  ins.className = 'adsbygoogle';
-  ins.style.display = 'block';
-  ins.dataset.adClient = 'ca-pub-4674524691998401';
-  ins.dataset.adSlot = '5877611157';
-  ins.dataset.adFormat = 'auto';
-  ins.dataset.fullWidthResponsive = 'true';
-  caja.append(ins);
-  pie.before(caja);
-  try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
 }
 // Recordatorio de renovación (una vez al día por aparato): en el último mes de VIP y cuando
 // ya ha terminado

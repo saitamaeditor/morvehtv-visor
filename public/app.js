@@ -198,9 +198,6 @@ function pintar() {
   // Plan Básico: un anuncio a lo ancho encima de la carpeta
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('carpeta');
   if (banner) items.append(banner);
-  // En una sección (Películas, Series…): su catálogo completo de una vez
-  if (raiz && !pintar.soloCarpeta) { pintarSeccion(items); return; }
-  pintar.soloCarpeta = false;
   for (const c of carpetas) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     t.dataset.carpeta = c;
@@ -219,88 +216,6 @@ function pintar() {
   });
   if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
   $('#mas').hidden = !estado.token;
-  enfocarAlLlegar();
-}
-
-// ---------- Sección entera ----------
-// Todas las películas y series de la sección (también las de sus subcarpetas que solo agrupan,
-// como «PELICULAS NETFLIX»), sin páginas ni «Cargar más», con el número exacto de títulos y el
-// orden a elegir. Si el catálogo no llega, se ve la carpeta como antes.
-let ordenSeccion = (() => { try { return localStorage.getItem('morvehtv-orden-seccion') || 'recientes'; } catch (e) { return 'recientes'; } })();
-async function pintarSeccion(items) {
-  const pref = estado.prefijo;
-  $('#mas').hidden = true;
-  const espera = el('div', 'vacio', 'Cargando el catálogo…');
-  espera.style.gridColumn = '1 / -1';
-  items.append(espera);
-  let d = null;
-  try { d = await api('/api/catalogo', { seccion: pref }); } catch (e) { d = null; }
-  if (estado.prefijo !== pref || !items.isConnected) return;
-  espera.remove();
-  if (!d || !Array.isArray(d.titulos)) { pintar.soloCarpeta = true; return pintar(); }
-  const titulos = d.titulos;
-  // Como en las webs de cine: carteles con su nota, «Película»/«Serie», título y año; arriba, un
-  // subtítulo y las plataformas de ese tipo; y se van cargando de 36 en 36 con «Cargar más»
-  items.classList.add('vista-carteles');
-  const esSeries = titulos.filter((x) => x.tipo === 'carpeta').length > titulos.length / 2;
-  const cab = items.querySelector('.biblioteca');
-  if (cab && !cab.querySelector('.biblioteca-sub')) cab.append(el('p', 'biblioteca-sub', esSeries ? 'Todas las series, de la más nueva a la más antigua' : 'Las más recientes y destacadas'));
-  if (titulos.length) items.append(filaPlataformas(esSeries ? 'series' : 'peliculas'));
-  const cuenta = items.querySelector('.biblioteca-cuenta');
-  if (cuenta) cuenta.textContent = `${titulos.length} ${titulos.length === 1 ? 'título' : 'títulos'}`;
-  if (!titulos.length) { items.append(el('div', 'vacio', 'Aún no hay nada en esta sección.')); return enfocarAlLlegar(); }
-  // Orden: lo último subido primero, o de la A a la Z
-  const orden = el('nav', 'categorias-chips orden-seccion');
-  const tarjetas = [];
-  const TANDA = 36;
-  let puestos = 0;
-  let lista = titulos;
-  const masBoton = el('button', 'boton cargar-mas-seccion', 'Cargar más');
-  masBoton.onclick = () => { poner(); };
-  const poner = () => {
-    const pelis = lista.filter((x) => x.tipo !== 'carpeta');
-    for (const x of lista.slice(puestos, puestos + TANDA)) {
-      let t;
-      if (x.tipo === 'carpeta') {
-        t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: 'Serie', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
-        t.dataset.carpeta = x.key;
-        conMeta(t, 'carpeta', x.key); estrella(t, x.key);
-      } else {
-        const [, , icono] = tipo(x.key);
-        t = tarjeta({ icono, titulo: nombre(x.key), meta: bytes(x.tamano), alPulsar: () => abrir(pelis.indexOf(x), pelis), nuevo: nuevas.has(x.key) });
-        t.dataset.key = x.key; t.dataset.tamano = x.tamano;
-        barraVisto(t);
-        conMeta(t, 'archivo', x.key); estrella(t, x.key, x);
-      }
-      tarjetas.push(t);
-      items.insertBefore(t, masBoton.isConnected ? masBoton : null);
-    }
-    puestos = Math.min(lista.length, puestos + TANDA);
-    if (puestos < lista.length) { if (!masBoton.isConnected) items.append(masBoton); masBoton.textContent = `Cargar más (${lista.length - puestos})`; } else masBoton.remove();
-  };
-  const colocar = () => {
-    lista = ordenSeccion === 'az'
-      ? [...titulos].sort((a, b) => nombre(a.key).localeCompare(nombre(b.key), 'es', { numeric: true }))
-      : titulos;
-    tarjetas.forEach((t) => t.remove());
-    tarjetas.length = 0;
-    puestos = 0;
-    masBoton.remove();
-    poner();
-  };
-  for (const [id, texto] of [['recientes', 'Más recientes'], ['az', 'A-Z']]) {
-    const b = el('button', `chip-cat${id === ordenSeccion ? ' activa' : ''}`, texto);
-    b.onclick = () => {
-      if (ordenSeccion === id) return;
-      ordenSeccion = id;
-      try { localStorage.setItem('morvehtv-orden-seccion', id); } catch (e) {}
-      orden.querySelectorAll('button').forEach((x) => x.classList.toggle('activa', x === b));
-      colocar();
-    };
-    orden.append(b);
-  }
-  items.append(orden);
-  colocar();
   enfocarAlLlegar();
 }
 
@@ -361,154 +276,6 @@ function fila(titulo, irAlPulsar, clase = '') {
   return { s, c };
 }
 
-// La altura real de la cabecera (cambia según cuántas líneas ocupe el menú): en la portada va
-// fija encima del contenido, que empieza justo debajo
-(() => {
-  const h = document.querySelector('header');
-  if (!h) return;
-  const poner = () => document.documentElement.style.setProperty('--alto-cabecera', `${h.offsetHeight}px`);
-  poner();
-  if (window.ResizeObserver) new ResizeObserver(poner).observe(h); else addEventListener('resize', poner);
-})();
-
-// ---------- Buscador (botón «Buscar», Ctrl K) ----------
-// Busca al momento en todo el catálogo (películas y series) por su nombre; cada resultado lleva
-// su póster, título y año (de TMDB). Una película abre su ficha; una serie, su página.
-let catalogoBusqueda = null;
-const sinAcentos = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const nombreLimpio = (key) => nombre(key).replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[._]+/g, ' ').replace(/\[[^\]]*\]|\([^)]*\)/g, '').replace(/\s+-\s+(19|20)\d\d\s*$/, '').replace(/\s+/g, ' ').trim();
-function botonBuscar() {
-  const b = el('button', 'boton', '');
-  b.id = 'buscar-boton';
-  b.title = 'Buscar (Ctrl K)';
-  b.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><span class="txt">Buscar</span><kbd>Ctrl K</kbd>';
-  b.onclick = abrirBuscador;
-  return b;
-}
-document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K') && typeof yo !== 'undefined' && yo) { e.preventDefault(); abrirBuscador(); }
-});
-function abrirBuscador() {
-  if ($('#buscador')) return $('#buscador input').focus();
-  const explorar = $('#menu-explorar'); if (explorar) explorar.remove();
-  const capa = el('div', 'buscador');
-  capa.id = 'buscador';
-  const caja = el('div', 'buscador-caja');
-  const fila = el('div', 'buscador-fila');
-  fila.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>';
-  const q = el('input');
-  q.type = 'search'; q.placeholder = 'Busca una película o serie…'; q.autocomplete = 'off'; q.spellcheck = false;
-  const cerrarB = el('button', 'buscador-cerrar', 'Esc');
-  fila.append(q, cerrarB);
-  const res = el('div', 'buscador-resultados');
-  caja.append(fila, res);
-  capa.append(caja);
-  document.body.append(capa);
-  document.documentElement.classList.add('con-buscador');
-  const cerrarTodo = () => { capa.remove(); document.documentElement.classList.remove('con-buscador'); };
-  cerrarB.onclick = cerrarTodo;
-  capa.addEventListener('pointerdown', (e) => { if (e.target === capa) cerrarTodo(); });
-  capa.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { e.stopPropagation(); cerrarTodo(); }
-    // ↓ ↑ entre los resultados
-    const lista = [...res.querySelectorAll('.resultado')];
-    const i = lista.indexOf(document.activeElement);
-    if (e.key === 'ArrowDown' && lista.length) { e.preventDefault(); e.stopPropagation(); (lista[i + 1] || lista[0]).focus(); }
-    if (e.key === 'ArrowUp' && lista.length) { e.preventDefault(); e.stopPropagation(); (i <= 0 ? q : lista[i - 1]).focus(); }
-  });
-  catalogoBusqueda = catalogoBusqueda || api('/api/catalogo', { max: 0 }).then((d) => d.carpetas.flatMap((c) => c.titulos.map((t) => ({ ...t, buscar: sinAcentos(nombreLimpio(t.key)) })))).catch(() => { catalogoBusqueda = null; return []; });
-  let turno = 0;
-  const pintarRes = async () => {
-    const n = ++turno;
-    const terminos = sinAcentos(q.value).split(/\s+/).filter(Boolean);
-    res.innerHTML = '';
-    if (!terminos.length) { res.append(el('div', 'buscador-vacio', 'Escribe el nombre de una película o serie')); return; }
-    const todos = await catalogoBusqueda;
-    if (n !== turno) return;
-    const vistos = new Set();
-    const hallados = todos.filter((t) => terminos.every((x) => t.buscar.includes(x)) && !vistos.has(t.buscar) && vistos.add(t.buscar))
-      .sort((a, b) => (a.buscar.startsWith(terminos[0]) ? 0 : 1) - (b.buscar.startsWith(terminos[0]) ? 0 : 1) || new Date(b.fecha) - new Date(a.fecha))
-      .slice(0, 12);
-    if (!hallados.length) { res.append(el('div', 'buscador-vacio', `No hay nada con «${q.value.trim()}»`)); return; }
-    const pelis = hallados.filter((x) => x.tipo !== 'carpeta');
-    for (const x of hallados) {
-      const serie = x.tipo === 'carpeta';
-      const r = el('button', 'resultado');
-      const img = el('div', 'resultado-cartel', serie ? '📺' : '🎬');
-      const texto = el('div', 'resultado-texto');
-      const t = el('b', null, nombreLimpio(x.key));
-      const sub = el('small', null, serie ? 'Serie' : 'Película');
-      texto.append(t, sub);
-      r.append(img, texto);
-      r.onclick = () => { cerrarTodo(); if (serie) irA(x.key); else abrir(pelis.indexOf(x), pelis); };
-      res.append(r);
-      pedirMeta(serie ? 'carpeta' : 'archivo', x.key).then((d) => {
-        if (!d?.encontrado || !d.titulo || !r.isConnected) return;
-        t.textContent = d.titulo;
-        sub.textContent = [d.anio, serie || d.tipo === 'serie' ? 'Serie' : 'Película', d.valoracion && `★ ${Number(d.valoracion).toFixed(1)}`].filter(Boolean).join(' · ');
-        const p = d.temporada?.poster ?? d.poster;
-        if (p) { const im = el('img'); im.src = p; im.alt = ''; im.loading = 'lazy'; im.onerror = () => im.remove(); img.textContent = ''; img.append(im); }
-      });
-    }
-  };
-  let espera = null;
-  q.addEventListener('input', () => { clearTimeout(espera); espera = setTimeout(pintarRes, 120); });
-  q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const p = res.querySelector('.resultado'); if (p) p.click(); } });
-  pintarRes();
-  setTimeout(() => q.focus(), 0);
-}
-
-// ---------- Listas de la portada ----------
-// Tarjeta con el póster, la nota y si es película o serie arriba, y el título y el año debajo;
-// en el Top 10, su número grande al lado
-function tarjetaLista(x, lista, puesto) {
-  const pelis = lista.filter((y) => y.tipo === 'archivo');
-  const t = tarjeta({
-    icono: x.tipo === 'carpeta' ? '📺' : '🎬', titulo: x.titulo, miniatura: x.poster,
-    meta: [x.anio, x.temporadas && `${x.temporadas} temporada${x.temporadas > 1 ? 's' : ''}`].filter(Boolean).join(' · '),
-    alPulsar: x.tipo === 'carpeta' ? () => irA(x.key) : () => abrir(pelis.indexOf(x), pelis),
-    nuevo: nuevas.has(x.tipo === 'carpeta' ? x.ultimo : x.key),
-  });
-  t.classList.add('tarjeta-lista');
-  const mini = t.querySelector('.mini');
-  mini.classList.add('cartel');
-  if (x.valoracion) mini.append(el('span', 'nota-cartel', `★ ${Number(x.valoracion).toFixed(1)}`));
-  mini.append(el('span', 'tipo-cartel', x.serie ? 'Serie' : 'Película'));
-  if (puesto) { t.classList.add('top'); t.prepend(el('span', 'puesto', String(puesto))); }
-  if (x.tipo === 'archivo') { t.dataset.key = x.key; barraVisto(t); }
-  return t;
-}
-async function pintarListas(sitio, intento = 0) {
-  const d = await api('/api/listas-portada').catch(() => null);
-  if (!sitio.isConnected) return;
-  // Aún sin hacer (el servidor acaba de arrancar): se vuelve a pedir sola cada 15 s
-  const vacias = !d || ![...Object.values(d.peliculas), ...Object.values(d.series)].some((l) => l.length >= 3);
-  if (vacias && intento < 12) {
-    setTimeout(() => { if (sitio.isConnected && !sitio.children.length) pintarListas(sitio, intento + 1); }, 15000);
-    return;
-  }
-  if (!d) return;
-  const filas = [
-    ['Tendencias de películas', d.peliculas.tendencias, true],
-    ['Películas mejor valoradas', d.peliculas.valoradas],
-    ['Películas populares', d.peliculas.populares],
-    ['Tendencias de series', d.series.tendencias, true],
-    ['Series mejor valoradas', d.series.valoradas],
-    ['Series populares', d.series.populares],
-  ];
-  let puestas = 0;
-  for (const [nombreFila, lista, top] of filas) {
-    if (nombreFila === 'Tendencias de series') sitio.append(filaPlataformas('series'));
-    if (!lista || lista.length < 3) continue;
-    const f = fila(nombreFila, null, top ? 'top10' : '');
-    f.s.classList.add(top ? 'fila-top' : 'fila-lista');
-    lista.forEach((x, n) => f.c.append(tarjetaLista(x, lista, top ? n + 1 : 0)));
-    sitio.append(f.s);
-    // Plan Básico: un anuncio cada tres filas
-    if (++puestas % 3 === 0) { const b = typeof anuncioBanner === 'function' && anuncioBanner('fila'); if (b) sitio.append(b); }
-  }
-}
-
 // ---------- Destacado de la portada ----------
 // Un cartel grande con el fondo de lo último que has subido (con ficha de TMDB): título, datos,
 // sinopsis y «▶ Reproducir» / «ℹ Más información». Cambia solo cada 9 s (se para mientras el
@@ -547,29 +314,16 @@ async function pintarDestacado(caja, d, carpetas) {
     const serie = x.tipo === 'carpeta';
     texto.innerHTML = '';
     texto.append(el('span', 'destacado-etiqueta', serie ? 'SERIE · NUEVO EN MORVEHTV' : 'NUEVO EN MORVEHTV'), el('h1', null, m.titulo));
-    // Insignias: la calidad (por el nombre del archivo: 4K, HDR, Full HD…) y la nota de TMDB
-    const insignias = el('div', 'destacado-insignias');
-    const nombreArchivo = String(x.key || '');
-    const calidad = /2160|\b4k\b|uhd/i.test(nombreArchivo) ? '4K UHD' : /1080/.test(nombreArchivo) ? 'Full HD' : /720/.test(nombreArchivo) ? 'HD' : null;
-    if (calidad) insignias.append(el('span', 'insignia calidad', calidad));
-    if (/hdr|dolby.?vision|\bdv\b/i.test(nombreArchivo)) insignias.append(el('span', 'insignia', 'HDR'));
-    if (/atmos/i.test(nombreArchivo)) insignias.append(el('span', 'insignia', 'Dolby Atmos'));
-    if (m.valoracion) {
-      const nota = el('span', 'insignia nota', '★ ');
-      nota.append(el('b', null, Number(m.valoracion).toFixed(1)), document.createTextNode(' TMDB'));
-      insignias.append(nota);
-    }
-    if (insignias.childNodes.length) texto.append(insignias);
-    const datos = [m.anio,
+    const datos = [m.valoracion && `★ ${Number(m.valoracion).toFixed(1)}`, m.anio,
       serie ? (m.temporadas && `${m.temporadas} temporada${m.temporadas > 1 ? 's' : ''}`) : m.duracion && `${Math.floor(m.duracion / 60) ? `${Math.floor(m.duracion / 60)} h ` : ''}${m.duracion % 60} min`,
       (m.generos || []).slice(0, 3).join(' · ')].filter(Boolean);
     texto.append(el('div', 'destacado-datos', datos.join('   ·   ')));
     if (m.sinopsis) texto.append(el('p', 'destacado-sinopsis', m.sinopsis));
     const bs = el('div', 'destacado-botones');
     const ver1 = el('button', 'boton reproducir', '▶ Reproducir');
-    ver1.onclick = () => (serie ? irA(x.key) : abrir(0, [x], { ver: true, reproducir: true }));
+    ver1.onclick = () => (serie ? irA(x.key) : abrir(0, [x]));
     const info = el('button', 'boton info', 'ℹ Más información');
-    info.onclick = () => (serie ? irA(x.key) : abrir(0, [x]));
+    info.onclick = () => (serie ? irA(x.key) : abrir(0, [x], { ficha: true }));
     bs.append(ver1, info);
     texto.append(bs);
     if (aMano) reiniciar();
@@ -602,44 +356,13 @@ function iconoPlataforma(p, tipoPlat, cuantos) {
   const que = tipoPlat === 'series' ? (cuantos === 1 ? 'serie' : 'series') : (cuantos === 1 ? 'película' : 'películas');
   b.title = `${p.nombre} · ${cuantos} ${que}`;
   b.setAttribute('aria-label', b.title);
-  if (p.especial) {
-    // «Sin plataforma»: lo que solo está en MorvehTV (con la nube del logo y cuántos hay)
-    b.classList.add('sin-plataforma');
-    const im = el('img'); im.src = '/icono.svg'; im.alt = '';
-    b.append(im, el('span', 'nombre-esp', 'Sin plataforma'), el('small', null, String(cuantos)));
-  } else if (p.logo) {
+  if (p.logo) {
     const im = el('img'); im.src = p.logo; im.alt = ''; im.loading = 'lazy';
     im.onerror = () => { im.remove(); b.append(el('span', null, p.nombre)); };
     b.append(im);
   } else b.append(el('span', null, p.nombre));
   b.onclick = () => irA(`:plataforma/${p.nombre}/${tipoPlat}`);
   return b;
-}
-// Fila de logotipos de las plataformas que tienen películas (o series); cada uno abre esa
-// plataforma con solo ese tipo
-function filaPlataformas(tipoPlat, intento = 0, plats = el('div', 'plataformas-inicio')) {
-  plats.hidden = true;
-  pedirPlataformas().then((d) => {
-    if (!plats.isConnected && intento) return;
-    // Recién arrancado el servidor aún las está buscando: se vuelve a mirar sola cada 15 s
-    if ((!d || !d.plataformas.some((p) => p[tipoPlat] > 0)) && intento < 12) {
-      setTimeout(() => { if (plats.isConnected) { plataformasPedidas = null; filaPlataformas(tipoPlat, intento + 1, plats); } }, 15000);
-      return;
-    }
-    if (!d || !d.plataformas.length) return;
-    const titulo = tipoPlat === 'series' ? 'Plataformas de streaming · Series' : 'Plataformas de streaming · Películas';
-    const conAlgo = d.plataformas.filter((p) => p[tipoPlat] > 0);
-    if (!conAlgo.length) return;
-    const s = el('section', 'fila-plataformas');
-    s.append(el('h2', 'etiqueta-plataformas', titulo));
-    const fila = el('nav', 'iconos-plataformas');
-    fila.setAttribute('aria-label', titulo);
-    for (const p of conAlgo) fila.append(iconoPlataforma(p, tipoPlat, p[tipoPlat]));
-    s.append(fila);
-    plats.append(s);
-    plats.hidden = false;
-  });
-  return plats;
 }
 let plataformasPedidas = null;
 function pedirPlataformas() {
@@ -662,11 +385,9 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const plat = ((d && d.plataformas) || []).find((p) => p.nombre === nombrePlat);
   // Cabecera con el logotipo de la plataforma
   const cab = el('div', 'biblioteca cabecera-plataforma');
-  const logoCab = plat && (plat.especial ? '/icono.svg' : plat.logo);
-  if (logoCab) { const im = el('img', `logo-plataforma${plat.especial ? ' especial' : ''}`); im.src = logoCab; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
+  if (plat && plat.logo) { const im = el('img', 'logo-plataforma'); im.src = plat.logo; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
   cab.append(el('h1', null, nombrePlat));
-  // Solo películas o solo series (lo que se eligió en la portada)
-  let tipoVisto = tipoInicial === 'series' ? 'series' : 'peliculas';
+  let tipoVisto = ['peliculas', 'series'].includes(tipoInicial) ? tipoInicial : 'todo';
   // Para cambiar de plataforma sin volver a la portada (las que tienen de lo que se está viendo)
   const chips = el('nav', 'iconos-plataformas pequenos');
   const pintarIconos = () => {
@@ -706,7 +427,7 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
     b.onclick = () => { tipoVisto = id; filtro.querySelectorAll('button').forEach((x) => x.classList.toggle('activa', x === b)); pintarLista(); pintarIconos(); };
     filtro.append(b);
   }
-  items.append(cab, chips, lista);
+  items.append(cab, chips, filtro, lista);
   pintarIconos();
   pintarLista();
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
@@ -725,8 +446,24 @@ function pintarInicio(carpetas, archivos) {
   // de su fila de novedades)
   // Plataformas (Netflix, Prime Video…) con su logotipo, en dos filas: las que tienen películas y
   // las que tienen series. Cada icono abre esa plataforma con ese tipo ya elegido.
-  // (la de películas aquí arriba; la de series, delante de «Tendencias de series»)
-  items.append(filaPlataformas('peliculas'));
+  const plats = el('div', 'plataformas-inicio');
+  plats.hidden = true;
+  items.append(plats);
+  pedirPlataformas().then((d) => {
+    if (!d || !plats.isConnected || !d.plataformas.length) return;
+    for (const [tipoPlat, titulo, campo] of [['peliculas', 'Plataformas de streaming · Películas', 'peliculas'], ['series', 'Plataformas de streaming · Series', 'series']]) {
+      const conAlgo = d.plataformas.filter((p) => p[campo] > 0);
+      if (!conAlgo.length) continue;
+      const s = el('section', 'fila-plataformas');
+      s.append(el('h2', 'etiqueta-plataformas', titulo));
+      const fila = el('nav', 'iconos-plataformas');
+      fila.setAttribute('aria-label', titulo);
+      for (const p of conAlgo) fila.append(iconoPlataforma(p, tipoPlat, p[campo]));
+      s.append(fila);
+      plats.append(s);
+    }
+    plats.hidden = !plats.children.length;
+  });
   // Plan Básico: un anuncio debajo de las categorías
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);
@@ -745,10 +482,6 @@ function pintarInicio(carpetas, archivos) {
   }
 
   // Últimos añadidos de cada categoría, en el mismo orden que «Mis medios»
-  // Tendencias (Top 10), mejor valoradas y populares, de películas y de series
-  const listasSitio = el('div', 'listas-portada');
-  items.append(listasSitio);
-  pintarListas(listasSitio);
   const sitio = el('div', 'ultimos');
   items.append(sitio);
   // Solo los 20 últimos de cada categoría: con mucho contenido el catálogo entero pesaría demasiado
@@ -758,7 +491,28 @@ function pintarInicio(carpetas, archivos) {
     if (catalogoPedido === pedido) catalogoPedido = null; // la próxima vez, datos frescos
     if (!d || estado.prefijo || !sitio.isConnected) return;
     pintarDestacado(destacado, d, carpetas).catch(() => {});
-    // (Las filas de cada sección ya no salen: las secciones están en el menú de arriba)
+    let filasPuestas = 0;
+    for (const { cat, suyas } of categoriasDe(carpetas)) {
+      const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
+      // En cada fila «Novedades en…», solo los 5 últimos (el resto, en «Ver todo»)
+      const titulos = entrada ? entrada.titulos.slice(0, 5) : [];
+      if (!titulos.length) continue;
+      const f = fila(`Novedades en ${cat.nombre}`, () => irA(suyas[0]));
+      const pelis = titulos.filter((x) => x.tipo === 'archivo');
+      for (const x of titulos) {
+        if (x.tipo === 'carpeta') {
+          const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
+          f.c.append(t); conMeta(t, 'carpeta', x.key);
+        } else {
+          const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis), nuevo: nuevas.has(x.key) });
+          t.dataset.key = x.key; barraVisto(t);
+          f.c.append(t); conMeta(t, 'archivo', x.key);
+        }
+      }
+      sitio.append(f.s);
+      // Y otro cada tres filas
+      if (++filasPuestas % 3 === 0) { const b = typeof anuncioBanner === 'function' && anuncioBanner('fila'); if (b) sitio.append(b); }
+    }
   });
 
   if (archivos.length) {
@@ -986,7 +740,7 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   await cuandoSeVea(t);
   if (!t.isConnected) return;
   const d = await pedirMeta(clase, clave);
-  if (!d?.encontrado || !d.titulo || !t.isConnected) return;
+  if (!d?.encontrado || !t.isConnected) return;
   const temp = d.temporada;
   const apaisada = d.episodio?.imagen ?? (ancha ? d.fondo : null);
   const imagen = apaisada ?? temp?.poster ?? d.poster;
@@ -1023,16 +777,6 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   }
   // Película o serie: solo el cartel (el título y los datos se ven en la ficha y al pasar por encima)
   if (imagen) t.classList.add('con-imagen');
-  // En la página de una sección: título y año debajo, y la nota y «Película»/«Serie» en el cartel
-  if (t.closest('.vista-carteles')) {
-    t.querySelector('.nombre').textContent = d.titulo;
-    meta.textContent = [d.anio, d.tipo === 'serie' && d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
-    if (imagen) {
-      if (d.valoracion) mini.append(el('span', 'nota-cartel', `★ ${Number(d.valoracion).toFixed(1)}`));
-      mini.append(el('span', 'tipo-cartel', d.tipo === 'serie' ? 'Serie' : 'Película'));
-    }
-    return;
-  }
   meta.textContent = [d.valoracion && `★ ${d.valoracion}`,
     d.tipo === 'serie' ? (d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`) : d.duracion && `${d.duracion} min`,
     d.generos.slice(0, 2).join(', '), tam].filter(Boolean).join(' · ');
@@ -1060,7 +804,7 @@ async function pintarCabecera(prefijo) {
       const videos = archivos.filter((x) => tipo(x.key)[1].startsWith('video') || tipo(x.key)[1] === 'enlace');
       if (videos.length) {
         const i = videos.findIndex((x) => posicionDe(x.key));
-        abrir(Math.max(0, i), videos, { ver: true, reproducir: true });
+        abrir(Math.max(0, i), videos);
       } else if (carpetas.length) irA(carpetas[0]); // una serie con temporadas: a la primera
     };
     enlaces.prepend(b);
@@ -1077,14 +821,9 @@ async function pintarCabecera(prefijo) {
 const pista = (p, n) => [(p.titulo || p.idioma || `Pista ${n + 1}`).toUpperCase(), p.codec].filter(Boolean).join(' · ');
 
 // Ficha completa: datos de TMDB + datos técnicos del archivo (si se pasan)
-// Diseño «héroe»: título grande, eslogan, una línea de datos (nota, año, duración, géneros),
-// los botones y la sinopsis con «Ver más»; detrás, el fondo de la película a lo grande
 function fichaHtml(d, { archivo, medio, clave } = {}) {
-  const f = el('div', 'ficha heroe');
+  const f = el('div', 'ficha');
   const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen);
-  // Con fondo grande (película en el visor) el póster no hace falta; en la cabecera de una
-  // serie el fondo lo pone #cabecera
-  if (d?.encontrado && d.fondo && archivo) { f.classList.add('con-fondo'); f.style.setProperty('--fondo-img', `url("${d.fondo}")`); }
   if (poster) {
     const img = el('img', 'cartel'); img.src = poster; img.alt = ''; f.append(img);
   }
@@ -1092,26 +831,14 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
   f.append(cuerpo);
 
   if (d?.encontrado) {
-    // En el visor (película): «← Volver» arriba, como en las webs de cine
-    if (archivo) {
-      const volver = el('button', 'boton volver-ficha', '← Volver');
-      volver.onclick = () => cerrar();
-      cuerpo.append(volver);
-    }
-    cuerpo.append(el('h2', 'titulo-heroe', d.titulo));
-    if (d.tituloOriginal && d.tituloOriginal !== d.titulo) cuerpo.append(el('div', 'suave original', d.tituloOriginal));
-    if (d.eslogan) cuerpo.append(el('p', 'eslogan', `«${d.eslogan.replace(/^["«“]|["»”]$/g, '')}»`));
+    cuerpo.append(el('h2', null, `${d.titulo}${d.anio ? ` (${d.anio})` : ''}`));
+    if (d.tituloOriginal && d.tituloOriginal !== d.titulo) cuerpo.append(el('div', 'suave', d.tituloOriginal));
     const chips = el('div', 'chips datos');
-    if (d.valoracion) {
-      // La nota en %, con color según lo buena que sea
-      const pct = Math.round(Number(d.valoracion) * 10);
-      chips.append(el('span', `nota-pct ${pct >= 70 ? 'alta' : pct >= 50 ? 'media' : 'baja'}`, `★ ${pct}%`));
-    }
-    if (d.anio) chips.append(el('span', 'dato', d.anio));
-    const dur = d.episodio?.duracion ?? d.duracion;
-    if (d.tipo === 'serie' && d.temporadas) chips.append(el('span', 'dato', `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`));
-    if (dur) chips.append(el('span', 'dato duracion', `${Math.floor(dur / 60) ? `${Math.floor(dur / 60)} h ` : ''}${dur % 60} min`));
-    d.generos.forEach((g) => chips.append(el('span', 'chip', g)));
+    const chip = (t) => t && chips.append(el('span', 'chip', t));
+    chip(d.valoracion && `★ ${d.valoracion}`);
+    chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
+    chip((d.episodio?.duracion ?? d.duracion) && `${d.episodio?.duracion ?? d.duracion} min`);
+    d.generos.forEach(chip);
     cuerpo.append(chips);
     if (d.temporada) {
       const t = d.temporada;
@@ -1123,20 +850,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
       if (d.episodio.fecha) cuerpo.append(el('div', 'suave', `Emitido el ${new Date(d.episodio.fecha).toLocaleDateString('es-ES')}`));
       if (d.episodio.sinopsis) cuerpo.append(el('p', null, d.episodio.sinopsis));
     }
-    // Botones (aquí se pone delante «▶ Reproducir»): favoritos, tráiler y de dónde salen los datos
-    const enlaces = el('div', 'chips acciones');
-    const objetivo = archivo ? archivo.key : clave;
-    if (yo && objetivo) enlaces.append(botonFavorito(objetivo, archivo));
-    if (d.trailer) {
-      const t = Object.assign(el('a', 'boton trailer'), { href: d.trailer, target: '_blank', rel: 'noopener' });
-      t.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>TRÁILER';
-      enlaces.append(t);
-    }
-    // (TMDB o, si no lo tenía, TVmaze, AniList o Wikipedia)
-    const web = d.web || d.tmdb;
-    if (web) enlaces.append(Object.assign(el('a', 'boton fuente', `${d.fuente || 'TMDB'} ↗`), { href: web, target: '_blank', rel: 'noopener' }));
-    cuerpo.append(enlaces);
-    if (d.sinopsis) cuerpo.append(el('p', `sinopsis${d.episodio || (d.temporada && d.temporada.sinopsis) ? ' suave' : ''}`, d.sinopsis));
+    if (d.sinopsis) cuerpo.append(el('p', d.episodio || (d.temporada && d.temporada.sinopsis) ? 'suave' : null, d.sinopsis));
     const linea = (t, v) => {
       if (!v?.length) return;
       const l = el('div', 'linea');
@@ -1146,29 +860,18 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     linea('Dirección', d.direccion);
     linea('Creada por', d.creadores);
     linea('Reparto', d.reparto);
-    // La sinopsis se recorta a 3 líneas (y el reparto se esconde) hasta pulsar «Ver más»
-    const mas = el('button', 'ver-mas', 'Ver más ▾');
+    // En el móvil la sinopsis y el reparto se recortan para que se vea antes lo de debajo
+    const mas = el('button', 'boton ver-mas', 'Ver más ▾');
     mas.onclick = () => { const si = f.classList.toggle('entera'); mas.textContent = si ? 'Ver menos ▴' : 'Ver más ▾'; };
     cuerpo.append(mas);
-    // Compartir: el enlace a su carpeta (el mismo que el «Ver ahora» de Telegram)
-    const carpeta = objetivo ? (objetivo.endsWith('/') ? objetivo : objetivo.slice(0, objetivo.lastIndexOf('/') + 1)) : '';
-    if (carpeta) {
-      const comp = el('div', 'compartir');
-      comp.append(el('span', null, `Compartir ${d.tipo === 'serie' ? 'serie' : 'película'} en:`));
-      const b = el('button', 'boton compartir-boton');
-      b.title = 'Compartir'; b.setAttribute('aria-label', 'Compartir');
-      b.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>';
-      b.onclick = async () => {
-        const url = `${location.origin}/#${encodeURIComponent(carpeta)}`;
-        const datos = { title: `${d.titulo} · MorvehTV`, text: `Mira «${d.titulo}» en MorvehTV`, url };
-        try {
-          if (navigator.share) return await navigator.share(datos);
-        } catch (e) { if (e && e.name === 'AbortError') return; }
-        try { await navigator.clipboard.writeText(url); aviso('Enlace copiado'); } catch (e) { prompt('Copia el enlace:', url); }
-      };
-      comp.append(b);
-      cuerpo.append(comp);
-    }
+    const enlaces = el('div', 'chips');
+    if (d.trailer) enlaces.append(Object.assign(el('a', 'boton', '▶ Tráiler'), { href: d.trailer, target: '_blank', rel: 'noopener' }));
+    // De dónde salen los datos: TMDB o, si no lo tenía, TVmaze, AniList o Wikipedia
+    const web = d.web || d.tmdb;
+    if (web) enlaces.append(Object.assign(el('a', 'boton', `${d.fuente || 'TMDB'} ↗`), { href: web, target: '_blank', rel: 'noopener' }));
+    const objetivo = archivo ? archivo.key : clave;
+    if (yo && objetivo) enlaces.prepend(botonFavorito(objetivo, archivo));
+    cuerpo.append(enlaces);
   } else if (d) {
     cuerpo.append(el('h2', null, 'Sin datos en ninguna fuente'));
     cuerpo.append(el('p', 'suave', d.buscado ? `No se encontró «${d.buscado}». Puedes buscarlo a mano:` : 'Puedes buscarlo a mano:'));
@@ -1187,10 +890,7 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
       fila('Audio', medio.audios.map((p, n) => [nombres[n], p.codec && p.codec.toUpperCase()].filter(Boolean).join(' · ')).join(' | '));
       fila('Subtítulos', medio.subtitulos?.map(pista).join(' | '));
     }
-    // Los datos del archivo, plegados: no son lo primero que se busca en la ficha
-    const det = el('details', 'detalles-tecnicos');
-    det.append(el('summary', null, 'Detalles técnicos'), tec);
-    cuerpo.append(det);
+    cuerpo.append(tec);
   }
   if (clave && d && typeof yo !== 'undefined' && yo && yo.admin) cuerpo.append(corrector(clave, d));
   return f;
@@ -1366,7 +1066,6 @@ function carpetaSerieDe(key) {
 function salirAFicha() {
   const serie = carpetaSerieDe(actualKey);
   // Capítulos y enlaces de otros servidores: se cierra el reproductor (en una serie, a su página)
-  if (!serie && tipo(actualKey)[1] === 'enlace' && actual >= 0) return abrir(actual, listaVisor);
   if (serie || tipo(actualKey)[1] === 'enlace') {
     cerrar();
     if (serie && estado.prefijo !== serie) irA(serie);
@@ -2034,22 +1733,13 @@ async function mantenerPantalla(si) {
 // Al cerrar o recargar la página se avisa al servidor para que pare ffmpeg
 window.addEventListener('pagehide', pararMedios);
 // Al volver a la app, si había un vídeo en marcha, se vuelve a pedir
-// Al salir (otra pestaña, botón de inicio del móvil o de la tele, apagar la pantalla) el vídeo se
-// pone en pausa: no sigue sonando por detrás. Al volver se queda en pausa donde iba, con ▶.
 document.addEventListener('visibilitychange', () => {
   const v = document.querySelector('#vcontenido video');
-  if (document.visibilityState === 'hidden') {
-    document.querySelectorAll('#vcontenido video, #vcontenido audio').forEach((m) => { if (!m.paused) m.pause(); });
-    mantenerPantalla(false);
-    return;
-  }
-  if (v && !v.paused) mantenerPantalla(true);
+  if (document.visibilityState === 'visible' && v && !v.paused) mantenerPantalla(true);
 });
 
 let listaVisor = [];
 async function abrir(i, lista = listaVisor, opciones = {}) {
-  // Desde la pantalla completa (⏮ ⏭, fin del capítulo) se sigue viendo, sin pasar por la ficha
-  const veniaDeCine = $('#visor').classList.contains('abierto') && $('#visor').classList.contains('cine');
   pararMedios();
   listaVisor = lista;
   if (i < 0 || i >= lista.length) return;
@@ -2059,11 +1749,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   const [, clase] = tipo(f.key);
   $('#visor').classList.add('abierto');
   // El mismo reproductor en la web, el móvil y la app de Android
-  // Una película (o un título de enlaces) se abre primero en su ficha; el reproductor, a pantalla
-  // completa, solo al pulsar «▶ Reproducir». Los capítulos de una serie van directos al vídeo.
-  const esTituloSuelto = (clase === 'video' || clase === 'video-raro' || clase === 'enlace') && !esEpisodio(f.key);
-  const soloFicha = esTituloSuelto && !opciones.ver && !opciones.reproducir && !opciones.ficha && !veniaDeCine;
-  if ((clase === 'video' || clase === 'video-raro') && !opciones.ficha && !soloFicha) entrarCine();
+  if ((clase === 'video' || clase === 'video-raro') && !opciones.ficha) entrarCine();
   else salirCine();
   $('#vtitulo').textContent = nombre(f.key);
   $('#vtitulo').title = f.key;
@@ -2073,7 +1759,6 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   actualizarFlechas(i);
   const c = $('#vcontenido'); c.innerHTML = '';
   c.classList.remove('solo-ficha');
-  if (soloFicha) return pintarSoloFicha(f, i, lista, c);
   if (clase === 'enlace') return abrirEnlace(f, i, c);
 
   try {
@@ -2096,10 +1781,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       // Anuncio en vídeo (VAST de una red externa) antes de empezar, si están activados
       if (typeof anuncioPrevio === 'function') await anuncioPrevio();
       if (actual !== i) return;
-      // El MP4 directo llega a través del servidor (/flujo), que lo baja de e2 a varias conexiones:
-      // e2 limita cada conexión a ~4 Mbit/s y el vídeo se paraba a trozos
-      const porServidor = `/flujo?key=${encodeURIComponent(f.key)}`;
-      const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? porServidor : null, () => Promise.resolve(porServidor), { reproducir: opciones.reproducir });
+      const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null, undefined, { reproducir: opciones.reproducir });
       c.append(caja);
       navegacionReproductor(caja, i);
       // Plan Básico: pausas publicitarias durante el vídeo y anuncio pequeño al pausar
@@ -2128,23 +1810,6 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   } catch (e) {
     c.innerHTML = `<div class="vacio error">${e.message}</div>`;
   }
-}
-
-// Ficha de una película sin preparar aún el vídeo (no se pone a convertir nada en el servidor
-// hasta que se pulsa «▶ Reproducir», que lo abre a pantalla completa)
-async function pintarSoloFicha(f, i, lista, c) {
-  c.innerHTML = '<div class="vacio">Cargando…</div>';
-  const d = await pedirMeta('archivo', f.key);
-  if (actual !== i || actualKey !== f.key) return;
-  c.innerHTML = '';
-  c.classList.add('solo-ficha');
-  c.append(fichaHtml(d || { encontrado: false }, { archivo: f, clave: f.key }));
-  const sitio = c.querySelector('.ficha .cuerpo > .chips.acciones') || c.insertBefore(el('div', 'chips ver-ahora-sitio'), c.querySelector('.ficha'));
-  const b = el('button', 'boton reproducir ver-ahora', posicionDe(f.key) ? '▶ Reanudar' : '▶ Reproducir');
-  b.onclick = () => abrir(i, lista, { ver: true, reproducir: true });
-  sitio.prepend(b);
-  enfocarVisor();
-  b.focus({ preventScroll: true });
 }
 
 // ---------- Pasar de un capítulo o película a otro ----------
@@ -2422,16 +2087,12 @@ async function abrirEnlace(f, i, c, opcion = 0) {
     return;
   }
   if (actual !== i) return;
-  // Al abrir el título (sin elegir servidor), el que eligió esta persona la última vez: mismo
-  // servidor e idioma; si no está, el idioma; si no, el servidor (el que le fue fluido)
+  // Al abrir el título (sin elegir servidor), el primero en el idioma que eligió esta persona la
+  // última vez, si lo hay
   if (opcion === 0 && d.opciones && d.opciones.length > 1) {
-    let idioma = null, servidor = null;
-    try { idioma = localStorage.getItem('morvehtv-idioma-enlace'); servidor = localStorage.getItem('morvehtv-servidor-enlace'); } catch (e) {}
-    const buscar = (fn) => d.opciones.findIndex(fn);
-    let n = -1;
-    if (idioma && servidor) n = buscar((o) => o.idioma === idioma && o.servidor === servidor);
-    if (n < 0 && idioma) n = buscar((o) => o.idioma === idioma);
-    if (n < 0 && servidor) n = buscar((o) => o.servidor === servidor);
+    let preferido = null;
+    try { preferido = localStorage.getItem('morvehtv-idioma-enlace'); } catch (e) {}
+    const n = preferido ? d.opciones.findIndex((o) => o.idioma === preferido) : -1;
     if (n > 0) return abrirEnlace(f, i, c, n);
   }
   // Con varios servidores en el archivo, una fila para cambiar de uno a otro (siempre visible,
@@ -2444,10 +2105,7 @@ async function abrirEnlace(f, i, c, opcion = 0) {
       const extra = [o.idioma, o.calidad].filter(Boolean).join(' · ');
       const b = el('button', `boton${n === d.opcion ? ' activo' : ''}`, `${o.servidor} ${n + 1}${extra ? ` · ${extra}` : ''}`);
       b.onclick = () => {
-        try {
-          if (o.idioma) localStorage.setItem('morvehtv-idioma-enlace', o.idioma);
-          localStorage.setItem('morvehtv-servidor-enlace', o.servidor);
-        } catch (e) {}
+        if (o.idioma) { try { localStorage.setItem('morvehtv-idioma-enlace', o.idioma); } catch (e) {} }
         if (n !== d.opcion) abrirEnlace(f, i, c, n);
       };
       fila.append(b);
@@ -2558,7 +2216,7 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
   || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '.destacado .boton, #pestanas button:not([hidden]), .menu-explorar button, #buscar-boton, .buscador input, .buscador .resultado, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .icono-plataforma, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .icono-plataforma, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, .servidores button, #vcontenido > iframe.incrustado';
 

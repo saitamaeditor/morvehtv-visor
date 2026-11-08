@@ -12,8 +12,7 @@ import os from 'node:os';
 import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { S3Client, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-import { servirRango, estadisticas as lecturaE2 } from './e2rapido.js';
+import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as meta from './metadatos.js';
 import * as acceso from './acceso.js';
@@ -180,26 +179,6 @@ function firmar(key, { segundos = 4 * 3600 } = {}) {
 }
 
 const archivo = (o) => ({ key: o.Key, tamano: o.Size, fecha: o.LastModified });
-
-// ---------- Vídeo de e2 a varias conexiones (e2rapido.js) ----------
-// Lo que pesa un archivo: del último repaso del bucket o, si aún no está, preguntándolo a e2
-async function tamDe(key) {
-  const v = foto?.get(key);
-  if (v) return Number(String(v).split(':')[0]);
-  const h = await s3.send(new HeadObjectCommand({ Bucket: E2_BUCKET, Key: key }));
-  return Number(h.ContentLength) || 0;
-}
-// ffmpeg lee los vídeos por una dirección interna de este mismo servidor (solo desde la propia
-// máquina, con un código al azar que caduca), así también va a varias conexiones
-const lecturasInternas = new Map(); // código → { url, tam, hasta }
-async function direccionInterna(key) {
-  const codigo = randomUUID();
-  lecturasInternas.set(codigo, { url: await firmar(key, { segundos: 12 * 3600 }), tam: await tamDe(key), hasta: Date.now() + 12 * 3600000 });
-  for (const [c, l] of lecturasInternas) if (l.hasta < Date.now()) lecturasInternas.delete(c);
-  return `http://127.0.0.1:${PUERTO}/_e2/${codigo}`;
-}
-const esLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
-const TIPO_VIDEO = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', ts: 'video/mp2t' };
 
 // En internet nunca se enseñan las carpetas internas («_fotograma» guarda las cuentas de
 // morvehtv.es y «_hls» las claves de los vídeos cifrados), ni con el botón «Ocultas»
@@ -803,8 +782,7 @@ async function hlsIniciar(p, quien) {
   // preparar: se dice claro en vez de mostrar el error de ffmpeg
   if (!info.video) throw Object.assign(new Error('Este archivo no tiene imagen (solo audio o está incompleto): hay que volver a subir el vídeo completo'), { status: 422 });
   const audio = Math.min(Math.max(0, Number(p.get('audio')) || 0), Math.max(0, info.audios.length - 1));
-  // (por e2rapido: a varias conexiones; con VISOR_E2_RAPIDO=0, directo de e2 como antes)
-  const url = process.env.VISOR_E2_RAPIDO === '0' ? await firmar(key, { segundos: 12 * 3600 }) : await direccionInterna(key);
+  const url = await firmar(key, { segundos: 12 * 3600 });
   const id = randomUUID();
   const carpeta = path.join(DIR_HLS, id);
   await mkdir(carpeta, { recursive: true });
@@ -819,17 +797,10 @@ async function hlsIniciar(p, quien) {
   // Un 4K/HDR tarda más en convertirse: en vez de esperar 20 s de margen hacia atrás antes de
   // arrancar, se empieza 4 s antes del punto pedido (arranca mucho antes)
   if (!copiaVideo && pesado && margen > 4) { desde += margen - 4; margen = 4; }
-  // Si hay que convertir la imagen y el servidor ya está convirtiendo otro vídeo (o este es
-  // 4K/HDR), un ajuste de x264 más rápido: un poco menos de calidad por megabyte, pero va por
-  // delante de la reproducción en vez de quedarse atrás (y pararse)
-  const convirtiendo = [...sesionesHls.values()].filter((s) => s.convierte && s.ff.exitCode === null).length;
-  const preset = process.env.VISOR_PRESET || (pesado || convirtiendo >= 1 ? 'superfast' : 'veryfast');
   const args = [
     // -multiple_requests reutiliza la conexión con e2 al buscar el minuto (salta el doble de rápido)
     // -reconnect…: si e2 corta la conexión a mitad de película, ffmpeg la retoma donde iba
-    // -progress: cada 2 s dice a qué velocidad va (para saber si va por delante del vídeo)
-    '-v', 'error', '-nostats', '-progress', 'pipe:1', '-stats_period', '2',
-    '-readrate', '3', ...RAFAGA, '-multiple_requests', '1',
+    '-v', 'error', '-readrate', '3', ...RAFAGA, '-multiple_requests', '1',
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_on_network_error', '1', '-reconnect_delay_max', '10',
     '-ss', String(desde), '-i', url,
     // «?»: si una pista no está donde decía ffprobe, se sigue sin ella en vez de fallar
@@ -838,7 +809,7 @@ async function hlsIniciar(p, quien) {
       ? ['-c:v', 'copy', ...(copiaHevc ? ['-tag:v', 'hvc1'] : [])]
       // Fotograma clave justo cada 4 s (cada trozo empieza en uno: saltar es más fino) y tope de
       // caudal, para que una escena con mucho movimiento no pida de golpe más de lo que da la wifi
-      : ['-vf', filtro, '-c:v', 'libx264', '-preset', preset, '-crf', '21', '-maxrate', '10M', '-bufsize', '20M',
+      : ['-vf', filtro, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '10M', '-bufsize', '20M',
         '-profile:v', 'high', '-force_key_frames', 'expr:gte(t,n_forced*4)']),
     // El AAC estéreo se copia; el 5.1/7.1 (aunque sea AAC) se pasa a estéreo: muchas teles
     // Android no lo decodifican y se queda sin sonido
@@ -854,40 +825,18 @@ async function hlsIniciar(p, quien) {
       : ['-hls_segment_filename', path.join(carpeta, 's%05d.ts')]),
     path.join(carpeta, 'index.m3u8'),
   ];
-  const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  const sesion = {
-    ff, carpeta, ultimo: Date.now(), errores: '', usuario: quien?.cuenta.usuario,
-    convierte: !copiaVideo, preset: copiaVideo ? 'copia' : preset, inicio: Date.now(), velocidad: null, avisado: false,
-    tipo: `${info.video || '?'} ${info.resolucion || ''}`.trim(),
-  };
+  const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+  const sesion = { ff, carpeta, ultimo: Date.now(), errores: '', usuario: quien?.cuenta.usuario };
   sesionesHls.set(id, sesion);
   ff.stderr.on('data', (d) => (sesion.errores = (sesion.errores + d).slice(-2000)));
-  // Velocidad de la conversión (1x = tan rápido como se ve; por debajo, el vídeo acaba parándose)
-  let resto = '';
-  ff.stdout.on('data', (d) => {
-    resto += d;
-    const lineas = resto.split('\n'); resto = lineas.pop();
-    for (const l of lineas) {
-      const v = l.match(/^speed=\s*([\d.]+)x/);
-      if (!v) continue;
-      sesion.velocidad = Number(v[1]);
-      // Tras el arranque (que va a ráfagas), si va más lento que el vídeo se deja anotado
-      if (!sesion.avisado && Date.now() - sesion.inicio > 40000 && sesion.velocidad < 1) {
-        sesion.avisado = true;
-        console.warn(`Conversión lenta: ${sesion.velocidad}x (${sesion.tipo}, ${sesion.preset}, ${[...sesionesHls.values()].filter((s) => s.ff.exitCode === null).length} vídeos a la vez)`);
-      }
-    }
-  });
   ff.on('close', (code) => code && sesion.errores && console.error(`ffmpeg (${key} @${desde}s): ${sesion.errores.trim().slice(-300)}`));
 
   // Espera a que la lista cubra los segundos pedidos («margen»: el cliente empieza un poco
-  // antes del punto elegido para poder retroceder sin volver a preparar) y unos 10 s más de
-  // colchón, para que un bache al empezar no pare la imagen (si tarda, con 2 s basta)
+  // antes del punto elegido para poder retroceder sin volver a preparar)
   for (let i = 0; i < 150; i++) {
     const lista = await readFile(path.join(carpeta, 'index.m3u8'), 'utf8').catch(() => '');
     const preparado = [...lista.matchAll(/#EXTINF:([\d.]+)/g)].reduce((s, m) => s + Number(m[1]), 0);
-    const listo = preparado >= margen + 10 || (preparado >= margen + 2 && i >= 30);
-    if (preparado > 0 && (listo || ff.exitCode !== null)) return { id, url: `/hls/${id}/index.m3u8`, desde, hevc: copiaHevc };
+    if (preparado > 0 && (preparado >= margen + 2 || ff.exitCode !== null)) return { id, url: `/hls/${id}/index.m3u8`, desde, hevc: copiaHevc };
     if (ff.exitCode !== null) break;
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -1042,7 +991,6 @@ async function plataformasDeTitulo(t) {
   plataformasTitulo.set(t.key, { hasta: Date.now() + (m?.encontrado ? 24 * 3600000 : 600000), lista });
   return lista;
 }
-const SIN_PLATAFORMA = 'Sin plataforma';
 async function construirPlataformas() {
   const c = await catalogoEntero();
   const titulos = c.carpetas.flatMap((x) => x.titulos.map((t) => ({ ...t, seccion: x.carpeta })));
@@ -1051,9 +999,7 @@ async function construirPlataformas() {
   const trabajar = async () => {
     while (i < titulos.length) {
       const t = titulos[i++];
-      const suyas = await plataformasDeTitulo(t);
-      // Lo que no está en ninguna plataforma va a su propio grupo («Sin plataforma», al final)
-      for (const p of suyas.length ? suyas : [SIN_PLATAFORMA]) {
+      for (const p of await plataformasDeTitulo(t)) {
         if (!por.has(p)) por.set(p, []);
         por.get(p).push(t);
       }
@@ -1064,13 +1010,12 @@ async function construirPlataformas() {
   const logos = await meta.logosPlataformas().catch(() => ({}));
   // Primero las conocidas (en su orden: Netflix, Prime Video, Disney+…) y después todas las demás
   // que haya dado TMDB, de la que más títulos tiene a la que menos
-  const puesto = (n) => (n === SIN_PLATAFORMA ? 100000 : orden.includes(n) ? orden.indexOf(n) : 1000);
+  const puesto = (n) => (orden.includes(n) ? orden.indexOf(n) : 1000);
   return [...por]
     .sort((a, b) => puesto(a[0]) - puesto(b[0]) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, lista]) => ({
       nombre,
       logo: logos[nombre] ?? null,
-      ...(nombre === SIN_PLATAFORMA && { especial: true }),
       total: lista.length,
       // (para las dos filas de la portada: plataformas con películas y con series)
       peliculas: lista.filter((t) => t.tipo !== 'carpeta').length,
@@ -1091,7 +1036,7 @@ async function plataformas() {
   return { preparando: !indicePlat.datos || !!indicePlat.construyendo, plataformas: indicePlat.datos ?? [] };
 }
 // (se empieza solo a los 2 minutos de arrancar, para que esté listo cuando alguien entre)
-setTimeout(() => plataformas().catch(() => {}), 30000).unref();
+setTimeout(() => plataformas().catch(() => {}), 120000).unref();
 
 async function catalogoEntero() {
   let objetos;
@@ -1136,69 +1081,6 @@ async function catalogoEntero() {
   };
 }
 
-// ---------- Listas de la portada: tendencias, mejor valoradas y populares ----------
-// Con las fichas de TMDB de todo el catálogo (películas: vídeos sueltos; series: carpetas), por
-// separado para películas y series. Se hacen una vez por cada estado del contenido (huella), en
-// segundo plano, y mientras se rehacen se sirven las anteriores.
-const listas = { huella: null, datos: null, haciendo: null };
-const VACIAS = { peliculas: { tendencias: [], valoradas: [], populares: [] }, series: { tendencias: [], valoradas: [], populares: [] } };
-async function hacerListas() {
-  const h = huella;
-  const c = await catalogo(0);
-  const titulos = c.carpetas.flatMap((x) => x.titulos);
-  const con = [];
-  let n = 0;
-  // De 4 en 4: las fichas ya conocidas salen de la caché; las nuevas, de TMDB sin saturarlo
-  await Promise.all(Array.from({ length: 4 }, async () => {
-    while (n < titulos.length) {
-      const t = titulos[n++];
-      const m = await (t.tipo === 'carpeta' ? meta.deCarpeta(t.key) : meta.deArchivo(t.key)).catch(() => null);
-      if (m?.encontrado && m.poster && !m.episodio) con.push({ t, m });
-    }
-  }));
-  // Un mismo título en dos secciones: solo una vez (el más nuevo)
-  const vistos = new Map();
-  for (const x of con) {
-    const id = `${x.t.tipo}:${x.m.fuente || ''}:${x.m.tmdbId ?? x.m.id ?? x.m.titulo}`;
-    const otro = vistos.get(id);
-    if (!otro || otro.t.fecha < x.t.fecha) vistos.set(id, x);
-  }
-  const tarjeta = ({ t, m }) => ({
-    tipo: t.tipo, key: t.key, fecha: t.fecha, tamano: t.tamano, ultimo: t.ultimo,
-    titulo: m.titulo, poster: m.poster, anio: m.anio || '', valoracion: m.valoracion ?? null,
-    temporadas: m.temporadas ?? null, serie: m.tipo === 'serie',
-  });
-  const este = new Date().getFullYear();
-  const pop = (x) => x.m.popularidad ?? 0;
-  const hacer = (lista) => {
-    const porPopularidad = [...lista].sort((a, b) => pop(b) - pop(a) || b.t.fecha - a.t.fecha);
-    // Tendencias: lo más popular de estos dos años (si no llega a 10, lo más popular sin más)
-    const recientes = porPopularidad.filter((x) => Number(x.m.anio) >= este - 1);
-    const tendencias = [...recientes, ...porPopularidad.filter((x) => !recientes.includes(x))].slice(0, 10);
-    const enTendencias = new Set(tendencias);
-    return {
-      tendencias: tendencias.map(tarjeta),
-      // Mejor valoradas: con votos suficientes para que la nota signifique algo
-      valoradas: lista.filter((x) => x.m.valoracion && (x.m.votos ?? 100) >= 30)
-        .sort((a, b) => b.m.valoracion - a.m.valoracion || pop(b) - pop(a)).slice(0, 20).map(tarjeta),
-      populares: porPopularidad.filter((x) => !enTendencias.has(x)).slice(0, 20).map(tarjeta),
-    };
-  };
-  const todos = [...vistos.values()];
-  listas.datos = { peliculas: hacer(todos.filter((x) => x.t.tipo === 'archivo')), series: hacer(todos.filter((x) => x.t.tipo === 'carpeta')) };
-  listas.huella = h;
-  return listas.datos;
-}
-async function listasPortada() {
-  if (listas.datos && listas.huella === huella) return listas.datos;
-  if (!listas.haciendo) listas.haciendo = hacerListas().catch((e) => { console.error(`Listas de la portada: ${e.message}`); return null; }).finally(() => { listas.haciendo = null; });
-  if (listas.datos) return listas.datos;
-  // La primera vez se espera (como mucho 25 s; si no, vacías y estarán en la próxima visita)
-  return (await Promise.race([listas.haciendo, new Promise((ok) => setTimeout(() => ok(null), 25000))])) ?? VACIAS;
-}
-// Se preparan poco después de arrancar, para que la primera visita ya las tenga
-setTimeout(() => listasPortada().catch(() => {}), 20000).unref();
-
 // Conexiones abiertas de cada cuenta: al pagar (o cancelar) se les avisa para que la web y la
 // app quiten o pongan los anuncios en el momento, en todos sus aparatos
 const oyentesCuenta = new Map(); // id de cuenta → Set de conexiones
@@ -1239,16 +1121,7 @@ const rutas = {
     return videos.length;
   }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
-  '/api/listas-portada': () => listasPortada(),
-  // Con «seccion»: el catálogo completo de esa sección (todas sus películas y series, también las
-  // de sus subcarpetas que solo agrupan), para verla entera de una vez
-  '/api/catalogo': async (p) => {
-    const seccion = p.get('seccion');
-    if (!seccion) return catalogo(p.get('max'));
-    if (prohibido(seccion) || !/^[^/]+\/$/.test(seccion)) throw Object.assign(new Error('Sección no válida'), { status: 400 });
-    const c = await catalogo(0);
-    return { seccion, titulos: c.carpetas.find((x) => x.carpeta === seccion)?.titulos ?? [] };
-  },
+  '/api/catalogo': (p) => catalogo(p.get('max')),
   '/api/plataformas': () => plataformas(),
   // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
   '/api/tmdb-buscar': async (p, req, quien) => {
@@ -1311,7 +1184,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'enlaces-video.js', 'e2rapido.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'enlaces-video.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -1406,12 +1279,6 @@ const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/ic
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    // Lectura interna de ffmpeg (solo desde la propia máquina; no pasa por límites ni sesión)
-    if (url.pathname.startsWith('/_e2/')) {
-      const l = esLocal(req) && lecturasInternas.get(url.pathname.slice(5));
-      if (!l || l.hasta < Date.now()) { res.writeHead(404); return res.end(); }
-      return servirRango(req, res, l.url, l.tam, 'application/octet-stream').catch(() => res.destroy());
-    }
     defensa.cabeceras(res, acceso.NUBE);
     try {
       const permiso = acceso.permiso(req);
@@ -1430,11 +1297,8 @@ http
       if (!paraProgramas && defensa.esBot(req)) return json(res, 403, { error: 'Acceso automático no permitido' });
       // ads.txt de la red de anuncios (público: lo lee su rastreador)
       if (url.pathname === '/ads.txt') {
-        // Google AdSense (cuenta ca-pub-4674524691998401) siempre; y las líneas de la otra red de
-        // anuncios, si está activada (ANUNCIOS_ADSTXT)
-        const lineas = ['google.com, pub-4674524691998401, DIRECT, f08c47fec0942fa0', ...String(pagos.adsTxt() ?? '').split('\n')]
-          .map((l) => l.trim()).filter(Boolean);
-        const t = [...new Set(lineas)].join('\n') + '\n';
+        const t = pagos.adsTxt();
+        if (!t) return json(res, 404, { error: 'Sin ads.txt' });
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(t);
       }
@@ -1457,14 +1321,7 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, intros: estadoIntros, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, carga: os.loadavg().map((x) => Math.round(x * 10) / 10), prueba: pruebaVideo,
-        // Lo que se está preparando ahora (sin nombres ni de quién): velocidad (1x = tan rápido como se ve)
-        sesiones: [...sesionesHls.values()].filter((s) => s.ff.exitCode === null).map((s) => ({ tipo: s.tipo, preset: s.preset, velocidad: s.velocidad, minutos: Math.round((Date.now() - s.inicio) / 6000) / 10 })),
-        // Vídeo directo (MP4 por /flujo) y lo que lee ffmpeg: a varias conexiones con e2
-        lectura: lecturaE2 },
-        // Portada: cuántas plataformas hay y si las listas (Top 10…) están hechas (solo números)
-        portada: { plataformas: indicePlat.datos ? indicePlat.datos.length : null, plataformasPreparando: !!indicePlat.construyendo,
-          listas: listas.datos ? { peliculas: listas.datos.peliculas.tendencias.length, series: listas.datos.series.tendencias.length } : null, listasPreparando: !!listas.haciendo } });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, intros: estadoIntros, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
@@ -1505,14 +1362,6 @@ http
         return paginaMantenimiento(res, mant);
       }
 
-      // Vídeo directo (MP4) para el reproductor, a través del servidor y a varias conexiones con
-      // e2: así no se para aunque e2 limite cada conexión. (El permiso de ver el vídeo se comprueba
-      // en /api/url, que el reproductor pide antes.)
-      if (url.pathname === '/flujo') {
-        const key = url.searchParams.get('key') ?? '';
-        if (!esVideo(key) || prohibido(key) || esInterna(key)) return json(res, 404, { error: 'No existe' });
-        return await servirRango(req, res, await firmar(key), await tamDe(key), TIPO_VIDEO[key.split('.').pop().toLowerCase()] || 'application/octet-stream');
-      }
       if (url.pathname === '/api/eventos') return eventos(req, res, cuenta);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       if (pagos.RUTAS.includes(url.pathname)) return await pagos.atender(url.pathname, req, res, json, cuenta);
