@@ -176,52 +176,105 @@ async function temasAlDia(carpetas) {
 const limpio = (key) => key.split('/').pop().replace(/\.[^.]+$/, '').replace(/[._]+/g, ' ').trim();
 const corto = (t, n) => (t && t.length > n ? `${t.slice(0, n - 1).trim()}…` : t);
 
+// Qué es lo que llega, según su sección y si es serie: el encabezado del aviso
+function tipoDeAviso(carpeta, serie) {
+  const t = carpeta.toLowerCase();
+  if (serie) {
+    if (/docuserie/.test(t)) return ['🎞️', 'NUEVA DOCUSERIE'];
+    if (/anime/.test(t)) return ['🐉', 'NUEVA SERIE ANIME'];
+    if (/novela|turc/.test(t)) return ['🌙', 'NUEVA NOVELA'];
+    if (/programa|\btv\b|reality/.test(t)) return ['📡', 'NUEVO PROGRAMA'];
+    if (/infantil|kids/.test(t)) return ['🧸', 'NUEVA SERIE INFANTIL'];
+    return ['📺', 'NUEVA SERIE'];
+  }
+  if (/documental/.test(t)) return ['🌍', 'NUEVO DOCUMENTAL'];
+  if (/anime/.test(t)) return ['🍥', 'NUEVA PELÍCULA ANIME'];
+  if (/infantil|kids/.test(t)) return ['🧸', 'NUEVA PELÍCULA INFANTIL'];
+  if (/concierto|music/.test(t)) return ['🎵', 'NUEVO CONCIERTO'];
+  if (/estreno/.test(t)) return ['🎟️', 'ESTRENO'];
+  return ['🎬', 'NUEVA PELÍCULA'];
+}
+const SEPARADOR = '━━━━━━━━━━━━━━━━━━';
+const duracionTexto = (min) => (!min ? null : min >= 60 ? `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}` : `${min} min`);
+// «Ciencia ficción» → #CienciaFicción (las etiquetas no admiten espacios ni signos)
+const etiqueta = (g) => `#${String(g).replace(/(^|\s)(\p{L})/gu, (_, e, l) => l.toUpperCase()).replace(/[^\p{L}\p{N}]+/gu, '')}`;
+const lista = (xs, n) => (xs ?? []).filter(Boolean).slice(0, n).map(html).join(', ');
+
+// El aviso con todo lo que haga falta, recortando la sinopsis si no cabe (Telegram admite 1024
+// caracteres junto a una foto)
+function montarAviso(partes, sinopsis, max) {
+  for (const largo of [420, 280, 160, 0]) {
+    const s = largo && sinopsis ? `<blockquote expandable>${html(corto(sinopsis, largo))}</blockquote>` : null;
+    const texto = partes(s).filter((l) => l != null).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+    // (lo que cuenta Telegram es el texto sin etiquetas HTML)
+    if (texto.replace(/<[^>]+>/g, '').length <= max) return texto;
+  }
+  return corto(partes(null).filter((l) => l != null).join('\n'), max);
+}
+
 // Un grupo es una película o los episodios de una misma serie: [{ key, tamano, fecha }]
-async function mensaje(carpeta, clave, archivos) {
+export async function mensaje(carpeta, clave, archivos) {
   const seccion = nombreSeccion(carpeta);
   const m = await meta.deArchivo(archivos[0].key).catch(() => null);
   const ver = clave.endsWith('/') ? clave : clave.slice(0, clave.lastIndexOf('/') + 1);
-  // En qué carpeta de e2 está (en vez del peso)
-  const carpetaE2 = `📁 <code>${html(ver || carpeta)}</code>`;
-  const boton = { reply_markup: { inline_keyboard: [[{ text: '▶ Ver en MorvehTV', url: `${WEB}/#${encodeURIComponent(ver)}` }]] } };
-  const datosTitulo = (f) => [f.valoracion && `⭐ ${Number(f.valoracion).toFixed(1)}`, f.anio, ...(f.generos ?? []).slice(0, 3)].filter(Boolean).join(' · ');
+  const botones = (trailer) => ({ reply_markup: { inline_keyboard: [[
+    { text: '▶ Ver ahora', url: `${WEB}/#${encodeURIComponent(ver)}` },
+    ...(trailer ? [{ text: '🎞️ Tráiler', url: trailer }] : []),
+  ]] } });
+  const pareceSerie = clave.endsWith('/') && (archivos.length > 1 || archivos.some((a) => /S\d{1,2}\s*E\d{1,3}|\b\d{1,2}x\d{1,3}\b|temporada|episodio|cap[ií]tulo/i.test(a.key)));
+  const esSerie = !!(m?.episodio) || (!m?.encontrado && pareceSerie);
+  const [emoji, que] = tipoDeAviso(carpeta, esSerie);
+  const encabezado = `${emoji} <b>${que}</b>  ·  ${html(seccion.nombre)}`;
+
+  // Episodios que llegan: cuántos y de qué temporadas
+  let episodios = null;
+  if (esSerie) {
+    const eps = m?.episodio ? await Promise.all(archivos.map((a) => (a === archivos[0] ? m : meta.deArchivo(a.key).catch(() => null)))) : [];
+    const temporadas = [...new Set(eps.map((e) => e?.episodio?.temporada).filter(Boolean))].sort((a, b) => a - b);
+    episodios = `📀 ${archivos.length} episodio${archivos.length === 1 ? '' : 's'}`
+      + (temporadas.length ? `  ·  ${temporadas.length === 1 ? `Temporada ${temporadas[0]}` : `Temporadas ${temporadas.join(', ')}`}` : '');
+  }
 
   if (!m || !m.encontrado) {
-    // Sin ficha: si es la carpeta de una serie, se anuncia la serie con su nombre (no los capítulos)
-    const pareceSerie = clave.endsWith('/') && (archivos.length > 1 || archivos.some((a) => /S\d{1,2}\s*E\d{1,3}|\b\d{1,2}x\d{1,3}\b|temporada|episodio|cap[ií]tulo/i.test(a.key)));
-    if (pareceSerie) {
-      const serie = clave.split('/').filter(Boolean).pop();
-      const texto = `📺 <b>Nueva serie en ${html(seccion.nombre)}</b>\n\n<b>${html(serie)}</b>\n▸ ${archivos.length} episodio${archivos.length === 1 ? '' : 's'} disponible${archivos.length === 1 ? '' : 's'}\n\n${carpetaE2}`;
-      return { texto, foto: null, boton };
-    }
-    const nombres = archivos.slice(0, 8).map((a) => `• ${html(limpio(a.key))}`);
-    if (archivos.length > 8) nombres.push(`• y ${archivos.length - 8} más`);
-    const texto = `${seccion.emoji} <b>${archivos.length === 1 ? 'Nuevo' : `${archivos.length} nuevos`} en ${html(seccion.nombre)}</b>\n\n${nombres.join('\n')}\n\n${carpetaE2}`;
-    return { texto, foto: null, boton };
+    // Sin ficha: el nombre limpio (de la serie, o de los archivos si son varios sueltos)
+    const titulo = esSerie ? clave.split('/').filter(Boolean).pop() : limpio(archivos[0].key);
+    const otros = !esSerie && archivos.length > 1
+      ? archivos.slice(1, 8).map((a) => `▫️ ${html(limpio(a.key))}`).concat(archivos.length > 8 ? [`▫️ y ${archivos.length - 8} más`] : [])
+      : [];
+    const texto = [encabezado, SEPARADOR, `<b>${html(titulo)}</b>`, ...otros, episodios && `\n${episodios}`].filter(Boolean).join('\n');
+    return { texto, foto: null, boton: botones(null) };
   }
 
-  let cabecera, cuerpo = '';
-  if (m.episodio) {
-    const eps = await Promise.all(archivos.map((a) => (a === archivos[0] ? m : meta.deArchivo(a.key).catch(() => null))));
-    const lista = eps.map((e, i) => (e?.episodio
-      ? { t: e.episodio.temporada, n: e.episodio.numero, titulo: e.episodio.titulo }
-      : { t: 0, n: 0, titulo: limpio(archivos[i].key) }))
-      .sort((a, b) => a.t - b.t || a.n - b.n);
-    // Una serie nueva: se anuncia la serie (no la lista de capítulos)
-    cabecera = `📺 <b>Nueva serie en ${html(seccion.nombre)}</b>`;
-    const temporadas = [...new Set(lista.map((e) => e.t).filter(Boolean))];
-    const disponible = `▸ ${lista.length} episodio${lista.length === 1 ? '' : 's'} disponible${lista.length === 1 ? '' : 's'}`
-      + (temporadas.length ? ` (${temporadas.length === 1 ? `temporada ${temporadas[0]}` : `temporadas ${temporadas.join(', ')}`})` : '');
-    cuerpo = m.sinopsis ? `<i>${html(corto(m.sinopsis, 300))}</i>\n\n${disponible}` : disponible;
-  } else {
-    cabecera = `${seccion.emoji} <b>Nuevo en ${html(seccion.nombre)}</b>`;
-    if (m.sinopsis) cuerpo = `<i>${html(corto(m.sinopsis, 320))}</i>`;
-  }
-  const texto = [cabecera, '', `<b>${html(m.titulo)}</b>`, html(datosTitulo(m)), cuerpo && `\n${cuerpo}`, `\n${carpetaE2}`]
-    .filter((l) => l !== '' && l != null).join('\n');
+  const anio = m.anio ? ` (${m.anio})` : '';
+  const original = m.tituloOriginal && m.tituloOriginal.toLowerCase() !== String(m.titulo).toLowerCase() ? `<i>${html(m.tituloOriginal)}</i>` : null;
+  const nota = m.valoracion ? `⭐ <b>${Number(m.valoracion).toFixed(1)}</b>/10` : null;
+  const duracion = esSerie ? (m.temporadas ? `🗂 ${m.temporadas} temporada${m.temporadas === 1 ? '' : 's'}` : null) : (duracionTexto(m.duracion) && `⏱ ${duracionTexto(m.duracion)}`);
+  const linea1 = [nota, duracion].filter(Boolean).join('   ');
+  const generos = (m.generos ?? []).slice(0, 3);
+  const autor = esSerie
+    ? (m.creadores?.length ? `✍️ Creada por: ${lista(m.creadores, 2)}` : null)
+    : (m.direccion?.length ? `🎬 Dirección: ${lista(m.direccion, 2)}` : null);
+  const reparto = m.reparto?.length ? `👥 Reparto: ${lista(m.reparto, 4)}` : null;
+  const etiquetas = [esSerie ? '#Serie' : '#Película', ...generos.map(etiqueta)].join(' ');
+
+  const partes = (sinopsis) => [
+    encabezado,
+    SEPARADOR,
+    `<b>${html(m.titulo)}</b>${html(anio)}`,
+    original,
+    '',
+    linea1 || null,
+    generos.length ? `🎭 ${generos.map(html).join(' · ')}` : null,
+    autor,
+    reparto,
+    episodios,
+    sinopsis ? `\n${sinopsis}` : null,
+    '',
+    etiquetas,
+  ];
   // El cartel de TMDB, en un tamaño que se vea bien en Telegram
   const foto = (m.poster ?? m.fondo ?? '').replace(/\/t\/p\/w\d+\//, '/t/p/w780/') || null;
-  return { texto: corto(texto, 1024), foto, boton };
+  return { texto: montarAviso(partes, m.sinopsis, foto ? 1024 : 4096), foto, boton: botones(m.trailer) };
 }
 
 async function enviar(tema, { texto, foto, boton }) {
