@@ -718,7 +718,7 @@ export async function atender(ruta, req, res, json, ip) {
   // solo dice lo que ha reconocido, sin guardar nada.
   if (ruta === '/api/panel/enlaces-video') {
     const lista = analizarEnlaces(String(datos.texto ?? '').slice(0, 50000)).slice(0, 12);
-    if (datos.vista) return json(res, 200, { enlaces: lista.map(({ servidor, id, url: u }) => ({ servidor, id, url: u })) });
+    if (datos.vista) return json(res, 200, { enlaces: lista.map(({ servidor, conocido, id, url: u }) => ({ servidor, conocido, id, url: u })) });
     if (!lista.length) throw error(400, 'No hay ningún enlace válido (tienen que empezar por https:// o ser un código <iframe>)');
     const carpeta = carpetaValida(datos.carpeta);
     if (carpeta.split('/').length < 2 || !puede(carpeta)) throw fuera();

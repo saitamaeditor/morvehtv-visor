@@ -1931,7 +1931,7 @@ async function abrirEnlace(f, i, c, opcion = 0) {
     const fila = el('div', 'servidores');
     fila.append(el('span', '', 'Servidor:'));
     d.opciones.forEach((o, n) => {
-      const b = el('button', `boton${n === d.opcion ? ' activo' : ''}`, `${o.servidor === 'Genérico' ? 'Opción' : o.servidor} ${n + 1}`);
+      const b = el('button', `boton${n === d.opcion ? ' activo' : ''}`, `${o.servidor} ${n + 1}`);
       b.onclick = () => { if (n !== d.opcion) abrirEnlace(f, i, c, n); };
       fila.append(b);
     });

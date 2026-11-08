@@ -402,7 +402,7 @@ async function enlace(key, opcion = 0) {
   const opciones = analizarEnlaces(contenido).slice(0, 12).map((o) => ({
     servidor: o.servidor,
     url: o.url,
-    tipo: o.servidor === 'Genérico' && STREAM.test(new URL(o.url).pathname) ? 'stream' : 'embed',
+    tipo: !o.conocido && STREAM.test(new URL(o.url).pathname) ? 'stream' : 'embed',
   }));
   if (!opciones.length) throw Object.assign(new Error('El archivo no tiene una dirección http(s) válida'), { status: 422 });
   const n = Math.min(Math.max(0, Number(opcion) || 0), opciones.length - 1);
