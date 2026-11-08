@@ -103,6 +103,12 @@
   .tele #visor .anuncio-previo iframe.marco-previo { zoom: 1.6; }
   /* Reproductor de otro sitio (enlace .url / .strm) y su aviso de fallo */
   #visor iframe.incrustado { background: #000; flex: 1; min-height: 0; }
+  .servidores { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; flex: none; padding: 6px 8px; }
+  #visor.cine .servidores { display: none; }
+  .servidores span { opacity: .75; font-size: .9em; }
+  .servidores .boton { padding: 6px 14px; border-radius: 999px; background: var(--panel); color: #fff; border: 1px solid #fff3; cursor: pointer; font: inherit; font-size: .9em; }
+  .servidores .boton.activo { background: #fff; color: #000; }
+  .servidores .boton:focus-visible, .servidores .boton:hover { outline: 2px solid #fff; outline-offset: 2px; }
   .fallo-enlace { display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .fallo-enlace p { margin: 0 0 4px; font-size: 1.1em; }
   .fallo-enlace .boton { padding: 10px 22px; border-radius: 8px; background: var(--panel); color: #fff; border: 1px solid #fff3; cursor: pointer; font: inherit; }

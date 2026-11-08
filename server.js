@@ -23,6 +23,7 @@ import * as xtream from './xtream.js';
 import * as panel from './panel.js';
 import * as defensa from './defensa.js';
 import * as pagos from './pagos.js';
+import { analizarEnlaces } from './enlaces-video.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -369,16 +370,6 @@ async function texto(key) {
 const esEnlace = (key) => /\.(url|strm)$/i.test(key);
 const STREAM = /\.(m3u8|mp4|m4v|webm|mov|mp3|m4a|aac)(\?|#|$)/i;
 
-// YouTube y Vimeo no dejan meter su página normal en un iframe: se pasa a su versión «embed»
-function aEmbed(u) {
-  const yt = u.hostname.replace(/^(www|m)\./, '');
-  const id = yt === 'youtu.be' ? u.pathname.slice(1)
-    : yt === 'youtube.com' && u.pathname === '/watch' ? u.searchParams.get('v') : null;
-  if (id) return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
-  const vimeo = yt === 'vimeo.com' && u.pathname.match(/^\/(\d+)/);
-  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}`;
-  return u.href;
-}
 
 // Direcciones de la propia máquina o de la red de casa: el servidor no las comprueba
 const privada = (host) => /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|0\.|\[?::1\]?$|\[?f[cd])/i.test(host);
@@ -399,17 +390,21 @@ async function comprobar(url) {
   }
 }
 
-async function enlace(key) {
+async function enlace(key, opcion = 0) {
   if (!esEnlace(key)) throw Object.assign(new Error('No es un enlace'), { status: 400 });
   const r = await s3.send(new GetObjectCommand({ Bucket: E2_BUCKET, Key: key, Range: 'bytes=0-65535' }));
-  const lineas = (await r.Body.transformToString('utf-8')).split(/\r?\n/).map((l) => l.trim());
-  const bruto = (lineas.find((l) => /^URL=/i.test(l)) ?? '').slice(4) || lineas.find((l) => /^https?:\/\//i.test(l));
-  let u;
-  try { u = new URL(bruto); } catch (e) { u = null; }
-  if (!u || !/^https?:$/.test(u.protocol)) throw Object.assign(new Error('El archivo no tiene una dirección http(s) válida'), { status: 422 });
-  const tipo = STREAM.test(u.pathname) ? 'stream' : 'embed';
-  const url = tipo === 'embed' ? aEmbed(u) : u.href;
-  return { tipo, url, ...(await comprobar(url)) };
+  // El archivo puede llevar una dirección, varias (una por línea: servidores de reserva) o
+  // códigos <iframe> pegados; enlaces-video.js reconoce el servidor (Voe, Streamwish,
+  // Filelions…) y deja cada uno en su dirección «embed» limpia
+  const contenido = (await r.Body.transformToString('utf-8')).replace(/^\s*URL=/gim, '');
+  const opciones = analizarEnlaces(contenido).slice(0, 12).map((o) => ({
+    servidor: o.servidor,
+    url: o.url,
+    tipo: o.servidor === 'Genérico' && STREAM.test(new URL(o.url).pathname) ? 'stream' : 'embed',
+  }));
+  if (!opciones.length) throw Object.assign(new Error('El archivo no tiene una dirección http(s) válida'), { status: 422 });
+  const n = Math.min(Math.max(0, Number(opcion) || 0), opciones.length - 1);
+  return { ...opciones[n], opcion: n, opciones, ...(await comprobar(opciones[n].url)) };
 }
 
 // ---------- Reproducción convertida con ffmpeg ----------
@@ -1080,7 +1075,7 @@ const rutas = {
     return { url: await firmar(p.get('key')) };
   },
   '/api/texto': (p) => texto(p.get('key')),
-  '/api/enlace': (p) => enlace(p.get('key')),
+  '/api/enlace': (p) => enlace(p.get('key'), p.get('opcion')),
 };
 
 const tipos = {
@@ -1115,7 +1110,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'enlaces-video.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();

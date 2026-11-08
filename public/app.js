@@ -1913,28 +1913,43 @@ function falloEnlace(c, texto, reintentar, igualmente) {
 
 const motivo = (d) => d.fallo || (d.estado ? `El sitio respondió con un error (HTTP ${d.estado})` : 'No se pudo conectar');
 
-async function abrirEnlace(f, i, c) {
-  const otraVez = () => { if (actual === i) abrirEnlace(f, i, c); };
+async function abrirEnlace(f, i, c, opcion = 0) {
+  const otraVez = () => { if (actual === i) abrirEnlace(f, i, c, opcion); };
   c.innerHTML = '<div class="vacio">Conectando…</div>';
   let d;
   try {
-    d = await api('/api/enlace', { key: f.key });
+    d = await api('/api/enlace', { key: f.key, opcion });
   } catch (e) {
     if (actual === i) falloEnlace(c, e.message, otraVez);
     return;
   }
   if (actual !== i) return;
+  // Con varios servidores en el archivo, una fila para cambiar de uno a otro (siempre visible,
+  // también cuando uno falla: así se prueba el siguiente)
+  const servidores = () => {
+    if (!(d.opciones && d.opciones.length > 1)) return;
+    const fila = el('div', 'servidores');
+    fila.append(el('span', '', 'Servidor:'));
+    d.opciones.forEach((o, n) => {
+      const b = el('button', `boton${n === d.opcion ? ' activo' : ''}`, `${o.servidor === 'Genérico' ? 'Opción' : o.servidor} ${n + 1}`);
+      b.onclick = () => { if (n !== d.opcion) abrirEnlace(f, i, c, n); };
+      fila.append(b);
+    });
+    c.prepend(fila);
+  };
   // estado null: dirección de la red de casa, que el servidor no comprueba
   const bien = d.estado === null || (d.estado >= 200 && d.estado < 400);
   if (d.tipo === 'stream') {
-    if (!bien) return falloEnlace(c, motivo(d), otraVez);
+    if (!bien) { falloEnlace(c, motivo(d), otraVez); return servidores(); }
     c.innerHTML = '';
     entrarCine();
     c.append(reproductor(f.key, { duracion: 0, audios: [] }, d.url, () => Promise.resolve(d.url)));
+    servidores();
     return enfocarVisor();
   }
-  if (!bien) return falloEnlace(c, motivo(d), otraVez, () => incrustar(c, d.url, otraVez));
+  if (!bien) { falloEnlace(c, motivo(d), otraVez, () => { incrustar(c, d.url, otraVez); servidores(); }); return servidores(); }
   incrustar(c, d.url, otraVez);
+  servidores();
 }
 
 // Página con su propio reproductor, aislada: puede ejecutar su JavaScript y ponerse a pantalla
@@ -2002,7 +2017,7 @@ const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguient
 
 const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
-const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, #vcontenido > iframe.incrustado';
+const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, .servidores button, #vcontenido > iframe.incrustado';
 
 // Lo escondido (la barra de progreso viendo el vídeo) no cuenta para el mando
 const visible = (x) => {
