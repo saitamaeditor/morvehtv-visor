@@ -392,8 +392,9 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const cab = el('div', 'biblioteca cabecera-plataforma');
   const logoCab = plat && (plat.especial ? '/icono.svg' : plat.logo);
   if (logoCab) { const im = el('img', `logo-plataforma${plat.especial ? ' especial' : ''}`); im.src = logoCab; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
-  cab.append(el('h1', null, nombrePlat));
-  let tipoVisto = ['peliculas', 'series'].includes(tipoInicial) ? tipoInicial : 'todo';
+  // Solo series (si se entró desde la fila de series) o solo películas: sin «Todo/Películas/Series»
+  let tipoVisto = tipoInicial === 'series' ? 'series' : 'peliculas';
+  cab.append(el('h1', null, nombrePlat), el('span', 'tipo-plataforma', tipoVisto === 'series' ? 'Series' : 'Películas'));
   // Para cambiar de plataforma sin volver a la portada (las que tienen de lo que se está viendo)
   const chips = el('nav', 'iconos-plataformas pequenos');
   const pintarIconos = () => {
@@ -419,10 +420,16 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
       return;
     }
     const pelis = titulos.filter((x) => x.tipo !== 'carpeta');
+    // (una serie guardada por su carpeta «Temporada N» se enseña con la serie: su nombre y su cartel)
+    const RE_TEMP = /\/(?:temporada|season|temp|t|s)[\s._-]*\d{1,2}\/$/i;
+    const vistas = new Set();
     for (const x of titulos) {
       if (x.tipo === 'carpeta') {
-        const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key) });
-        lista.append(t); conMeta(t, 'carpeta', x.key);
+        const serie = RE_TEMP.test(x.key) && x.key.split('/').filter(Boolean).length > 2 ? x.key.replace(/[^/]+\/$/, '') : x.key;
+        if (vistas.has(serie)) continue;
+        vistas.add(serie);
+        const t = tarjeta({ icono: '📺', titulo: nombre(serie), meta: '', alPulsar: () => irA(serie) });
+        lista.append(t); conMeta(t, 'carpeta', serie);
       } else {
         const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis) });
         t.dataset.key = x.key; barraVisto(t);
@@ -435,7 +442,7 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
     b.onclick = () => { tipoVisto = id; filtro.querySelectorAll('button').forEach((x) => x.classList.toggle('activa', x === b)); pintarLista(); pintarIconos(); };
     filtro.append(b);
   }
-  items.append(cab, chips, filtro, lista);
+  items.append(cab, chips, lista);
   pintarIconos();
   pintarLista();
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
