@@ -889,8 +889,13 @@
   .destacado-puntos .punto.activo { background: #fff; width: 26px; border-radius: 6px; }
   /* Filas: título con «Ver todo ›» y flechas a los lados */
   .fila-titulo a { display: inline-flex; align-items: baseline; gap: 10px; }
-  .ver-todo { font-size: .7em; font-weight: 700; color: var(--acento); opacity: 0; transform: translateX(-6px); transition: opacity .2s, transform .2s; }
-  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo, .fila:hover .ver-todo { opacity: 1; transform: none; }
+  /* «Ver todo ›» siempre a la vista, como un botón junto al nombre de la fila */
+  .ver-todo { font-size: .62em; font-weight: 700; color: #fff; margin-left: 12px; padding: 4px 12px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.06); vertical-align: middle; transition: background .15s, color .15s; }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: #fff; color: #0a0a0c; }
+  /* La tarjeta del final de cada fila: «Ver todo», a juego con las carátulas */
+  .tarjeta-ver-todo .mini { background: linear-gradient(135deg, rgba(255,255,255,.12), rgba(255,255,255,.03)); font-size: 3.4em; font-weight: 300;
+    display: flex; align-items: center; justify-content: center; border: 1px dashed rgba(255,255,255,.3); }
   .carrusel-caja { position: relative; }
   .flecha-fila { position: absolute; top: 0; bottom: 14px; z-index: 3; width: clamp(34px, 3.2vw, 56px); border: 0; padding: 0; cursor: pointer;
     background: rgba(11,12,16,.55); color: #fff; font-size: clamp(30px, 3vw, 48px); line-height: 1; opacity: 0; transition: opacity .2s, background .2s; }

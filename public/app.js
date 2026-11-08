@@ -563,7 +563,10 @@ function pintarInicio(carpetas, archivos) {
       // En cada fila «Novedades en…», solo los 5 últimos (el resto, en «Ver todo»)
       const titulos = entrada ? entrada.titulos.slice(0, 5) : [];
       if (!titulos.length) continue;
-      const f = fila(`Novedades en ${cat.nombre}`, () => irA(suyas[0]));
+      // La fila lleva el nombre de la categoría («Películas anime») y «Ver todo ›» siempre a la
+      // vista; al final, una tarjeta más para ver la categoría entera
+      const f = fila(cat.nombre, () => irA(suyas[0]));
+      const total = entrada.total || entrada.titulos.length;
       const pelis = titulos.filter((x) => x.tipo === 'archivo');
       for (const x of titulos) {
         if (x.tipo === 'carpeta') {
@@ -575,6 +578,9 @@ function pintarInicio(carpetas, archivos) {
           f.c.append(t); conMeta(t, 'archivo', x.key);
         }
       }
+      const todo = tarjeta({ icono: '›', titulo: 'Ver todo', meta: `${total} ${total === 1 ? 'título' : 'títulos'}`, alPulsar: () => irA(suyas[0]) });
+      todo.classList.add('tarjeta-ver-todo');
+      f.c.append(todo);
       sitio.append(f.s);
       // Y otro cada tres filas
       if (++filasPuestas % 3 === 0) { const b = typeof anuncioBanner === 'function' && anuncioBanner('fila'); if (b) sitio.append(b); }
