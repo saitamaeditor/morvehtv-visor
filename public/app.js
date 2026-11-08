@@ -442,14 +442,9 @@ function pintarInicio(carpetas, archivos) {
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);
 
-  // Seguir viendo (imagen apaisada, con la barra de lo visto) y Favoritos, si se pudo leer la lista
+  // Favoritos, si se pudo leer la lista («Seguir viendo» ya no sale en la portada: está en su
+  // pestaña de arriba)
   if (typeof yo !== 'undefined' && yo) {
-    const seguir = listaSeguir();
-    if (seguir.length) {
-      const f = fila('Seguir viendo', () => irA(':seguir'), 'anchas');
-      seguir.slice(0, 20).forEach((x, i) => f.c.append(tarjetaPerfil(x, () => abrir(i, seguir), false, true)));
-      items.append(f.s);
-    }
     if (yo.favoritos.length) {
       const f = fila('Favoritos', () => irA(':favoritos'));
       const sueltos = yo.favoritos.filter((x) => x.tipo === 'archivo');
