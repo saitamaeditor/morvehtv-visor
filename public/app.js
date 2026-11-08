@@ -1735,7 +1735,10 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       // Anuncio en vídeo (VAST de una red externa) antes de empezar, si están activados
       if (typeof anuncioPrevio === 'function') await anuncioPrevio();
       if (actual !== i) return;
-      const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? url : null, undefined, { reproducir: opciones.reproducir });
+      // El MP4 directo llega a través del servidor (/flujo), que lo baja de e2 a varias conexiones:
+      // e2 limita cada conexión a ~4 Mbit/s y el vídeo se paraba a trozos
+      const porServidor = `/flujo?key=${encodeURIComponent(f.key)}`;
+      const caja = reproductor(f.key, m || { duracion: 0, audios: [] }, directo || !m ? porServidor : null, () => Promise.resolve(porServidor), { reproducir: opciones.reproducir });
       c.append(caja);
       navegacionReproductor(caja, i);
       // Plan Básico: pausas publicitarias durante el vídeo y anuncio pequeño al pausar

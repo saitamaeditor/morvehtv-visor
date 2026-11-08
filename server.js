@@ -12,7 +12,8 @@ import os from 'node:os';
 import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { servirRango } from './e2rapido.js';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as meta from './metadatos.js';
 import * as acceso from './acceso.js';
@@ -179,6 +180,26 @@ function firmar(key, { segundos = 4 * 3600 } = {}) {
 }
 
 const archivo = (o) => ({ key: o.Key, tamano: o.Size, fecha: o.LastModified });
+
+// ---------- Vídeo de e2 a varias conexiones (e2rapido.js) ----------
+// Lo que pesa un archivo: del último repaso del bucket o, si aún no está, preguntándolo a e2
+async function tamDe(key) {
+  const v = foto?.get(key);
+  if (v) return Number(String(v).split(':')[0]);
+  const h = await s3.send(new HeadObjectCommand({ Bucket: E2_BUCKET, Key: key }));
+  return Number(h.ContentLength) || 0;
+}
+// ffmpeg lee los vídeos por una dirección interna de este mismo servidor (solo desde la propia
+// máquina, con un código al azar que caduca), así también va a varias conexiones
+const lecturasInternas = new Map(); // código → { url, tam, hasta }
+async function direccionInterna(key) {
+  const codigo = randomUUID();
+  lecturasInternas.set(codigo, { url: await firmar(key, { segundos: 12 * 3600 }), tam: await tamDe(key), hasta: Date.now() + 12 * 3600000 });
+  for (const [c, l] of lecturasInternas) if (l.hasta < Date.now()) lecturasInternas.delete(c);
+  return `http://127.0.0.1:${PUERTO}/_e2/${codigo}`;
+}
+const esLocal = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+const TIPO_VIDEO = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska', ts: 'video/mp2t' };
 
 // En internet nunca se enseñan las carpetas internas («_fotograma» guarda las cuentas de
 // morvehtv.es y «_hls» las claves de los vídeos cifrados), ni con el botón «Ocultas»
@@ -782,7 +803,8 @@ async function hlsIniciar(p, quien) {
   // preparar: se dice claro en vez de mostrar el error de ffmpeg
   if (!info.video) throw Object.assign(new Error('Este archivo no tiene imagen (solo audio o está incompleto): hay que volver a subir el vídeo completo'), { status: 422 });
   const audio = Math.min(Math.max(0, Number(p.get('audio')) || 0), Math.max(0, info.audios.length - 1));
-  const url = await firmar(key, { segundos: 12 * 3600 });
+  // (por e2rapido: a varias conexiones; con VISOR_E2_RAPIDO=0, directo de e2 como antes)
+  const url = process.env.VISOR_E2_RAPIDO === '0' ? await firmar(key, { segundos: 12 * 3600 }) : await direccionInterna(key);
   const id = randomUUID();
   const carpeta = path.join(DIR_HLS, id);
   await mkdir(carpeta, { recursive: true });
@@ -1127,7 +1149,7 @@ const ARRANQUE = new Date().toISOString();
 // con ella, así que ninguna tele ni WebView puede quedarse con un archivo de la versión anterior.
 const VERSION = (() => {
   const h = createHash('sha256');
-  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'enlaces-video.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
+  const ficheros = ['server.js', 'metadatos.js', 'perfiles.js', 'acceso.js', 'telegram.js', 'xtream.js', 'panel.js', 'defensa.js', 'pagos.js', 'intros.js', 'enlaces.js', 'enlaces-video.js', 'e2rapido.js', 'fichas/fichas.json', ...readdirSync(path.join(dir, 'public')).sort().map((f) => `public/${f}`)];
   for (const f of ficheros) { h.update(f); h.update(readFileSync(path.join(dir, f))); }
   return h.digest('hex').slice(0, 10);
 })();
@@ -1222,6 +1244,12 @@ const PUBLICO = ['/entrar.html', '/manifest.webmanifest', '/icono-192.png', '/ic
 http
   .createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    // Lectura interna de ffmpeg (solo desde la propia máquina; no pasa por límites ni sesión)
+    if (url.pathname.startsWith('/_e2/')) {
+      const l = esLocal(req) && lecturasInternas.get(url.pathname.slice(5));
+      if (!l || l.hasta < Date.now()) { res.writeHead(404); return res.end(); }
+      return servirRango(req, res, l.url, l.tam, 'application/octet-stream').catch(() => res.destroy());
+    }
     defensa.cabeceras(res, acceso.NUBE);
     try {
       const permiso = acceso.permiso(req);
@@ -1305,6 +1333,14 @@ http
         return paginaMantenimiento(res, mant);
       }
 
+      // Vídeo directo (MP4) para el reproductor, a través del servidor y a varias conexiones con
+      // e2: así no se para aunque e2 limite cada conexión. (El permiso de ver el vídeo se comprueba
+      // en /api/url, que el reproductor pide antes.)
+      if (url.pathname === '/flujo') {
+        const key = url.searchParams.get('key') ?? '';
+        if (!esVideo(key) || prohibido(key) || esInterna(key)) return json(res, 404, { error: 'No existe' });
+        return await servirRango(req, res, await firmar(key), await tamDe(key), TIPO_VIDEO[key.split('.').pop().toLowerCase()] || 'application/octet-stream');
+      }
       if (url.pathname === '/api/eventos') return eventos(req, res, cuenta);
       if (perfiles.RUTAS.includes(url.pathname)) return await perfiles.atender(url.pathname, req, res, json, acceso.ipDe(req));
       if (pagos.RUTAS.includes(url.pathname)) return await pagos.atender(url.pathname, req, res, json, cuenta);
