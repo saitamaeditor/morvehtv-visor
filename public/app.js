@@ -186,6 +186,10 @@ function pintar() {
     const n = carpetas.length + archivos.length;
     cab.append(el('span', 'biblioteca-icono', cat.icono), el('h1', null, cat.nombre),
       el('span', 'biblioteca-cuenta', `${n}${estado.token ? '+' : ''} ${n === 1 ? 'título' : 'títulos'}`));
+    // Página de una sección como en las webs de cine: carteles con la nota y «Película»/«Serie»
+    // arriba, y el título y el año debajo
+    cab.append(el('p', 'biblioteca-sub', cat.tmdb === 'serie' || /serie|novela|programa/.test(cat.id) ? 'Todas las series, de la más nueva a la más antigua' : 'Las más recientes y destacadas'));
+    items.classList.add('vista-carteles');
     items.append(cab);
   }
 
@@ -448,6 +452,16 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const conMando = esTele || document.documentElement.classList.contains('usa-mando');
   if (conMando && actual < 0) { const p = lista.querySelector('.item') || chips.querySelector('.activa'); if (p) p.focus(); }
 }
+
+// La altura real de la cabecera (cambia según cuántas líneas ocupe el menú): en la portada va
+// fija encima del contenido, que empieza justo debajo
+(() => {
+  const h = document.querySelector('header');
+  if (!h) return;
+  const poner = () => document.documentElement.style.setProperty('--alto-cabecera', `${h.offsetHeight}px`);
+  poner();
+  if (window.ResizeObserver) new ResizeObserver(poner).observe(h); else addEventListener('resize', poner);
+})();
 
 let catalogoPedido = null;
 function pintarInicio(carpetas, archivos) {
@@ -773,6 +787,16 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   }
   // Película o serie: solo el cartel (el título y los datos se ven en la ficha y al pasar por encima)
   if (imagen) t.classList.add('con-imagen');
+  // En la página de una sección: título y año debajo, y la nota y «Película»/«Serie» en el cartel
+  if (t.closest('.vista-carteles')) {
+    t.querySelector('.nombre').textContent = d.titulo;
+    meta.textContent = [d.anio, d.tipo === 'serie' && d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+    if (imagen) {
+      if (d.valoracion) mini.append(el('span', 'nota-cartel', `★ ${Number(d.valoracion).toFixed(1)}`));
+      mini.append(el('span', 'tipo-cartel', d.tipo === 'serie' ? 'Serie' : 'Película'));
+    }
+    return;
+  }
   meta.textContent = [d.valoracion && `★ ${d.valoracion}`,
     d.tipo === 'serie' ? (d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`) : d.duracion && `${d.duracion} min`,
     d.generos.slice(0, 2).join(', '), tam].filter(Boolean).join(' · ');

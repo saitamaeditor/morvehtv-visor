@@ -1514,6 +1514,81 @@
   .pie a { color: #c7c7cc; text-decoration: none; }
   .pie a:hover, .pie a:focus-visible { color: #fff; text-decoration: underline; }
 
+  /* ===== Recuperado del historial: menú con todas las secciones y secciones con carteles ===== */
+  /* ================= Menú de arriba como las webs de cine =================
+     Inicio · Películas · Series · Explorar ▾ · Favoritos (texto limpio; la activa con una raya
+     cian debajo), la cuenta en una píldora azul con el plan encima del nombre y «Buscar» (Ctrl K) */
+  #pestanas .pestana { background: none !important; box-shadow: none !important; border-radius: 0; padding: 8px 2px; margin: 0 clamp(8px, 1.1vw, 16px); color: #c7c7cc;
+    font-size: clamp(13.5px, 1vw, 15px); font-weight: 600; position: relative; display: inline-flex; align-items: center; gap: 5px; }
+  #pestanas .pestana:hover, #pestanas .pestana:focus { color: #fff; }
+  #pestanas .pestana.activa { color: #fff; font-weight: 700; }
+  #pestanas .pestana.activa::after { content: ''; display: block !important; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 2px;
+    background: #00a3ff; transform: none; width: auto; }
+  #pestanas .pestana .flechita { font-size: .8em; opacity: .8; }
+  /* El menú, en su propia fila debajo del logo, la cuenta y «Buscar»: todas las secciones a la
+     vista (si no caben en una línea, pasan a la siguiente; nada escondido ni deslizable) */
+  header #pestanas { order: 2; flex: 1 1 100%; min-width: 0; flex-wrap: wrap; align-items: center; overflow: visible; padding: 0; margin: -2px 0 0;
+    -webkit-mask-image: none; mask-image: none; white-space: nowrap; gap: 2px clamp(14px, 1.6vw, 26px); }
+  header #pestanas .pestana { margin: 0; padding: 7px 2px; }
+  header .logo { flex: 1 1 auto; }
+  .destacado[hidden] + * { padding-top: calc(var(--alto-cabecera, 96px) + 14px) !important; }
+  html.en-portada { scroll-padding-top: calc(var(--alto-cabecera, 96px) + 16px); }
+  .destacado-texto { padding-top: calc(var(--alto-cabecera, 96px) + 10px); }
+  @media (max-width: 600px) {
+    header #pestanas { gap: 0 13px; }
+    header #pestanas .pestana { font-size: 12.5px; padding: 6px 1px; margin: 0; }
+  }
+  /* Plataformas de streaming de películas: etiqueta en píldora y logotipos cuadrados redondeados */
+  /* ================= Página de una sección (Películas, Series…) =================
+     Título grande con subtítulo, las plataformas de ese tipo y una cuadrícula de carteles 2:3 con
+     la nota y «Película»/«Serie» arriba, y el título y el año debajo; «Cargar más» al final */
+  #items.vista-carteles { grid-template-columns: repeat(auto-fill, minmax(clamp(120px, 10.4vw, 175px), 1fr)); gap: clamp(16px, 1.6vw, 26px) clamp(12px, 1.2vw, 20px); }
+  .vista-carteles > .biblioteca, .vista-carteles > .plataformas-inicio, .vista-carteles > .orden-seccion, .vista-carteles > .cargar-mas-seccion,
+  .vista-carteles > .vacio, .vista-carteles > :not(.item) { grid-column: 1 / -1; }
+  .vista-carteles > .biblioteca { flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 4px; }
+  .vista-carteles > .biblioteca h1 { padding-bottom: 0; }
+  .vista-carteles > .biblioteca h1::after { display: none; }
+  .biblioteca-sub { margin: 0; color: var(--suave); font-size: clamp(13px, 1vw, 15px); }
+  .vista-carteles > .plataformas-inicio { margin: 8px 0 4px; }
+  .vista-carteles .item .mini { aspect-ratio: 2 / 3; }
+  .vista-carteles .item.con-imagen .nombre, .vista-carteles .item.con-imagen .meta { display: block !important; position: static !important; opacity: 1 !important;
+    transform: none !important; padding: 0 2px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vista-carteles .item .nombre { margin-top: 8px; font-size: 14px; font-weight: 700; color: #fff; -webkit-line-clamp: 1; }
+  .vista-carteles .item .meta { font-size: 12px; color: var(--suave); }
+  .vista-carteles .item .resumen { display: none !important; }
+  .vista-carteles .item.con-imagen .mini::after { display: none !important; }
+  .vista-carteles .nota-cartel, .vista-carteles .tipo-cartel { position: absolute; top: 8px; z-index: 2; height: 22px; display: inline-flex; align-items: center;
+    padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 800; line-height: 1; pointer-events: none;
+    background: rgba(11,12,14,.78); border: 1px solid rgba(255,255,255,.14); color: #fff; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .vista-carteles .nota-cartel { left: 8px; color: #5cc8ff; }
+  .vista-carteles .tipo-cartel { right: 8px; }
+  /* (la ☆ de favoritos, abajo a la derecha para no tapar las etiquetas) */
+  .vista-carteles .item .estrella { top: 38px; bottom: auto; right: 8px; width: 30px; height: 30px; font-size: 16px; }
+  .cargar-mas-seccion { justify-self: center; margin: 18px auto 8px; padding: 12px 34px !important; font-size: 15px; font-weight: 800; color: #fff !important;
+    background: var(--marca) !important; border-color: transparent !important; border-radius: 12px !important; box-shadow: 0 10px 28px rgba(0,163,255,.28); }
+  .cargar-mas-seccion:hover, .cargar-mas-seccion:focus { filter: brightness(1.1); }
+  @media (max-width: 600px) {
+    #items.vista-carteles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 10px; }
+    .vista-carteles .item .nombre { font-size: 12.5px; }
+    .vista-carteles .nota-cartel, .vista-carteles .tipo-cartel { height: 19px; font-size: 9.5px; padding: 0 6px; top: 6px; }
+    .vista-carteles .nota-cartel { left: 6px; } .vista-carteles .tipo-cartel { right: 6px; }
+    .vista-carteles .item .estrella { top: 30px; right: 6px; width: 26px; height: 26px; font-size: 14px; }
+  }
+  .tele #items.vista-carteles { grid-template-columns: repeat(auto-fill, minmax(13vw, 1fr)); }
+  .tele .vista-carteles .item .nombre { font-size: 2.2vh; } .tele .vista-carteles .item .meta { font-size: 1.8vh; }
+  /* Menú en su propia fila: la «secciones-menu» no es una caja más, sus botones van sueltos */
+  .secciones-menu { display: contents; }
+  #pestanas .pestana { flex: none; }
+  header .logo > span:not(#directo), header .logo::before { flex: none; }
+  @media (max-width: 600px) { header { position: relative; } }
+  /* «Cargar más» de las secciones, con la marca */
+  .vista-carteles ~ #mas, main #mas:not([hidden]) { display: block; margin: 22px auto 8px; padding: 12px 34px; font-weight: 800; color: #fff;
+    background: var(--marca); border-color: transparent; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,163,255,.28); }
+  /* Bloques de AdSense sin anuncio (sitio aún sin aprobar, o Google no tiene ninguno): se esconden
+     con su etiqueta «Publicidad», para no dejar huecos vacíos */
+  ins.adsbygoogle[data-ad-status="unfilled"] { display: none !important; }
+  .anuncio:has(ins.adsbygoogle[data-ad-status="unfilled"]), .adsense-bloque:has(ins.adsbygoogle[data-ad-status="unfilled"]) { display: none !important; }
+  .anuncio ins.adsbygoogle:not([data-ad-status]), .adsense-bloque ins.adsbygoogle:not([data-ad-status]) { min-height: 0; }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>

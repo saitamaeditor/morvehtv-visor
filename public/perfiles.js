@@ -257,26 +257,49 @@ const VISTAS_PERFIL = {
   favoritos: { titulo: '★ Favoritos', corto: '★ Favoritos' },
 };
 
+// Menú de arriba: Inicio, todas las secciones de e2, «Seguir viendo» y «Favoritos»
 function pintarPestanas() {
   let nav = $('#pestanas');
   if (!nav) {
     nav = el('nav');
     nav.id = 'pestanas';
-    const inicio = el('button', 'pestana', '⌂ Inicio');
-    inicio.dataset.vista = '';
-    inicio.onclick = () => irA('');
-    nav.append(inicio);
-    for (const [id, v] of Object.entries(VISTAS_PERFIL)) {
-      const b = el('button', 'pestana', v.corto);
-      b.dataset.vista = id;
-      b.onclick = () => irA(estado.prefijo === `:${id}` ? '' : `:${id}`);
-      nav.append(b);
-    }
-    $('#directo').after(nav);
+    const boton = (texto, alPulsar, datos = {}) => {
+      const b = el('button', 'pestana', texto);
+      Object.assign(b.dataset, datos);
+      b.onclick = alPulsar;
+      return b;
+    };
+    const inicio = boton('Inicio', () => irA(''), { vista: '' });
+    // Todas las secciones de e2 (cada carpeta de primer nivel), en el orden de la portada
+    const secciones = el('span', 'secciones-menu');
+    const seguir = boton('Seguir viendo', () => irA(estado.prefijo === ':seguir' ? '' : ':seguir'), { vista: 'seguir' });
+    const favoritos = boton('Favoritos', () => irA(estado.prefijo === ':favoritos' ? '' : ':favoritos'), { vista: 'favoritos' });
+    nav.append(inicio, secciones, seguir, favoritos);
+    // (en su propia fila, debajo del logo y la cuenta, para que se vean todas las secciones)
+    $('header .logo').after(nav);
+    api('/api/catalogo', { max: 1 }).then((d) => {
+      for (const { cat, suyas } of categoriasDe(d.carpetas.map((x) => x.carpeta))) {
+        secciones.append(boton(cat.nombre, () => irA(suyas[0]), { seccion: suyas[0] }));
+      }
+      marcarPestanas();
+    }).catch(() => {});
   }
   nav.hidden = !yo;
-  nav.querySelectorAll('button').forEach((b) => b.classList.toggle('activa',
-    b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo));
+  marcarPestanas();
+}
+// La pestaña activa: Inicio, «Seguir viendo», «Favoritos» o la sección en la que se está
+function marcarPestanas() {
+  const nav = $('#pestanas');
+  if (!nav) return;
+  let activa = null;
+  nav.querySelectorAll('button').forEach((b) => {
+    const si = b.dataset.seccion ? estado.prefijo.startsWith(b.dataset.seccion)
+      : b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo;
+    b.classList.toggle('activa', si);
+    if (si) activa = b;
+  });
+  // (en el móvil, la activa se desliza a la vista si el menú no cabe)
+  if (activa && nav.scrollWidth > nav.clientWidth) activa.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function pintarVistaPerfil(vista) {
