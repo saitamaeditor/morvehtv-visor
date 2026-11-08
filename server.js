@@ -13,7 +13,7 @@ import { transform } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { S3Client, ListObjectsV2Command, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
-import { servirRango } from './e2rapido.js';
+import { servirRango, estadisticas as lecturaE2 } from './e2rapido.js';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import * as meta from './metadatos.js';
 import * as acceso from './acceso.js';
@@ -1323,7 +1323,9 @@ http
       // Para que Render sepa que está viva
       if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, intros: estadoIntros, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, carga: os.loadavg().map((x) => Math.round(x * 10) / 10), prueba: pruebaVideo,
         // Lo que se está preparando ahora (sin nombres ni de quién): velocidad (1x = tan rápido como se ve)
-        sesiones: [...sesionesHls.values()].filter((s) => s.ff.exitCode === null).map((s) => ({ tipo: s.tipo, preset: s.preset, velocidad: s.velocidad, minutos: Math.round((Date.now() - s.inicio) / 6000) / 10 })) } });
+        sesiones: [...sesionesHls.values()].filter((s) => s.ff.exitCode === null).map((s) => ({ tipo: s.tipo, preset: s.preset, velocidad: s.velocidad, minutos: Math.round((Date.now() - s.inicio) / 6000) / 10 })),
+        // Vídeo directo (MP4 por /flujo) y lo que lee ffmpeg: a varias conexiones con e2
+        lectura: lecturaE2 } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie

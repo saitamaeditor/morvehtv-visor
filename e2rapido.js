@@ -10,6 +10,12 @@ const TROZOS = [256 * 1024, 512 * 1024, 1024 * 1024]; // los primeros; después,
 const TROZO = 2 * 1024 * 1024;
 const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
+// Para /api/salud: lecturas abiertas, lo entregado en el último minuto, lo que tarda e2 en dar
+// cada trozo y los reintentos (sin nombres de archivo ni de quién)
+export const estadisticas = { abiertas: 0, entregadoMinuto: 0, trozoMs: null, reintentos: 0, fallos: 0 };
+let entregado = 0;
+setInterval(() => { estadisticas.entregadoMinuto = Math.round(entregado / 2 ** 20); entregado = 0; }, 60000).unref();
+
 // `url`: la dirección firmada de e2; `tam`: lo que pesa el archivo; `tipo`: su content-type
 export async function servirRango(req, res, url, tam, tipo) {
   let ini = 0;
@@ -37,18 +43,24 @@ export async function servirRango(req, res, url, tam, tipo) {
   // Si quien lo pide se va (cierra el vídeo, salta a otro minuto), se cancela todo lo pendiente
   const control = new AbortController();
   let cerrado = false;
-  const alCerrar = new Promise((ok) => res.once('close', () => { cerrado = true; control.abort(); ok(); }));
+  estadisticas.abiertas++;
+  const alCerrar = new Promise((ok) => res.once('close', () => { cerrado = true; estadisticas.abiertas--; control.abort(); ok(); }));
 
   const pedir = async (a, b, intento = 0) => {
     try {
+      const t0 = Date.now();
       const r = await fetch(url, { headers: { range: `bytes=${a}-${b}` }, signal: control.signal });
       if (r.status !== 206 && r.status !== 200) { r.body?.cancel().catch(() => {}); throw new Error(`e2 respondió ${r.status}`); }
       const buf = Buffer.from(await r.arrayBuffer());
       if (buf.length !== b - a + 1) throw new Error('trozo incompleto');
+      // (media móvil de lo que tarda e2 por MB)
+      const ms = (Date.now() - t0) / (buf.length / 2 ** 20);
+      estadisticas.trozoMs = Math.round(estadisticas.trozoMs == null ? ms : estadisticas.trozoMs * 0.8 + ms * 0.2);
       return buf;
     } catch (e) {
       // Un corte de e2 en un trozo se reintenta (hasta 4 veces) sin que se note
-      if (cerrado || intento >= 4) throw e;
+      if (cerrado || intento >= 4) { if (!cerrado) estadisticas.fallos++; throw e; }
+      estadisticas.reintentos++;
       await espera(400 * (intento + 1));
       return pedir(a, b, intento + 1);
     }
@@ -73,6 +85,7 @@ export async function servirRango(req, res, url, tam, tipo) {
       const buf = await Promise.race([cola[0], alCerrar]);
       if (cerrado) break;
       cola.shift();
+      entregado += buf.length;
       llenar();
       // Si el reproductor va lleno (pausa), se espera: como mucho quedan A_LA_VEZ trozos en memoria
       if (!res.write(buf)) await Promise.race([new Promise((ok) => res.once('drain', ok)), alCerrar]);
