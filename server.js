@@ -1433,6 +1433,14 @@ http
           // La portada con los datos de verdad: versión de la app de Android y grupo de Telegram
           const version = versionApk();
           html = version ? html.replace(/<!--\/?CONVERSION-->/g, '').replace(/\{\{VERSION_APK\}\}/g, escHtml(version)) : html.replace(/<!--CONVERSION-->[\s\S]*?<!--\/CONVERSION-->/g, '');
+          // «Más de N títulos»: solo la cifra redondeada hacia abajo (sin enseñar el catálogo); si aún
+          // no se sabe o son menos de 20, la frase no sale
+          const cat = foto ? await catalogo(1).catch(() => null) : null;
+          const total = cat ? cat.carpetas.reduce((s, x) => s + (x.total ?? x.titulos.length), 0) : 0;
+          const redondo = total >= 1000 ? Math.floor(total / 100) * 100 : total >= 100 ? Math.floor(total / 50) * 50 : Math.floor(total / 10) * 10;
+          html = total >= 20
+            ? html.replace(/<!--\/?TITULOS-->/g, '').replace(/\{\{TITULOS\}\}/g, redondo.toLocaleString('es-ES'))
+            : html.replace(/<!--TITULOS-->[\s\S]*?<!--\/TITULOS-->/g, '');
           // Turnstile de Cloudflare en el registro, solo si está configurado
           html = defensa.TURNSTILE_SITEKEY
             ? html.replace(/<!--\/?TURNSTILE-->/g, '').replace(/\{\{TURNSTILE\}\}/g, escHtml(defensa.TURNSTILE_SITEKEY))

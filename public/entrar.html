@@ -186,6 +186,58 @@
   input:focus { border-color: #00a3ff; box-shadow: 0 0 0 3px rgba(0,163,255,.25); }
   .enviar { background: var(--marca); border-radius: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 12px 32px rgba(0,163,255,.28); transition: filter .2s; }
   .enviar:hover, .enviar:focus { filter: brightness(1.12); }
+
+  /* ================= Portada que invita a entrar =================
+     Titular claro, botones grandes de «Crear cuenta gratis», línea de confianza, pasos, preguntas
+     frecuentes, llamada final y (en el móvil) un botón fijo abajo */
+  h1.titulo-gancho { font-size: clamp(38px, 5.4vw, 72px); line-height: 1.02; letter-spacing: -.035em; max-width: 14ch; }
+  h1.titulo-gancho span { background: linear-gradient(100deg, #5cc8ff, #00a3ff 40%, #9b5cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .lema { background: none; color: #e6e9f0; -webkit-text-fill-color: currentColor; font-size: clamp(18px, 1.9vw, 24px); font-weight: 700; }
+  .llamada { display: flex; flex-wrap: wrap; gap: 12px; margin: 4px 0 18px; }
+  .cta-principal { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 16px 30px; border: 0; border-radius: 14px; cursor: pointer;
+    background: linear-gradient(110deg, #00a3ff, #7928ca); color: #fff; font: 800 17px/1 inherit; font-family: inherit; letter-spacing: .01em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 14px 34px rgba(0,163,255,.32); transition: transform .2s, filter .2s, box-shadow .2s; }
+  .cta-principal:hover, .cta-principal:focus-visible { filter: brightness(1.1); transform: translateY(-1px); outline: none; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 18px 40px rgba(0,163,255,.42), 0 0 0 3px rgba(255,255,255,.35); }
+  .cta-principal span { transition: transform .2s; } .cta-principal:hover span { transform: translateX(3px); }
+  .cta-secundario { padding: 16px 26px; border-radius: 14px; cursor: pointer; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18);
+    color: #fff; font: 700 16px/1 inherit; font-family: inherit; transition: background .2s, border-color .2s; }
+  .cta-secundario:hover, .cta-secundario:focus-visible { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.35); outline: none; }
+  .confianza { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 30px; padding: 0; color: #c9ced8; font-size: 14.5px; font-weight: 600; }
+  .confianza li { display: inline-flex; align-items: center; gap: 7px; }
+  .confianza li::before { content: '✓'; display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 900;
+    color: #0b0b10; background: #30d158; }
+  /* Pasos */
+  .pasos, .preguntas, .cierre { margin-top: clamp(56px, 7vw, 96px); }
+  .pasos h3, .preguntas h3, .cierre h3 { margin: 0 0 18px; font-size: clamp(24px, 2.4vw, 32px); font-weight: 800; letter-spacing: -.02em; }
+  .pasos ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .pasos li { display: flex; flex-direction: column; gap: 6px; padding: 22px; border-radius: 18px; background: rgba(18,19,22,.78); border: 1px solid rgba(255,255,255,.09); }
+  .pasos .num { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; margin-bottom: 6px; font-weight: 900; font-size: 18px; color: #fff;
+    background: linear-gradient(135deg, #00a3ff, #7928ca); box-shadow: 0 8px 20px rgba(0,163,255,.3); }
+  .pasos li b { font-size: 18px; } .pasos li span:not(.num) { color: #b9bfcb; font-size: 15px; }
+  /* Preguntas frecuentes */
+  .preguntas { max-width: 860px; }
+  .preguntas details { border-bottom: 1px solid rgba(255,255,255,.09); }
+  .preguntas summary { cursor: pointer; list-style: none; padding: 18px 40px 18px 0; position: relative; font-size: 17px; font-weight: 700; }
+  .preguntas summary::-webkit-details-marker { display: none; }
+  .preguntas summary::after { content: '+'; position: absolute; right: 6px; top: 50%; transform: translateY(-50%); font-size: 24px; font-weight: 400; color: #7cd0ff; transition: transform .2s; }
+  .preguntas details[open] summary::after { transform: translateY(-50%) rotate(45deg); }
+  .preguntas summary:focus-visible { outline: 2px solid #00a3ff; outline-offset: 2px; border-radius: 6px; }
+  .preguntas p { margin: -6px 0 18px; color: #b9bfcb; font-size: 15.5px; line-height: 1.6; max-width: 70ch; }
+  /* Llamada final */
+  .cierre { text-align: center; padding: clamp(34px, 5vw, 56px) 20px; border-radius: 24px; border: 1px solid rgba(0,163,255,.25);
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,163,255,.2), transparent 70%), rgba(18,19,22,.8); }
+  .cierre h3 { margin-bottom: 6px; } .cierre p { margin: 0 0 22px; color: #c9ced8; font-size: 17px; }
+  /* Botón fijo en el móvil */
+  .cta-fija { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 10px max(16px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-bottom));
+    background: linear-gradient(0deg, rgba(11,11,16,.98) 60%, rgba(11,11,16,0)); }
+  .cta-fija .cta-principal { width: 100%; padding: 15px; }
+  @media (min-width: 901px) { .cta-fija { display: none !important; } }
+  @media (max-width: 900px) {
+    .pasos ol { grid-template-columns: minmax(0, 1fr); }
+    .llamada { flex-direction: column; } .llamada button { width: 100%; }
+    .pagina { padding-bottom: 96px; }
+  }
+  .tele .cta-fija, .tele .llamada .cta-secundario { display: none !important; }
 </style>
 <!--TURNSTILE--><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><!--/TURNSTILE-->
 <!-- Google AdSense -->
@@ -206,9 +258,16 @@
   <main class="portada">
     <section>
       <!--CONVERSION--><span class="insignia">App Android {{VERSION_APK}} · disponible ahora</span><!--/CONVERSION-->
-      <h1 class="titulo">Morveh<span>TV</span></h1>
-      <p class="lema">Tu cine y tus series, en todas tus pantallas</p>
-      <p class="intro">Películas y series en <b>HD</b>, con tu propia lista de <b>«Seguir viendo»</b> y tus <b>favoritos</b>: empiezas en el móvil y sigues en la tele justo donde lo dejaste.</p>
+      <h1 class="titulo titulo-gancho">Tu cine y tus series, <span>cuando quieras</span></h1>
+      <p class="lema">Gratis, en HD y en todas tus pantallas</p>
+      <p class="intro">Películas, series, anime y documentales en <b>HD</b>, con tu propia lista de <b>«Seguir viendo»</b> y tus <b>favoritos</b>: empiezas en el móvil y sigues en la tele justo donde lo dejaste.</p>
+      <div class="llamada">
+        <button type="button" class="cta-principal" data-registro>Crear cuenta gratis <span aria-hidden="true">→</span></button>
+        <button type="button" class="cta-secundario" data-entrar>Ya tengo cuenta</button>
+      </div>
+      <ul class="confianza">
+        <li>Gratis</li><li>Sin tarjeta</li><li>Lista en 30 segundos</li><!--TITULOS--><li>Más de {{TITULOS}} títulos</li><!--/TITULOS-->
+      </ul>
       <div class="ventajas">
         <div class="ventaja"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
           <div><b>Alta calidad</b><span>HD y Full HD, en la web, el móvil y la tele.</span></div></div>
@@ -307,8 +366,35 @@
     </a><!--/TELEGRAM-->
   </section>
 
+  <section class="pasos">
+    <h3>Empieza en 30 segundos</h3>
+    <ol>
+      <li><span class="num">1</span><b>Crea tu cuenta</b><span>Solo un usuario y una contraseña. Sin correo ni tarjeta.</span></li>
+      <li><span class="num">2</span><b>Elige qué ver</b><span>Películas, series, anime y documentales, con lo nuevo siempre arriba.</span></li>
+      <li><span class="num">3</span><b>Míralo donde quieras</b><span>En el navegador, el móvil o la tele, y sigue justo donde lo dejaste.</span></li>
+    </ol>
+  </section>
+
+  <section class="preguntas">
+    <h3>Preguntas frecuentes</h3>
+    <details><summary>¿Cuánto cuesta?</summary><p>Crear la cuenta y ver es gratis, con algunos anuncios.<!--PAGOS--> Si prefieres verlo todo sin anuncios, puedes hacerte VIP con un pago único ({{PRECIO}}), sin suscripción.<!--/PAGOS--></p></details>
+    <details><summary>¿En qué aparatos puedo verlo?</summary><p>En cualquier navegador (ordenador, móvil o tablet), en la app de Android, en Android TV, Google TV y Fire TV, y en iPhone o iPad añadiéndola a la pantalla de inicio.</p></details>
+    <details><summary>¿Tengo que instalar algo?</summary><p>No. Funciona directamente en el navegador. La app de Android y la de la tele son opcionales, por si prefieres tenerla a mano.</p></details>
+    <details><summary>¿Puedo seguir viendo donde lo dejé?</summary><p>Sí. Tu cuenta recuerda por dónde ibas en cada película y capítulo, también si cambias del móvil a la tele.</p></details>
+    <details><summary>¿Y si olvido la contraseña?</summary><p>Como no pedimos correo, no se puede recuperar: guárdala bien (el gestor de contraseñas del navegador te la recuerda).</p></details>
+  </section>
+
+  <section class="cierre">
+    <h3>¿Listo para empezar?</h3>
+    <p>Crea tu cuenta gratis y empieza a ver ahora mismo.</p>
+    <button type="button" class="cta-principal" data-registro>Crear cuenta gratis <span aria-hidden="true">→</span></button>
+  </section>
+
   <footer>© MorvehTV</footer>
 </div>
+
+<!-- En el móvil, un botón fijo abajo mientras la tarjeta de entrar no se ve -->
+<div class="cta-fija" id="cta-fija" hidden><button type="button" class="cta-principal" data-registro>Crear cuenta gratis</button></div>
 
 <div class="dialogo" id="d-iphone" hidden role="dialog" aria-modal="true" aria-labelledby="d-iphone-t">
   <div class="caja">
@@ -401,6 +487,18 @@
     $('p-registro').onclick = function () { cambiar('registro'); };
     $('ir-registro').onclick = function () { cambiar('registro'); };
     $('ir-entrar').onclick = function () { cambiar('entrar'); };
+    // Botones «Crear cuenta gratis» / «Ya tengo cuenta»: abren esa pestaña y llevan a la tarjeta
+    function irATarjeta(nuevo) {
+      cambiar(nuevo, true);
+      $('tarjeta').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(function () { $(nuevo === 'entrar' ? 'e-usuario' : 'r-nombre').focus({ preventScroll: true }); }, 450);
+    }
+    Array.prototype.forEach.call(document.querySelectorAll('[data-registro]'), function (b) { b.onclick = function () { irATarjeta('registro'); }; });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-entrar]'), function (b) { b.onclick = function () { irATarjeta('entrar'); }; });
+    // El botón fijo del móvil, solo mientras la tarjeta no está a la vista
+    if ('IntersectionObserver' in window && window.matchMedia('(max-width: 900px)').matches) {
+      new IntersectionObserver(function (e) { $('cta-fija').hidden = e[0].isIntersecting; }, { threshold: 0.15 }).observe($('tarjeta'));
+    }
     // En el móvil no se abre el teclado nada más llegar (taparía la portada)
     var tactil = window.matchMedia && window.matchMedia('(pointer: coarse)').matches && !/\btele\b/.test(document.documentElement.className);
     if (location.hash === '#registro' || location.hash === '#vip') cambiar('registro', tactil); else if (!tactil) $('e-usuario').focus();

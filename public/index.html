@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MorvehTV</title>
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0b0c0e">
 <!-- Para añadirla a la pantalla de inicio del móvil como si fuera una app -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
@@ -1215,6 +1215,305 @@
     .controles .boton.audio .nombre-idioma { display: none; }
     .controles .boton.audio { padding: 0 6px; }
   }
+
+  /* (Diseño recuperado del historial: Aurora + acabado profesional + «Cine»; solo estilos) */
+  /* Sin cartel destacado, lo primero de la portada baja para no quedar debajo de la cabecera fija */
+  html.en-portada .destacado[hidden] + * { margin-top: clamp(72px, 9vh, 100px) !important; }
+  /* ================= Estilo propio de MorvehTV: «Aurora» =================
+     La identidad sale del logo: el degradado azul → violeta → magenta de la nube. Fondo de noche
+     azul-violeta con un resplandor suave arriba, todo redondeado (botones en píldora, carteles con
+     esquinas amables), el botón principal con el degradado de la marca y los carteles que se elevan
+     con un halo de color al pasar por encima. Sin fuentes externas (así ninguna otra web sabe
+     quién entra): letra del sistema, más marcada. */
+  :root {
+    --fondo: #0a0914; --panel: #13111f; --panel2: #1c1930; --borde: #2a2640; --texto: #f3f1fa; --suave: #a7a2bd;
+    --acento: #a066ff; --m-azul: #4f8cff; --m-violeta: #8e4ec6; --m-magenta: #e0459b;
+    --marca: linear-gradient(120deg, var(--m-azul) 0%, var(--m-violeta) 52%, var(--m-magenta) 100%);
+    --halo: 0 14px 38px rgba(142,78,198,.42);
+  }
+  body { background: var(--fondo); font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  /* Resplandor de aurora fijo detrás de todo (no se mueve: no gasta en las teles) */
+  body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(60% 45% at 12% -8%, rgba(79,140,255,.16), transparent 70%),
+      radial-gradient(50% 40% at 88% -6%, rgba(224,69,155,.14), transparent 70%),
+      radial-gradient(70% 50% at 50% 110%, rgba(142,78,198,.10), transparent 70%); }
+  ::selection { background: rgba(160,102,255,.45); color: #fff; }
+  html { scrollbar-color: #3a3458 transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #3a3458; border-radius: 10px; border: 2px solid var(--fondo); }
+  ::-webkit-scrollbar-track { background: transparent; }
+  /* Cabecera de cristal con una línea fina de la marca debajo (en la portada, al bajar) */
+  header { background: rgba(10,9,20,.82); box-shadow: none; border-bottom: 0; }
+  .en-portada.bajado header { background: rgba(10,9,20,.92); box-shadow: none; }
+  header::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--marca); opacity: .55; pointer-events: none; }
+  .en-portada:not(.bajado) header::after { opacity: 0; }
+  @media (max-width: 600px) { header { position: relative; } }
+  .logo .tv { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* Menú: la pestaña activa con una rayita de la marca debajo */
+  .pestana { position: relative; }
+  .pestana.activa::after { content: ''; position: absolute; left: 50%; bottom: -3px; width: 18px; height: 3px; border-radius: 3px; transform: translateX(-50%); background: var(--marca); }
+  /* Botones en píldora */
+  .boton, select { border-radius: 999px; }
+  .boton { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); transition: background .2s, border-color .2s, box-shadow .2s, transform .15s, filter .2s; }
+  .boton:hover { border-color: rgba(160,102,255,.7); background: rgba(160,102,255,.12); }
+  .boton.activo { background: var(--marca); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(142,78,198,.35); }
+  .boton.reproducir, .destacado .boton.reproducir { background: var(--marca); border-color: transparent; color: #fff; border-radius: 999px; box-shadow: var(--halo); }
+  .boton.reproducir:hover, .boton.reproducir:focus, .destacado .boton.reproducir:hover, .destacado .boton.reproducir:focus {
+    background: var(--marca); border-color: transparent; filter: brightness(1.12); }
+  .destacado .boton { border-radius: 999px; }
+  .destacado .boton.info, #cabecera .boton:not(.reproducir) { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; color: #fff; }
+  .destacado .boton.info:hover, .destacado .boton.info:focus, #cabecera .boton:not(.reproducir):hover { background: rgba(255,255,255,.2); }
+  .boton.reproducir:focus, .destacado .boton:focus, #cabecera .boton:focus { outline: 3px solid #fff; outline-offset: 3px; }
+  /* Portada: el destacado se funde con el fondo de noche; su etiqueta y sus puntos con la marca */
+  .destacado::after { background: linear-gradient(90deg, rgba(10,9,20,.94) 0%, rgba(10,9,20,.6) 38%, rgba(10,9,20,0) 70%),
+      linear-gradient(0deg, var(--fondo) 0%, rgba(10,9,20,.55) 22%, rgba(10,9,20,0) 50%); }
+  .destacado-etiqueta { color: #d9c7ff; }
+  .destacado-etiqueta::before { background: var(--marca); }
+  .destacado-puntos .punto.activo { background: var(--marca); }
+  /* Filas: el título con una barrita de la marca delante */
+  .fila-titulo a::before { content: ''; align-self: center; width: 4px; height: .95em; border-radius: 3px; background: var(--marca); flex: none; }
+  .fila-titulo a:hover, .fila-titulo a:focus { color: #fff; }
+  .ver-todo { background: rgba(160,102,255,.14); border: 1px solid rgba(160,102,255,.4); }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: var(--marca); border-color: transparent; color: #fff; }
+  .tarjeta-ver-todo .mini { background: linear-gradient(135deg, rgba(79,140,255,.22), rgba(142,78,198,.18) 50%, rgba(224,69,155,.22)); }
+  .flecha-fila:hover { background: rgba(10,9,20,.8); }
+  /* Carteles: esquinas redondeadas; al pasar el ratón se elevan con el halo de la marca y, con
+     el mando o el teclado, llevan un marco blanco */
+  .item .mini { border-radius: 12px; }
+  .item .visto { border-radius: 0 0 12px 12px; }
+  .item:hover .mini { box-shadow: 0 0 0 2px rgba(160,102,255,.75), var(--halo); }
+  .item:focus .mini { box-shadow: 0 0 0 3px #fff, var(--halo); }
+  .item .nuevo { background: var(--marca); border-radius: 8px 8px 0 0; }
+  @media (hover: hover) and (pointer: fine) {
+    .carrusel .item:not(.episodio) { transition: transform .22s ease; }
+    .carrusel .item:not(.episodio):hover { transform: translateY(-4px); }
+    .rejilla .item:not(.episodio):hover { transform: translateY(-4px) scale(1.03); }
+  }
+  /* Categorías y chips: píldoras; la elegida con la marca */
+  .chip-cat { border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.05); }
+  .chip-cat:hover, .chip-cat:focus, .chip-cat.activa { background: var(--marca); border-color: transparent; color: #fff; }
+  #cabecera .chip { border-radius: 999px; }
+  /* El nombre grande de la sección, de blanco a lila y rosa */
+  .biblioteca h1 { background: linear-gradient(120deg, #fff 35%, #d9c7ff 70%, #ff9ccf); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #migas a:hover { color: #d9c7ff; }
+  /* El reproductor, con el mismo degradado de la marca */
+  .repro { --g1: var(--m-azul); --g2: var(--m-magenta); --deg: var(--marca); }
+  .sigla, .menu-audio .guardar-audios, #visor.cine #salircine:hover, #visor.cine #salircine:focus { background: var(--marca); }
+  .gran-play, #visor.cine .gran-play, .gran-play:hover, .gran-play:focus, #visor.cine .gran-play:hover, #visor.cine .gran-play:focus { background: var(--marca); }
+  .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(120deg, rgba(79,140,255,.9), rgba(142,78,198,.9) 52%, rgba(224,69,155,.9)); }
+  .menu-audio button.activo::after { color: #c9a6ff; }
+  .tele .item:focus .mini { box-shadow: 0 0 0 .45vh #fff, var(--halo); }
+
+  /* ---------- Aurora, acabado profesional ----------
+     Más contención: el degradado solo en lo principal (reproducir, lo elegido), el resto en
+     blanco y grises de cristal; títulos con la letra más apretada, menú en píldoras, carteles
+     con un filo de luz y un brillo que entra al pasar por encima, y movimiento suave. */
+  :root { --cristal: rgba(255,255,255,.06); --cristal-borde: rgba(255,255,255,.09); --suave: #9d98b3; --curva: cubic-bezier(.2,.8,.2,1); }
+  h1, h2, h3, .fila-titulo, .destacado h1, .biblioteca h1, #cabecera .ficha h2 { letter-spacing: -.022em; }
+  /* Cabecera más alta y limpia */
+  header { padding-top: 12px; padding-bottom: 12px; }
+  .logo > span:not(#directo) { letter-spacing: -.035em; }
+  /* Menú: píldoras de cristal; la activa, blanca y destacada */
+  .pestana { margin: 0 2px; padding: 7px 14px; border-radius: 999px; color: #bdb8d2; font-weight: 600; transition: background .2s var(--curva), color .2s; }
+  .pestana:hover, .pestana:focus { background: var(--cristal); color: #fff; }
+  .pestana.activa { background: rgba(255,255,255,.1); color: #fff; font-weight: 700; box-shadow: inset 0 0 0 1px var(--cristal-borde); }
+  .pestana.activa::after { display: none; }
+  @media (max-width: 600px) { .pestana { padding: 6px 10px; margin: 0; } }
+  /* Botones secundarios de cristal; el principal con el degradado y un brillo interior */
+  .boton { background: var(--cristal); border-color: var(--cristal-borde); font-weight: 600; }
+  .boton:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.18); }
+  .boton.reproducir, .destacado .boton.reproducir { font-weight: 800; letter-spacing: .01em;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 10px 30px rgba(142,78,198,.38); }
+  .destacado .boton { padding: 12px 28px; }
+  /* Portada: el título del destacado más imponente; los puntos, finos */
+  .destacado h1 { font-weight: 900; line-height: .98; text-shadow: 0 4px 30px rgba(0,0,0,.55); }
+  .destacado-etiqueta { color: #fff; opacity: .9; letter-spacing: .18em; }
+  .destacado-datos { color: #e3dff0; }
+  .destacado-puntos .punto { width: 8px; height: 8px; background: rgba(255,255,255,.3); transition: width .3s var(--curva), background .3s; }
+  .destacado-puntos .punto.activo { width: 28px; border-radius: 4px; }
+  /* Filas: título sobrio y «Ver todo» discreto que se enciende al pasar */
+  .fila { margin-bottom: clamp(18px, 2.2vw, 34px); }
+  .fila-titulo { font-weight: 800; font-size: clamp(17px, 1.5vw, 24px); }
+  .fila-titulo a::before { width: 3px; height: .85em; }
+  .ver-todo { background: transparent; border: 1px solid var(--cristal-borde); color: #cfc9e6; font-weight: 600; transition: all .2s var(--curva); }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: #fff; border-color: #fff; color: #0a0914; }
+  .tarjeta-ver-todo .mini { border: 1px solid var(--cristal-borde) !important; background: linear-gradient(160deg, rgba(79,140,255,.16), rgba(142,78,198,.12) 50%, rgba(224,69,155,.16)); }
+  .tarjeta-ver-todo:hover .mini { background: linear-gradient(160deg, rgba(79,140,255,.3), rgba(142,78,198,.24) 50%, rgba(224,69,155,.3)); }
+  /* Carteles: filo de luz, fondo de cristal mientras carga la imagen y un brillo al pasar */
+  .item .mini { position: relative; background-color: #15132a; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); transition: box-shadow .3s var(--curva); }
+  .item .mini::before { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; z-index: 1;
+    background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.14) 48%, transparent 62%); background-size: 250% 100%; background-position: 100% 0;
+    transition: opacity .3s, background-position .7s var(--curva); }
+  .item:hover .mini::before { opacity: 1; background-position: 0 0; }
+  .item:hover .mini { box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 18px 40px rgba(0,0,0,.55), 0 8px 30px rgba(142,78,198,.3); }
+  .item:focus .mini { box-shadow: 0 0 0 3px #fff, 0 18px 40px rgba(0,0,0,.55); }
+  @media (hover: hover) and (pointer: fine) {
+    .carrusel .item:not(.episodio), .rejilla .item:not(.episodio) { transition: transform .35s var(--curva); }
+    .carrusel .item:not(.episodio):hover { transform: translateY(-6px); }
+    .rejilla .item:not(.episodio):hover { transform: translateY(-6px); }
+  }
+  .item .nombre { font-weight: 650; letter-spacing: -.005em; }
+  .item .meta { color: var(--suave); }
+  .item .nuevo { background: #fff; color: #0a0914; font-weight: 800; }
+  /* Categorías y orden: cristal; la elegida, blanca */
+  .chip-cat { background: var(--cristal); border-color: var(--cristal-borde); font-weight: 600; }
+  .chip-cat:hover, .chip-cat:focus { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.2); color: #fff; }
+  .chip-cat.activa { background: #fff; border-color: #fff; color: #0a0914; }
+  .boton.activo { background: #fff; border-color: #fff; color: #0a0914; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+  .servidores .boton.activo { background: var(--marca); border-color: transparent; color: #fff; }
+  /* Sección: nombre grande en blanco, con una línea de la marca debajo */
+  .biblioteca h1 { background: none; color: #fff; -webkit-background-clip: border-box; background-clip: border-box; font-weight: 900; position: relative; padding-bottom: 10px; }
+  .biblioteca h1::after { content: ''; position: absolute; left: 0; bottom: 0; width: 48px; height: 3px; border-radius: 3px; background: var(--marca); }
+  /* Ficha: chips de cristal y el título con más presencia */
+  #cabecera .ficha h2 { font-weight: 900; line-height: 1.02; }
+  #cabecera .chip { background: var(--cristal); border: 1px solid var(--cristal-borde); color: #e8e4f5; }
+  #cabecera .ficha p { color: #ddd8ec; line-height: 1.6; }
+  /* Ventanas y cajas de la cuenta, con el mismo cristal */
+  .cuenta-caja { background: rgba(19,17,31,.92); border-color: var(--cristal-borde); border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.05); }
+  .aviso { background: rgba(28,25,48,.96); border: 1px solid var(--cristal-borde); border-radius: 999px; padding: 10px 18px; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+  /* Entrada suave del contenido al cambiar de página */
+  @keyframes aparecer-aurora { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  #items > *, .fila { animation: aparecer-aurora .45s var(--curva) both; }
+  .tele #items > *, .tele .fila { animation: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #items > *, .fila { animation: none; }
+    .item .mini::before { display: none; }
+  }
+
+  /* ================= Sistema de diseño «Cine» (premium, modo oscuro) =================
+     Negro carbón cinematográfico, superficies elevadas de cristal con borde blanco al 10 %,
+     un solo acento cian → violeta para lo importante (reproducir, lo elegido, el progreso),
+     jerarquía clara de letra (Display, H1-H4, cuerpo y datos en gris apagado) y focos bien
+     marcados para el teclado y el mando de la tele. */
+  :root {
+    --fondo: #0b0c0e; --fondo2: #121316; --panel: #121316; --panel2: #18191d; --borde: rgba(255,255,255,.1);
+    --texto: #f5f5f7; --suave: #8e8e93; --acento: #00a3ff; --acento2: #7928ca;
+    --m-azul: #00a3ff; --m-violeta: #4b6bff; --m-magenta: #7928ca;
+    --marca: linear-gradient(110deg, #00a3ff 0%, #7928ca 100%);
+    --cristal: rgba(255,255,255,.04); --cristal-borde: rgba(255,255,255,.1);
+    --halo: 0 16px 40px rgba(0,163,255,.22);
+    --r-xl: 12px; --r-2xl: 16px; --curva: cubic-bezier(.16,1,.3,1);
+  }
+  body { font-family: Inter, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+    font-feature-settings: "cv11", "ss01"; letter-spacing: -.003em; }
+  body::before { background: radial-gradient(55% 40% at 8% -10%, rgba(0,163,255,.09), transparent 70%),
+    radial-gradient(45% 35% at 95% -8%, rgba(121,40,202,.10), transparent 70%); }
+  ::selection { background: rgba(0,163,255,.4); }
+  html { scrollbar-color: #2a2b31 transparent; }
+  ::-webkit-scrollbar-thumb { background: #2a2b31; }
+  /* Foco visible (teclado y mando): anillo cian, sin saltos de diseño */
+  :focus-visible { outline: 3px solid var(--acento); outline-offset: 3px; }
+  .item:focus-visible { outline: none; }
+  /* Cabecera flotante de cristal */
+  header { background: rgba(11,12,14,.72); box-shadow: inset 0 -1px 0 rgba(255,255,255,.06); }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    header, .en-portada.bajado header { -webkit-backdrop-filter: saturate(160%) blur(16px); backdrop-filter: saturate(160%) blur(16px); }
+  }
+  .en-portada.bajado header { background: rgba(11,12,14,.78); }
+  header::after { background: linear-gradient(90deg, transparent, rgba(0,163,255,.5), rgba(121,40,202,.5), transparent); opacity: .7; }
+  .logo .tv { background: var(--marca); -webkit-background-clip: text; background-clip: text; }
+  .pestana { color: #c7c7cc; }
+  .pestana.activa { background: rgba(255,255,255,.1); }
+  /* Jerarquía de letra */
+  .destacado h1 { font-size: clamp(34px, 5vw, 76px); font-weight: 800; letter-spacing: -.035em; line-height: .96; }
+  .biblioteca h1 { font-size: clamp(30px, 3.4vw, 56px); font-weight: 800; letter-spacing: -.03em; }
+  .fila-titulo { font-size: clamp(17px, 1.45vw, 23px); font-weight: 700; letter-spacing: -.02em; }
+  .fila-titulo a::before { display: none; }
+  .item .meta, .destacado-datos, #cabecera .ficha p.suave { color: var(--suave); }
+  /* Botones: CTA con el degradado; secundarios de cristal */
+  .boton { border-radius: var(--r-xl); background: var(--cristal); border-color: var(--cristal-borde); transition: background .3s var(--curva), border-color .3s, box-shadow .3s, filter .3s; }
+  .boton:hover { background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.2); }
+  .boton.reproducir, .destacado .boton.reproducir { background: var(--marca); border-radius: var(--r-xl); color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 12px 32px rgba(0,163,255,.28); }
+  .boton.reproducir:hover, .boton.reproducir:focus, .destacado .boton.reproducir:hover, .destacado .boton.reproducir:focus { background: var(--marca); filter: brightness(1.1); }
+  .destacado .boton, #cabecera .boton:not(.reproducir), .destacado .boton.info { border-radius: var(--r-xl); }
+  .destacado .boton.info, #cabecera .boton:not(.reproducir) { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.14);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+  .boton.activo, .chip-cat.activa { background: #fff; border-color: #fff; color: #0b0c0e; }
+  .servidores .boton.activo { background: var(--marca); color: #fff; border-color: transparent; }
+  select, input[type=text], input[type=search], input[type=password] { border-radius: var(--r-xl); }
+  /* Destacado: 85 % de la pantalla, degradado suave hacia el fondo e insignias */
+  .destacado { min-height: clamp(380px, 85vh, 900px); }
+  @media (max-width: 600px) { .destacado { min-height: clamp(380px, 70vh, 640px); } }
+  .destacado::after { background: linear-gradient(90deg, rgba(11,12,14,.9) 0%, rgba(11,12,14,.55) 36%, rgba(11,12,14,0) 68%),
+      linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,14,.6) 20%, rgba(11,12,14,0) 52%); }
+  .destacado-etiqueta { color: #c7c7cc; font-size: 12px; letter-spacing: .2em; }
+  .destacado-etiqueta::before { background: var(--marca); }
+  .destacado-insignias { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .insignia { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
+    letter-spacing: .03em; color: #fff; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.16); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+  .insignia.calidad { background: var(--marca); border-color: transparent; }
+  .insignia.nota { color: #ffd60a; }
+  .insignia.nota b { color: #fff; }
+  .destacado-sinopsis { color: #d1d1d6; max-width: 56ch; }
+  .destacado-puntos .punto.activo { background: #fff; }
+  /* Filas y «Ver todo» */
+  .ver-todo { border-radius: 8px; color: var(--suave); border-color: transparent; background: transparent; padding: 3px 8px; }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: transparent; color: var(--acento); border-color: transparent; }
+  .tarjeta-ver-todo .mini { background: linear-gradient(160deg, rgba(0,163,255,.14), rgba(121,40,202,.16)); }
+  .tarjeta-ver-todo:hover .mini { background: linear-gradient(160deg, rgba(0,163,255,.26), rgba(121,40,202,.28)); }
+  /* Tarjetas 2:3 (y 16:9 las apaisadas): al pasar, crecen un 5 % con una sombra luminosa y
+     aparecen sus datos dentro del cartel (sin mover nada alrededor) */
+  .item .mini { border-radius: var(--r-xl); background-color: var(--panel2); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+  .item .visto { border-radius: 0 0 var(--r-xl) var(--r-xl); }
+  .item .mini::before { display: none; } /* sin el destello: más sobrio */
+  .item:hover .mini { box-shadow: inset 0 0 0 1px rgba(255,255,255,.14), 0 20px 44px rgba(0,0,0,.6), var(--halo); }
+  .item:focus .mini, .item:focus-visible .mini { box-shadow: 0 0 0 3px var(--acento), 0 20px 44px rgba(0,0,0,.6), var(--halo); }
+  .usa-mando .item:focus .mini, .tele .item:focus .mini { box-shadow: 0 0 0 4px #fff, 0 0 0 7px var(--acento), var(--halo); }
+  @media (hover: hover) and (pointer: fine) {
+    .carrusel .item:not(.episodio), .rejilla .item:not(.episodio) { transition: transform .3s var(--curva); will-change: transform; }
+    .carrusel .item:not(.episodio):hover, .rejilla .item:not(.episodio):hover { transform: scale(1.05); z-index: 2; }
+  }
+  .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .nombre, .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .meta,
+  .rejilla .item.con-imagen:not(.episodio) .nombre, .rejilla .item.con-imagen:not(.episodio) .meta {
+    display: block; position: absolute; left: 0; right: 0; z-index: 2; margin: 0; padding: 0 12px; text-align: left; pointer-events: none;
+    opacity: 0; transform: translateY(6px); transition: opacity .3s var(--curva), transform .3s var(--curva); }
+  .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .nombre, .rejilla .item.con-imagen:not(.episodio) .nombre {
+    bottom: 30px; font-size: 13.5px; font-weight: 700; line-height: 1.25; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .carrusel:not(.anchas) .item.con-imagen:not(.episodio) .meta, .rejilla .item.con-imagen:not(.episodio) .meta {
+    bottom: 12px; font-size: 11.5px; font-weight: 600; color: #d1d1d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item.con-imagen:not(.episodio) .mini::after { content: ''; display: block; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(0deg, rgba(0,0,0,.92) 0%, rgba(0,0,0,.55) 32%, rgba(0,0,0,0) 58%); opacity: 0; transition: opacity .3s var(--curva); z-index: 1; }
+  .item.con-imagen:not(.episodio):hover .mini::after, .item.con-imagen:not(.episodio):focus .mini::after { opacity: 1; }
+  .item.con-imagen:not(.episodio):hover .nombre, .item.con-imagen:not(.episodio):hover .meta,
+  .item.con-imagen:not(.episodio):focus .nombre, .item.con-imagen:not(.episodio):focus .meta { opacity: 1 !important; transform: none !important; }
+  .tele .item.con-imagen:not(.episodio) .nombre { font-size: 2.2vh !important; bottom: 4.6vh; }
+  .tele .item.con-imagen:not(.episodio) .meta { font-size: 1.7vh !important; bottom: 1.8vh; }
+  .item .nuevo { background: var(--marca); color: #fff; border-radius: 6px 6px 0 0; z-index: 3; }
+  /* Chips */
+  .chip-cat { background: var(--cristal); border-color: var(--cristal-borde); }
+  .chip-cat:hover, .chip-cat:focus { background: rgba(255,255,255,.12); color: #fff; }
+  .chip-cat.activa { background: #fff; color: #0b0c0e; }
+  #cabecera .chip { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.12); border-radius: 8px; }
+  .biblioteca h1::after { background: var(--marca); }
+  /* Reproductor: progreso y botón principal en cian → violeta; contenedor 16:9 limpio */
+  .repro { --g1: #00a3ff; --g2: #7928ca; --deg: var(--marca); }
+  .controles .grupo .boton:hover, .controles .grupo .boton:focus { box-shadow: 0 6px 24px rgba(0,163,255,.4); }
+  .controles .grupo.izq .boton:first-child { box-shadow: 0 6px 22px rgba(0,163,255,.35); }
+  .controles input[type=range]::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(0,163,255,.45), 0 0 16px rgba(0,163,255,.7); }
+  .controles input[type=range]::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(0,163,255,.45); }
+  .controles input[type=range]::-moz-range-progress { background: var(--marca); }
+  @keyframes latido-play { 0%, 100% { box-shadow: 0 10px 40px rgba(0,163,255,.45), 0 0 0 0 rgba(0,163,255,.35); } 50% { box-shadow: 0 10px 40px rgba(121,40,202,.5), 0 0 0 18px rgba(0,163,255,0); } }
+  .sigla { box-shadow: 0 2px 10px rgba(0,163,255,.3); }
+  .controles .boton.audio:hover .sigla, .controles .boton.audio:focus .sigla, .menu-audio button:hover .sigla, .menu-audio button:focus .sigla { color: #005c99; }
+  .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(110deg, rgba(0,163,255,.9), rgba(121,40,202,.9)); }
+  .menu-audio button.activo::after { color: #5cc8ff; }
+  #visor.cine .controles, .menu-audio { background: rgba(18,19,22,.86); border-color: rgba(255,255,255,.1); border-radius: var(--r-2xl); }
+  .servidores { gap: 6px; }
+  .servidores .boton { border-radius: 10px; }
+  /* Cajas y avisos */
+  .cuenta-caja { background: rgba(18,19,22,.94); border-radius: var(--r-2xl); }
+  .aviso { background: rgba(24,25,29,.96); border-radius: var(--r-xl); }
+  /* Pie de página discreto */
+  .pie { margin: clamp(40px, 6vw, 80px) 0 0; padding: 28px clamp(16px, 4vw, 48px) calc(28px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(255,255,255,.06);
+    color: var(--suave); font-size: 12.5px; line-height: 1.6; display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: center; justify-content: space-between; }
+  .pie .pie-marca { font-weight: 800; color: #fff; letter-spacing: -.02em; font-size: 14px; }
+  .pie .pie-marca span { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .pie p { margin: 0; max-width: 70ch; }
+  .pie a { color: #c7c7cc; text-decoration: none; }
+  .pie a:hover, .pie a:focus-visible { color: #fff; text-decoration: underline; }
+
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
