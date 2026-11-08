@@ -1532,8 +1532,14 @@ function nombresAudio(audios, key, manual) {
       const i = sinDatos.indexOf(a);
       nombre = enNombre[i] || (audios.length === 1 ? enNombre[0] : null);
     }
-    return nombre || (audios.length === 1 ? 'Audio' : `Audio ${n + 1}`);
+    return nombre || null;
   });
+  // Sin nada que diga el idioma: el contenido de MorvehTV es en español, así que la primera pista
+  // que no se sabe (o la única) es Castellano, si ninguna otra lo es ya; las demás, numeradas
+  // (se les puede poner nombre a mano desde el reproductor)
+  const primeraSinNombre = nombres.indexOf(null);
+  if (primeraSinNombre >= 0 && !nombres.includes('Castellano')) nombres[primeraSinNombre] = 'Castellano';
+  nombres.forEach((x, n) => { if (!x) nombres[n] = audios.length === 1 ? 'Audio' : `Audio ${n + 1}`; });
   // Si dos se llaman igual (Castellano 5.1 y Castellano estéreo), se distinguen por los canales
   // (y si también coinciden los canales, se numeran: «Inglés 1», «Inglés 2»)
   const canal = (c) => (c === 6 ? '5.1' : c === 8 ? '7.1' : c === 2 ? 'estéreo' : c === 1 ? 'mono' : '');
