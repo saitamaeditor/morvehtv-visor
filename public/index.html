@@ -105,6 +105,9 @@
   #visor iframe.incrustado { background: #000; flex: 1; min-height: 0; }
   .servidores { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; flex: none; padding: 6px 8px; }
   #visor.cine .servidores { display: none; }
+  /* Fuera de la pantalla completa, la película se ve como ficha (el vídeo en pausa, escondido) */
+  #visor:not(.cine) #vcontenido.solo-ficha > .repro { display: none; }
+  #vcontenido .ver-ahora-sitio { justify-content: center; }
   .servidores span { opacity: .75; font-size: .9em; }
   .servidores .boton { padding: 6px 14px; border-radius: 999px; background: var(--panel); color: #fff; border: 1px solid #fff3; cursor: pointer; font: inherit; font-size: .9em; }
   .servidores .boton.activo { background: #fff; color: #000; }

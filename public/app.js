@@ -946,8 +946,55 @@ function salirCine() {
   }
 }
 
+// Salir del reproductor (Atrás, Esc, el gesto del móvil, ⛶): nada de quedarse con el vídeo en
+// pequeño. Un capítulo lleva a la página de su serie (su ficha, con «▶ Reanudar»); una película
+// deja su ficha a la vista con el vídeo en pausa y escondido, listo para seguir.
+// La serie es la carpeta que tiene las temporadas, o la del capítulo si va suelto (S01E02)
+function carpetaSerieDe(key) {
+  const partes = String(key || '').split('/');
+  if (partes.length < 3) return null; // suelto en la sección: película
+  const carpetas = partes.slice(0, -1);
+  const enTemporada = /^(temporada|season|temp\.?|especiales|specials|t\d+$|s\d+$)/i.test(carpetas[carpetas.length - 1]);
+  if (enTemporada) carpetas.pop();
+  else if (!/\bS\d{1,2}\s*E\d{1,3}\b|\b\d{1,2}x\d{2}\b/i.test(partes[partes.length - 1])) return null;
+  return carpetas.length >= 2 ? `${carpetas.join('/')}/` : null;
+}
+function salirAFicha() {
+  const serie = carpetaSerieDe(actualKey);
+  // Capítulos y enlaces de otros servidores: se cierra el reproductor (en una serie, a su página)
+  if (serie || tipo(actualKey)[1] === 'enlace') {
+    cerrar();
+    if (serie && estado.prefijo !== serie) irA(serie);
+    return;
+  }
+  salirCine();
+  const v = document.querySelector('#vcontenido .repro video');
+  if (v) v.pause();
+  const b = document.querySelector('#vcontenido .ver-ahora');
+  if (b) { b.textContent = v && v.currentTime > 5 ? '▶ Reanudar' : '▶ Reproducir'; b.focus({ preventScroll: true }); }
+  $('#vcontenido').scrollTop = 0;
+}
+// En la ficha de una película (al salir del vídeo o desde «Información»): «▶ Reproducir» vuelve
+// a la pantalla completa y sigue donde iba
+function botonVerAhora(c) {
+  if (!c.querySelector('.repro') || c.querySelector('.ver-ahora')) return;
+  // (en sus botones de la ficha; si la ficha no los tiene, encima de ella)
+  const chips = c.querySelector('.ficha .cuerpo > .chips:not(.datos)') || c.insertBefore(el('div', 'chips ver-ahora-sitio'), c.querySelector('.ficha') || null);
+  // Con el botón puesto, fuera de la pantalla completa se ve solo la ficha (el vídeo, escondido)
+  c.classList.add('solo-ficha');
+  const v = c.querySelector('.repro video');
+  const b = el('button', 'boton reproducir ver-ahora', v && v.currentTime > 5 ? '▶ Reanudar' : '▶ Reproducir');
+  b.onclick = () => {
+    entrarCine();
+    const video = c.querySelector('.repro video');
+    if (video) video.play().catch(() => {});
+    enfocarVisor();
+  };
+  chips.prepend(b);
+}
+
 // Esc, el botón Atrás de la app o el gesto del móvil sacan de la pantalla completa: se sale
-// también del modo cine y se ve la ficha
+// también del reproductor, a la ficha
 function alCambiarPantalla() {
   const giro = screen.orientation;
   if (enPantallaCompleta()) {
@@ -957,7 +1004,12 @@ function alCambiarPantalla() {
     return;
   }
   if (giro && giro.unlock) try { giro.unlock(); } catch (e) {}
-  if (cineReal) { cineReal = false; $('#visor').classList.remove('cine', 'reposo'); }
+  if (cineReal) {
+    cineReal = false;
+    // (si lo ha quitado MorvehTV al salir, ya no está en modo cine y no hay nada más que hacer)
+    if ($('#visor').classList.contains('cine') && actual >= 0) salirAFicha();
+    else $('#visor').classList.remove('cine', 'reposo');
+  }
 }
 document.addEventListener('fullscreenchange', alCambiarPantalla);
 document.addEventListener('webkitfullscreenchange', alCambiarPantalla);
@@ -1465,7 +1517,7 @@ function reproductor(key, m, urlDirecto = null, renovar = () => api('/api/url', 
     bSonido.innerHTML = icono(v.muted ? 'mudo' : 'volumen');
     bSonido.title = v.muted ? 'Activar el sonido' : 'Silenciar'; bSonido.setAttribute('aria-label', bSonido.title);
   };
-  bPantalla.onclick = () => ($('#visor').classList.contains('cine') ? salirCine() : entrarCine());
+  bPantalla.onclick = () => ($('#visor').classList.contains('cine') ? salirAFicha() : entrarCine());
   caja.irA = ir;
   caja.saltar = (s) => ir(ahora() + s);
   caja.alternar = alternar;
@@ -1602,6 +1654,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   pintarFavVisor(f);
   actualizarFlechas(i);
   const c = $('#vcontenido'); c.innerHTML = '';
+  c.classList.remove('solo-ficha');
   if (clase === 'enlace') return abrirEnlace(f, i, c);
 
   try {
@@ -1632,7 +1685,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
       avisoDelReproductor(caja);
       enfocarVisor();
       const d = await pedirMeta('archivo', f.key);
-      if (actual === i) c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key }));
+      if (actual === i) { c.append(fichaHtml(d || { encontrado: false }, { archivo: f, medio: m, clave: f.key })); botonVerAhora(c); }
     } else if (clase === 'imagen') {
       const img = el('img'); img.src = url; img.alt = nombre(f.key); c.append(img);
     } else if (clase === 'audio') {
@@ -2280,7 +2333,7 @@ function atras() {
   // Con la lista de idiomas del audio abierta, Atrás solo la cierra
   const menuAudio = document.querySelector('.menu-audio');
   if (menuAudio) { const r = menuAudio.closest('.repro'); if (r && r.cerrarMenuAudio) r.cerrarMenuAudio(); else menuAudio.remove(); return true; }
-  if ($('#visor').classList.contains('cine')) { salirCine(); return true; }
+  if ($('#visor').classList.contains('cine')) { if (actual >= 0) salirAFicha(); else salirCine(); return true; }
   if (actual >= 0) { cerrar(); return true; }
   if (estado.prefijo) { irA(padre(estado.prefijo)); return true; }
   // En la portada con el mando: el primer Atrás sube al principio (a «▶ Reproducir» del
