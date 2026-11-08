@@ -260,29 +260,59 @@ const VISTAS_PERFIL = {
   favoritos: { titulo: '★ Favoritos', corto: '★ Favoritos' },
 };
 
+// Iconos del menú (trazo fino, del color del texto): uno por tipo de sección
+const ICONO = (d) => `<svg class="ico-pestana" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICONOS_MENU = {
+  inicio: ICONO('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/>'),
+  pelicula: ICONO('<rect x="3" y="7" width="18" height="14" rx="2"/><path d="m3 7 3.5-4h3L6 7M10 7l3.5-4h3L13 7M17 7l3.5-4"/>'),
+  serie: ICONO('<rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="m8 2.5 4 3.5 4-3.5M8 22h8"/>'),
+  anime: ICONO('<path d="M12 3l2.2 5.8L20 9.5l-4.5 3.9 1.4 6.1L12 16.3 7.1 19.5l1.4-6.1L4 9.5l5.8-.7z"/>'),
+  documental: ICONO('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'),
+  docuserie: ICONO('<path d="M4 5h11a2 2 0 0 1 2 2v12H6a2 2 0 0 1-2-2z"/><path d="M17 9l4-2v10l-4-2"/>'),
+  programa: ICONO('<circle cx="12" cy="10" r="2"/><path d="M8.5 13.5a5 5 0 0 1 0-7M15.5 6.5a5 5 0 0 1 0 7M5.6 16.4a9 9 0 0 1 0-12.8M18.4 3.6a9 9 0 0 1 0 12.8M12 12v9"/>'),
+  novela: ICONO('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+  infantil: ICONO('<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>'),
+  musica: ICONO('<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>'),
+  terror: ICONO('<path d="M5 21V11a7 7 0 0 1 14 0v10l-2.5-2-2.5 2-2-2-2 2-2.5-2z"/><path d="M9.5 11h.01M14.5 11h.01"/>'),
+  deporte: ICONO('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4"/>'),
+  estreno: ICONO('<path d="M12 2c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.5 2 1.5 3 3 3-1-3 0-6 0-8.5z"/>'),
+  seguir: ICONO('<circle cx="12" cy="12" r="9"/><path d="m10 8.5 5 3.5-5 3.5z" fill="currentColor"/>'),
+  favoritos: ICONO('<path d="M12 3.5l2.6 5.3 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.7 1-5.8L3.5 9.6l5.9-.8z"/>'),
+  carpeta: ICONO('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+};
+// El icono de una sección según lo que es (por su regla de categoría o, si no, por su nombre)
+function iconoSeccion(cat) {
+  const n = (cat.nombre || '').toLowerCase();
+  if (/estreno|novedad/.test(n)) return 'estreno';
+  return ({ '🎬': 'pelicula', '📺': 'serie', '🍥': 'anime', '🐉': 'anime', '🌍': 'documental', '🎞️': 'docuserie', '📡': 'programa',
+    '🌙': 'novela', '🧸': 'infantil', '🎵': 'musica', '👻': 'terror', '⚽': 'deporte' })[cat.icono] || 'carpeta';
+}
+
 // Menú de arriba: Inicio, todas las secciones de e2, «Seguir viendo» y «Favoritos»
 function pintarPestanas() {
   let nav = $('#pestanas');
   if (!nav) {
     nav = el('nav');
     nav.id = 'pestanas';
-    const boton = (texto, alPulsar, datos = {}) => {
-      const b = el('button', 'pestana', texto);
+    const boton = (texto, alPulsar, datos = {}, icono = 'carpeta') => {
+      const b = el('button', 'pestana');
+      b.innerHTML = ICONOS_MENU[icono] || ICONOS_MENU.carpeta;
+      b.append(el('span', 'txt-pestana', texto));
       Object.assign(b.dataset, datos);
       b.onclick = alPulsar;
       return b;
     };
-    const inicio = boton('Inicio', () => irA(''), { vista: '' });
+    const inicio = boton('Inicio', () => irA(''), { vista: '' }, 'inicio');
     // Todas las secciones de e2 (cada carpeta de primer nivel), en el orden de la portada
     const secciones = el('span', 'secciones-menu');
-    const seguir = boton('Seguir viendo', () => irA(estado.prefijo === ':seguir' ? '' : ':seguir'), { vista: 'seguir' });
-    const favoritos = boton('Favoritos', () => irA(estado.prefijo === ':favoritos' ? '' : ':favoritos'), { vista: 'favoritos' });
+    const seguir = boton('Seguir viendo', () => irA(estado.prefijo === ':seguir' ? '' : ':seguir'), { vista: 'seguir' }, 'seguir');
+    const favoritos = boton('Favoritos', () => irA(estado.prefijo === ':favoritos' ? '' : ':favoritos'), { vista: 'favoritos' }, 'favoritos');
     nav.append(inicio, secciones, seguir, favoritos);
     // (en su propia fila, debajo del logo y la cuenta, para que se vean todas las secciones)
     $('header .logo').after(nav);
     api('/api/catalogo', { max: 1 }).then((d) => {
       for (const { cat, suyas } of categoriasDe(d.carpetas.map((x) => x.carpeta))) {
-        secciones.append(boton(cat.nombre, () => irA(suyas[0]), { seccion: suyas[0] }));
+        secciones.append(boton(cat.nombre, () => irA(suyas[0]), { seccion: suyas[0] }, iconoSeccion(cat)));
       }
       marcarPestanas();
     }).catch(() => {});

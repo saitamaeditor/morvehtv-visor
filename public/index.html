@@ -1756,6 +1756,20 @@
   .abanico-cab img:nth-child(3) { transform: rotate(8deg) translateY(8px); }
   @media (max-width: 700px) { .abanico-cab { display: none; } .biblioteca.con-arte { min-height: 160px; } }
   .tele .abanico-cab img { width: 14vh; }
+  /* Menú con iconos: cada apartado con el suyo; el de la sección activa, en cian */
+  #pestanas .pestana { gap: 7px; }
+  #pestanas .ico-pestana { width: 17px; height: 17px; flex: none; opacity: .72; transition: opacity .2s, color .2s, transform .2s; }
+  #pestanas .pestana:hover .ico-pestana, #pestanas .pestana:focus .ico-pestana { opacity: 1; transform: translateY(-1px); }
+  #pestanas .pestana.activa .ico-pestana { opacity: 1; color: #00a3ff; }
+  @media (max-width: 600px) { #pestanas .ico-pestana { width: 15px; height: 15px; } #pestanas .pestana { gap: 5px; } }
+  .tele #pestanas .ico-pestana { width: 2.6vh; height: 2.6vh; }
+  /* En portátiles (hasta 1500 px) un poco más juntos, para que quepan todos en una línea */
+  @media (min-width: 901px) and (max-width: 1500px) { header #pestanas { column-gap: 10px; } header #pestanas .pestana { font-size: 13.5px; gap: 5px; } #pestanas .ico-pestana { width: 15px; height: 15px; } }
+  @media (min-width: 901px) and (max-width: 1340px) { header #pestanas { column-gap: 7px; } header #pestanas .pestana { font-size: 13px; gap: 4px; } #pestanas .ico-pestana { width: 14px; height: 14px; } }
+  /* Portada sin cartel destacado: el hueco para la cabecera fija va en el contenido entero (no en
+     el primer bloque, que puede ser un anuncio escondido) */
+  html.en-portada .destacado[hidden] + * { margin-top: 0 !important; padding-top: 0 !important; }
+  html.en-portada #items:has(> .destacado[hidden]) { padding-top: calc(var(--alto-cabecera, 96px) + 14px); }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
