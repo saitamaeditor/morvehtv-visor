@@ -45,6 +45,9 @@ function pintarBotonCuenta() {
     $('header').insertBefore(b, $('#salir-app'));
   }
   b.hidden = !yo;
+  // «Buscar» (Ctrl K) al lado de la cuenta
+  if (!$('#buscar-boton') && typeof botonBuscar === 'function') b.after(botonBuscar());
+  if ($('#buscar-boton')) $('#buscar-boton').hidden = !yo;
   b.innerHTML = '';
   if (yo) b.append(el('span', 'inicial', inicial(yo)), el('span', 'txt', yo.nombre || yo.usuario));
   if (yo && typeof planInfo !== 'undefined' && planInfo && planInfo.activo && planInfo.plan === 'premium') b.append(el('span', 'insignia', 'VIP'));
