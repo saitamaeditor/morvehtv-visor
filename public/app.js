@@ -362,9 +362,16 @@ function tarjetaLista(x, lista, puesto) {
   if (x.tipo === 'archivo') { t.dataset.key = x.key; barraVisto(t); }
   return t;
 }
-async function pintarListas(sitio) {
+async function pintarListas(sitio, intento = 0) {
   const d = await api('/api/listas-portada').catch(() => null);
-  if (!d || !sitio.isConnected) return;
+  if (!sitio.isConnected) return;
+  // Aún sin hacer (el servidor acaba de arrancar): se vuelve a pedir sola cada 15 s
+  const vacias = !d || ![...Object.values(d.peliculas), ...Object.values(d.series)].some((l) => l.length >= 3);
+  if (vacias && intento < 12) {
+    setTimeout(() => { if (sitio.isConnected && !sitio.children.length) pintarListas(sitio, intento + 1); }, 15000);
+    return;
+  }
+  if (!d) return;
   const filas = [
     ['Tendencias de películas', d.peliculas.tendencias, true],
     ['Películas mejor valoradas', d.peliculas.valoradas],
@@ -489,11 +496,16 @@ function iconoPlataforma(p, tipoPlat, cuantos) {
 }
 // Fila de logotipos de las plataformas que tienen películas (o series); cada uno abre esa
 // plataforma con solo ese tipo
-function filaPlataformas(tipoPlat) {
-  const plats = el('div', 'plataformas-inicio');
+function filaPlataformas(tipoPlat, intento = 0, plats = el('div', 'plataformas-inicio')) {
   plats.hidden = true;
   pedirPlataformas().then((d) => {
-    if (!d || !plats.isConnected || !d.plataformas.length) return;
+    if (!plats.isConnected && intento) return;
+    // Recién arrancado el servidor aún las está buscando: se vuelve a mirar sola cada 15 s
+    if ((!d || !d.plataformas.some((p) => p[tipoPlat] > 0)) && intento < 12) {
+      setTimeout(() => { if (plats.isConnected) { plataformasPedidas = null; filaPlataformas(tipoPlat, intento + 1, plats); } }, 15000);
+      return;
+    }
+    if (!d || !d.plataformas.length) return;
     const titulo = tipoPlat === 'series' ? 'Plataformas de streaming · Series' : 'Plataformas de streaming · Películas';
     const conAlgo = d.plataformas.filter((p) => p[tipoPlat] > 0);
     if (!conAlgo.length) return;

@@ -1087,7 +1087,7 @@ async function plataformas() {
   return { preparando: !indicePlat.datos || !!indicePlat.construyendo, plataformas: indicePlat.datos ?? [] };
 }
 // (se empieza solo a los 2 minutos de arrancar, para que esté listo cuando alguien entre)
-setTimeout(() => plataformas().catch(() => {}), 120000).unref();
+setTimeout(() => plataformas().catch(() => {}), 30000).unref();
 
 async function catalogoEntero() {
   let objetos;
@@ -1193,7 +1193,7 @@ async function listasPortada() {
   return (await Promise.race([listas.haciendo, new Promise((ok) => setTimeout(() => ok(null), 25000))])) ?? VACIAS;
 }
 // Se preparan poco después de arrancar, para que la primera visita ya las tenga
-setTimeout(() => listasPortada().catch(() => {}), 90000).unref();
+setTimeout(() => listasPortada().catch(() => {}), 20000).unref();
 
 // Conexiones abiertas de cada cuenta: al pagar (o cancelar) se les avisa para que la web y la
 // app quiten o pongan los anuncios en el momento, en todos sus aparatos
@@ -1454,7 +1454,10 @@ http
         // Lo que se está preparando ahora (sin nombres ni de quién): velocidad (1x = tan rápido como se ve)
         sesiones: [...sesionesHls.values()].filter((s) => s.ff.exitCode === null).map((s) => ({ tipo: s.tipo, preset: s.preset, velocidad: s.velocidad, minutos: Math.round((Date.now() - s.inicio) / 6000) / 10 })),
         // Vídeo directo (MP4 por /flujo) y lo que lee ffmpeg: a varias conexiones con e2
-        lectura: lecturaE2 } });
+        lectura: lecturaE2 },
+        // Portada: cuántas plataformas hay y si las listas (Top 10…) están hechas (solo números)
+        portada: { plataformas: indicePlat.datos ? indicePlat.datos.length : null, plataformasPreparando: !!indicePlat.construyendo,
+          listas: listas.datos ? { peliculas: listas.datos.peliculas.tendencias.length, series: listas.datos.series.tendencias.length } : null, listasPreparando: !!listas.haciendo } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
