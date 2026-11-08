@@ -117,7 +117,7 @@ for (const senal of ['SIGTERM', 'SIGINT']) {
 
 const esVideo = (key) => /\.(mp4|m4v|webm|mov|mkv|ogv|avi|ts|wmv|flv)$/i.test(key);
 // Avisos de lo nuevo en Telegram, con un tema por sección (ver telegram.js)
-await telegram.iniciar({ nube: acceso.NUBE, esVideo, leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
+await telegram.iniciar({ nube: acceso.NUBE, esVideo: (k) => esTitulo(k), leer: perfiles.leerAjuste, guardar: perfiles.guardarAjuste });
 // Reproductores externos tipo Xtream Codes (ver xtream.js): usan la foto del último repaso.
 // Apagados salvo que el servidor tenga XTREAM_ACTIVO=1
 pagos.iniciar({ perfiles, firmar: (k, o) => firmar(k, o) });
@@ -368,6 +368,8 @@ async function texto(key) {
 // que se abre en un iframe aislado. Vale el formato de acceso directo de Windows («URL=…»)
 // y el de Kodi/Jellyfin (.strm, la dirección en la primera línea).
 const esEnlace = (key) => /\.(url|strm)$/i.test(key);
+// Lo que cuenta como título en la portada, las fichas y los avisos de Telegram
+const esTitulo = (key) => esVideo(key) || esEnlace(key);
 const STREAM = /\.(m3u8|mp4|m4v|webm|mov|mp3|m4a|aac)(\?|#|$)/i;
 
 
@@ -927,7 +929,7 @@ async function repasar() {
   avisar('cambios', total > MAX_AVISO
     ? { nuevos: nuevos.slice(0, MAX_AVISO), cambiados: [], borrados: [], todo: true, huella }
     : { nuevos, cambiados, borrados, huella });
-  prepararFichas(nuevos.filter((k) => esVideo(k)));
+  prepararFichas(nuevos.filter((k) => esTitulo(k)));
 }
 
 // El repaso se adapta: con un bucket enorme (repasarlo tarda) se espera más entre uno y otro, y
@@ -984,7 +986,8 @@ async function catalogoEntero() {
     const raiz = `${partes[0]}/`;
     // También las carpetas aún vacías (o sin vídeos): la portada las enseña como «Próximamente»
     if (!carpetas.has(raiz)) carpetas.set(raiz, new Map());
-    if (!esVideo(o.key)) continue;
+    // (los .url/.strm de enlaces de vídeo también son títulos: se ven igual en la portada)
+    if (!esTitulo(o.key)) continue;
     // Las carpetas que solo agrupan («PELICULAS NETFLIX», «NETFLIX»…) se saltan: la serie es la
     // primera carpeta de debajo que no lo sea; si no hay ninguna, el vídeo es una película
     let i = 1;

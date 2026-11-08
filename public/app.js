@@ -697,7 +697,7 @@ async function pintarCabecera(prefijo) {
     const pintarB = () => { const { archivos } = visibles(); b.textContent = archivos.some((x) => posicionDe(x.key)) ? '▶ Reanudar' : '▶ Reproducir'; };
     b.onclick = () => {
       const { carpetas, archivos } = visibles();
-      const videos = archivos.filter((x) => tipo(x.key)[1].startsWith('video'));
+      const videos = archivos.filter((x) => tipo(x.key)[1].startsWith('video') || tipo(x.key)[1] === 'enlace');
       if (videos.length) {
         const i = videos.findIndex((x) => posicionDe(x.key));
         abrir(Math.max(0, i), videos);
