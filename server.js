@@ -1008,8 +1008,11 @@ async function construirPlataformas() {
   await Promise.all(Array.from({ length: 4 }, trabajar));
   const orden = meta.PLATAFORMAS.map(([n]) => n);
   const logos = await meta.logosPlataformas().catch(() => ({}));
+  // Primero las conocidas (en su orden: Netflix, Prime Video, Disney+…) y después todas las demás
+  // que haya dado TMDB, de la que más títulos tiene a la que menos
+  const puesto = (n) => (orden.includes(n) ? orden.indexOf(n) : 1000);
   return [...por]
-    .sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0]))
+    .sort((a, b) => puesto(a[0]) - puesto(b[0]) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, lista]) => ({
       nombre,
       logo: logos[nombre] ?? null,

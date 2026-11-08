@@ -124,7 +124,7 @@ export function logosPlataformas() {
       const prio = (p) => p.display_priorities?.[region] ?? p.display_priority ?? 999;
       todas.sort((a, b) => prio(a) - prio(b) || a.provider_name.length - b.provider_name.length);
       for (const p of todas) {
-        const n = plataformaDe(p.provider_name);
+        const n = nombrePlataforma(p.provider_name);
         if (n && p.logo_path && !logos.has(n)) logos.set(n, img(p.logo_path, 'w154'));
       }
       logosHasta = Date.now() + (logos.size ? 7 * 86400000 : 600000);
@@ -137,9 +137,20 @@ const REGION_PLATAFORMAS = () => process.env.TMDB_REGION || 'ES';
 function plataformaDe(nombre) {
   return (PLATAFORMAS.find(([, re]) => re.test(String(nombre))) || [])[0] || null;
 }
+// Cualquier plataforma que dé TMDB, no solo las de la lista: las conocidas con su nombre fijo y
+// las demás con el suyo. Las variantes cuentan como la original: «Netflix basic with Ads»,
+// «Filmin Amazon Channel» (Filmin dentro de Prime Video), «… Apple TV Channel», «… Kids»…
+export function nombrePlataforma(nombre) {
+  const limpio = String(nombre ?? '')
+    .replace(/\s+(amazon|apple tv|roku premium|youtube)\s+channels?$/i, '')
+    .replace(/\s+(basic|standard|premium)?\s*with ads$/i, '')
+    .replace(/\s+(kids|plus kids)$/i, '')
+    .trim();
+  return plataformaDe(limpio) || limpio || null;
+}
 function plataformasTmdb(wp) {
   const r = wp?.results?.[REGION_PLATAFORMAS()] ?? {};
-  const todas = [...(r.flatrate ?? []), ...(r.free ?? []), ...(r.ads ?? [])].map((p) => plataformaDe(p.provider_name)).filter(Boolean);
+  const todas = [...(r.flatrate ?? []), ...(r.free ?? []), ...(r.ads ?? [])].map((p) => nombrePlataforma(p.provider_name)).filter(Boolean);
   return [...new Set(todas)];
 }
 // Las carpetas de la ruta que nombran una plataforma («PELICULAS NETFLIX/», «DISNEY+/»…). Solo
