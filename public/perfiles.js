@@ -390,6 +390,28 @@ function cargarAdsense() {
   s.crossOrigin = 'anonymous';
   s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4674524691998401';
   document.head.append(s);
+  ponerBloqueAdsense();
+}
+// Bloque de anuncio de AdSense (data-ad-slot 5877611157) al final del catálogo, encima del pie,
+// con la etiqueta «Publicidad». Solo una vez por página (se queda al cambiar de sección).
+function ponerBloqueAdsense() {
+  if (document.getElementById('adsense-bloque')) return;
+  const pie = document.querySelector('main .pie');
+  if (!pie) return;
+  const caja = el('aside', 'adsense-bloque');
+  caja.id = 'adsense-bloque';
+  caja.setAttribute('aria-label', 'Publicidad');
+  caja.append(el('span', 'etiqueta-anuncio', 'Publicidad'));
+  const ins = document.createElement('ins');
+  ins.className = 'adsbygoogle';
+  ins.style.display = 'block';
+  ins.dataset.adClient = 'ca-pub-4674524691998401';
+  ins.dataset.adSlot = '5877611157';
+  ins.dataset.adFormat = 'auto';
+  ins.dataset.fullWidthResponsive = 'true';
+  caja.append(ins);
+  pie.before(caja);
+  try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {}
 }
 // Recordatorio de renovación (una vez al día por aparato): en el último mes de VIP y cuando
 // ya ha terminado
