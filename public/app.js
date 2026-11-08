@@ -191,6 +191,19 @@ function pintar() {
     cab.append(el('p', 'biblioteca-sub', cat.tmdb === 'serie' || /serie|novela|programa/.test(cat.id) ? 'Todas las series, de la más nueva a la más antigua' : 'Las más recientes y destacadas'));
     items.classList.add('vista-carteles');
     items.append(cab);
+    // Cabecera llamativa: el fondo de uno de sus títulos a lo ancho y un abanico de 3 carteles
+    const pref = estado.prefijo;
+    arteCategoria(cat, [estado.prefijo]).then(async (a) => {
+      if (!a || estado.prefijo !== pref || !cab.isConnected) return;
+      const fondo = a.fondo && await precargar(a.fondo.replace(/\/t\/p\/w\d+\//, '/t/p/w1280/'));
+      if (fondo) { cab.style.setProperty('--fondo-cab', `url("${fondo}")`); cab.classList.add('con-arte'); }
+      if (a.carteles.length) {
+        const abanico = el('div', 'abanico-cab');
+        a.carteles.slice(0, 3).forEach((u) => { const im = el('img'); im.src = u; im.alt = ''; im.loading = 'lazy'; abanico.append(im); });
+        cab.append(abanico);
+        cab.classList.add('con-arte');
+      }
+    }).catch(() => {});
   }
 
   if (!estado.prefijo) {
@@ -206,7 +219,7 @@ function pintar() {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     t.dataset.carpeta = c;
     items.append(t);
-    conMeta(t, 'carpeta', c); estrella(t, c);
+    conPortada(t, c); estrella(t, c);
   }
   archivos.forEach((f, i) => {
     const [, clase, icono] = tipo(f.key);
@@ -599,7 +612,7 @@ function pintarInicio(carpetas, archivos) {
       for (const x of titulos) {
         if (x.tipo === 'carpeta') {
           const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
-          f.c.append(t); conMeta(t, 'carpeta', x.key);
+          f.c.append(t); conPortada(t, x.key);
         } else {
           const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis), nuevo: nuevas.has(x.key) });
           t.dataset.key = x.key; barraVisto(t);
@@ -832,6 +845,43 @@ const observador = typeof IntersectionObserver === 'function'
   }), { rootMargin: '600px 600px' })
   : null;
 const cuandoSeVea = (t) => (observador ? new Promise((ok) => { t._alVer = ok; observador.observe(t); }) : Promise.resolve());
+
+// Carpeta con portada: su cartel de TMDB si lo tiene; si no (carpetas que solo agrupan, temporadas
+// sin datos, nombres que TMDB no reconoce), un mosaico con los carteles de lo que hay dentro y, si
+// tampoco hay, una portada con su nombre sobre el degradado de la marca
+function conPortada(t, carpeta) {
+  return conMeta(t, 'carpeta', carpeta).catch(() => {}).then(() => {
+    if (!t.isConnected || t.querySelector('.mini img')) return;
+    return mosaicoCarpeta(t, carpeta);
+  });
+}
+async function mosaicoCarpeta(t, carpeta) {
+  const mini = t.querySelector('.mini');
+  const d = await api('/api/buscar', { prefijo: carpeta, q: '', azar: 10 }).catch(() => null);
+  const videos = ((d && d.archivos) || []).filter((f) => tipo(f.key)[1].startsWith('video'));
+  const metas = await Promise.all(videos.slice(0, 10).map((f) => pedirMeta('archivo', f.key).catch(() => null)));
+  const carteles = [];
+  for (const m of metas) {
+    const p = m && m.encontrado && (m.temporada?.poster || m.poster);
+    if (p && !carteles.includes(p)) carteles.push(p);
+  }
+  if (!t.isConnected || mini.querySelector('img')) return;
+  mini.classList.add('cartel');
+  if (carteles.length) {
+    mini.textContent = '';
+    mini.classList.add('mosaico', `mosaico-${Math.min(4, carteles.length)}`);
+    carteles.slice(0, 4).forEach((u) => { const im = el('img'); im.src = u; im.alt = ''; im.loading = 'lazy'; im.decoding = 'async'; im.onerror = () => im.remove(); mini.append(im); });
+    mini.append(el('span', 'mosaico-nombre', nombre(carpeta)));
+    t.classList.add('con-mosaico');
+  } else {
+    // Sin carteles: el nombre de la carpeta en grande sobre un degradado (cada carpeta su color)
+    let h = 0; for (const ch of carpeta) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    mini.textContent = '';
+    mini.classList.add('portada-texto');
+    mini.style.setProperty('--tono', String(h % 360));
+    mini.append(el('span', 'portada-icono', '🎬'), el('b', null, nombre(carpeta)));
+  }
+}
 
 async function conMeta(t, clase, clave, { ancha = false } = {}) {
   await cuandoSeVea(t);
