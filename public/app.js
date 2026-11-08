@@ -1953,11 +1953,19 @@ async function abrirEnlace(f, i, c, opcion = 0) {
 }
 
 // Página con su propio reproductor, aislada: puede ejecutar su JavaScript y ponerse a pantalla
-// completa, pero no abrir ventanas ni pestañas nuevas ni cambiar la página de MorvehTV
+// completa, pero nunca cambiar la página de MorvehTV. Los servidores de vídeo (Voe, Streamwish,
+// Doodstream…) no reproducen si notan que no pueden abrir ventanas (sus anuncios), así que se les
+// deja: en el navegador sale como pestaña aparte; en la app, que sabe distinguir un toque en
+// MorvehTV de uno dentro del reproductor, se descartan (las app antiguas sin ese aviso, no:
+// allí se abrirían encima de MorvehTV, así que siguen sin permiso).
+const ventanasEnIframe = !window.MorvehApp || typeof window.MorvehApp.permitir === 'function';
+// Cada toque en la propia página de MorvehTV (no dentro de un iframe) se avisa a la app: solo en
+// el segundo siguiente puede abrirse una ventana (Tráiler, TMDB, Ko-fi…)
+document.addEventListener('click', () => { try { if (window.MorvehApp && window.MorvehApp.permitir) window.MorvehApp.permitir(); } catch (e) {} }, true);
 function incrustar(c, url, otraVez) {
   c.innerHTML = '';
   const fr = el('iframe', 'incrustado');
-  fr.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation allow-forms');
+  fr.setAttribute('sandbox', `allow-scripts allow-same-origin allow-presentation allow-forms${ventanasEnIframe ? ' allow-popups' : ''}`);
   fr.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
   fr.setAttribute('allowfullscreen', '');
   fr.referrerPolicy = 'strict-origin-when-cross-origin';

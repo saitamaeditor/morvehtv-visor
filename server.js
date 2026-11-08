@@ -406,7 +406,11 @@ async function enlace(key, opcion = 0) {
   }));
   if (!opciones.length) throw Object.assign(new Error('El archivo no tiene una dirección http(s) válida'), { status: 422 });
   const n = Math.min(Math.max(0, Number(opcion) || 0), opciones.length - 1);
-  return { ...opciones[n], opcion: n, opciones, ...(await comprobar(opciones[n].url)) };
+  // Solo se comprueba desde aquí un stream (.mp4, .m3u8…). Las páginas con reproductor (Voe,
+  // Streamwish…) suelen rechazar a quien no es un navegador (Cloudflare): desde el servidor
+  // saldrían «caídas» aunque funcionen. Se abren siempre; si no cargan, avisa el reproductor.
+  const comprobado = opciones[n].tipo === 'stream' ? await comprobar(opciones[n].url) : { estado: null };
+  return { ...opciones[n], opcion: n, opciones, ...comprobado };
 }
 
 // ---------- Reproducción convertida con ffmpeg ----------

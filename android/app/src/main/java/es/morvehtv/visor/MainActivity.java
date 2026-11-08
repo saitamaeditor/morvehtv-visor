@@ -46,6 +46,7 @@ public class MainActivity extends Activity {
     private FrameLayout raiz;
     private View vistaCompleta;
     private boolean sinBarras = false; // viendo un vídeo a pantalla completa dentro de la web
+    private volatile long toqueNuestro = -10000; // último toque en la página de MorvehTV (no en un iframe)
     private WebChromeClient.CustomViewCallback alSalirCompleta;
     private boolean cargada = false;
     private final Cromo cromo = new Cromo();
@@ -246,6 +247,9 @@ public class MainActivity extends Activity {
         @Override
         public boolean onCreateWindow(WebView vista, boolean dialogo, boolean gesto, Message resultado) {
             if (!gesto || dialogo) return false;
+            // Una ventana que pide un reproductor de otro sitio (sus anuncios) se descarta: solo las
+            // que siguen a un toque en la propia página de MorvehTV
+            if (android.os.SystemClock.uptimeMillis() - toqueNuestro > 1500) return false;
             // Una vista provisional solo para saber qué dirección quería abrir
             WebView provisional = new WebView(MainActivity.this);
             provisional.setWebViewClient(new WebViewClient() {
@@ -308,6 +312,13 @@ public class MainActivity extends Activity {
                     .setPositiveButton("Salir", (d, w) -> finishAndRemoveTask())
                     .setNegativeButton("Cancelar", null)
                     .show());
+        }
+
+        // La página avisa de cada toque suyo: así una ventana nueva que llega justo después es de
+        // MorvehTV (Tráiler, TMDB…) y no un anuncio de un reproductor metido en un iframe
+        @JavascriptInterface
+        public void permitir() {
+            toqueNuestro = android.os.SystemClock.uptimeMillis();
         }
 
         @JavascriptInterface
