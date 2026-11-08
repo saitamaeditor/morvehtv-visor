@@ -1770,6 +1770,27 @@
      el primer bloque, que puede ser un anuncio escondido) */
   html.en-portada .destacado[hidden] + * { margin-top: 0 !important; padding-top: 0 !important; }
   html.en-portada #items:has(> .destacado[hidden]) { padding-top: calc(var(--alto-cabecera, 96px) + 14px); }
+  /* ================= Cabecera fija, como franja aparte =================
+     Logo, cuenta, «Buscar» y el menú en una barra sólida que se queda arriba al bajar (también en la
+     portada y en el móvil); el contenido empieza siempre debajo, nunca por detrás */
+  header, html.en-portada header, html.en-portada.bajado header { position: sticky !important; top: 0; left: auto; right: auto; z-index: 6;
+    background: rgba(11,12,14,.96) !important; box-shadow: 0 1px 0 rgba(255,255,255,.07), 0 10px 30px rgba(0,0,0,.35) !important; }
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    header, html.en-portada header, html.en-portada.bajado header { background: rgba(11,12,14,.95) !important; -webkit-backdrop-filter: saturate(160%) blur(18px); backdrop-filter: saturate(160%) blur(18px); }
+  }
+  header::after { opacity: .6 !important; }
+  html.en-portada main { padding-top: 0; }
+  html.en-portada #items:has(> .destacado[hidden]) { padding-top: 16px; }
+  .destacado-texto { padding-top: clamp(24px, 5vh, 60px) !important; }
+  html { scroll-padding-top: calc(var(--alto-cabecera, 96px) + 12px); }
+  /* En el móvil la barra no puede ocupar media pantalla: el menú va en una sola fila que se desliza
+     con el dedo (con un difuminado al final que indica que hay más) */
+  @media (max-width: 600px) {
+    header #pestanas { flex-wrap: nowrap !important; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding-bottom: 2px;
+      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+    header #pestanas::-webkit-scrollbar { display: none; }
+    header { padding-top: max(8px, env(safe-area-inset-top)); padding-bottom: 6px; }
+  }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>

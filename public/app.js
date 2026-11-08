@@ -1948,11 +1948,27 @@ async function mantenerPantalla(si) {
 }
 // Al cerrar o recargar la página se avisa al servidor para que pare ffmpeg
 window.addEventListener('pagehide', pararMedios);
-// Al volver a la app, si había un vídeo en marcha, se vuelve a pedir
+// Al salir (otra pestaña, botón de inicio del móvil o de la tele, apagar la pantalla) el vídeo se
+// pone en pausa: no sigue sonando por detrás. Al volver se queda en pausa donde iba, con ▶.
 document.addEventListener('visibilitychange', () => {
   const v = document.querySelector('#vcontenido video');
-  if (document.visibilityState === 'visible' && v && !v.paused) mantenerPantalla(true);
+  if (document.visibilityState === 'hidden') {
+    document.querySelectorAll('#vcontenido video, #vcontenido audio').forEach((m) => { if (!m.paused) m.pause(); });
+    mantenerPantalla(false);
+    return;
+  }
+  if (v && !v.paused) mantenerPantalla(true);
 });
+// Seguro contra el «sigue sonando por detrás»: un vídeo solo puede sonar con el reproductor a la
+// vista (pantalla completa del visor). Si algo lo arranca estando en la ficha, con el visor
+// cerrado o con la página escondida (el final de una carga, una reconexión…), se para al momento.
+document.addEventListener('play', (e) => {
+  const m = e.target;
+  if (!(m instanceof HTMLMediaElement) || !m.closest('#vcontenido')) return;
+  const visor = $('#visor');
+  const aLaVista = visor.classList.contains('abierto') && (visor.classList.contains('cine') || !m.closest('.repro')) && !document.hidden;
+  if (!aLaVista) m.pause();
+}, true);
 
 let listaVisor = [];
 async function abrir(i, lista = listaVisor, opciones = {}) {
