@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MorvehTV</title>
-<meta name="theme-color" content="#0f1115">
+<meta name="theme-color" content="#0a0914">
 <!-- Para añadirla a la pantalla de inicio del móvil como si fuera una app -->
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
@@ -1179,6 +1179,92 @@
     .controles .boton.audio .nombre-idioma { display: none; }
     .controles .boton.audio { padding: 0 6px; }
   }
+
+  /* ================= Estilo propio de MorvehTV: «Aurora» =================
+     La identidad sale del logo: el degradado azul → violeta → magenta de la nube. Fondo de noche
+     azul-violeta con un resplandor suave arriba, todo redondeado (botones en píldora, carteles con
+     esquinas amables), el botón principal con el degradado de la marca y los carteles que se elevan
+     con un halo de color al pasar por encima. Sin fuentes externas (así ninguna otra web sabe
+     quién entra): letra del sistema, más marcada. */
+  :root {
+    --fondo: #0a0914; --panel: #13111f; --panel2: #1c1930; --borde: #2a2640; --texto: #f3f1fa; --suave: #a7a2bd;
+    --acento: #a066ff; --m-azul: #4f8cff; --m-violeta: #8e4ec6; --m-magenta: #e0459b;
+    --marca: linear-gradient(120deg, var(--m-azul) 0%, var(--m-violeta) 52%, var(--m-magenta) 100%);
+    --halo: 0 14px 38px rgba(142,78,198,.42);
+  }
+  body { background: var(--fondo); font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased; }
+  /* Resplandor de aurora fijo detrás de todo (no se mueve: no gasta en las teles) */
+  body::before { content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background: radial-gradient(60% 45% at 12% -8%, rgba(79,140,255,.16), transparent 70%),
+      radial-gradient(50% 40% at 88% -6%, rgba(224,69,155,.14), transparent 70%),
+      radial-gradient(70% 50% at 50% 110%, rgba(142,78,198,.10), transparent 70%); }
+  ::selection { background: rgba(160,102,255,.45); color: #fff; }
+  html { scrollbar-color: #3a3458 transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #3a3458; border-radius: 10px; border: 2px solid var(--fondo); }
+  ::-webkit-scrollbar-track { background: transparent; }
+  /* Cabecera de cristal con una línea fina de la marca debajo (en la portada, al bajar) */
+  header { background: rgba(10,9,20,.82); box-shadow: none; border-bottom: 0; }
+  .en-portada.bajado header { background: rgba(10,9,20,.92); box-shadow: none; }
+  header::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--marca); opacity: .55; pointer-events: none; }
+  .en-portada:not(.bajado) header::after { opacity: 0; }
+  @media (max-width: 600px) { header { position: relative; } }
+  .logo .tv { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  /* Menú: la pestaña activa con una rayita de la marca debajo */
+  .pestana { position: relative; }
+  .pestana.activa::after { content: ''; position: absolute; left: 50%; bottom: -3px; width: 18px; height: 3px; border-radius: 3px; transform: translateX(-50%); background: var(--marca); }
+  /* Botones en píldora */
+  .boton, select { border-radius: 999px; }
+  .boton { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.1); transition: background .2s, border-color .2s, box-shadow .2s, transform .15s, filter .2s; }
+  .boton:hover { border-color: rgba(160,102,255,.7); background: rgba(160,102,255,.12); }
+  .boton.activo { background: var(--marca); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(142,78,198,.35); }
+  .boton.reproducir, .destacado .boton.reproducir { background: var(--marca); border-color: transparent; color: #fff; border-radius: 999px; box-shadow: var(--halo); }
+  .boton.reproducir:hover, .boton.reproducir:focus, .destacado .boton.reproducir:hover, .destacado .boton.reproducir:focus {
+    background: var(--marca); border-color: transparent; filter: brightness(1.12); }
+  .destacado .boton { border-radius: 999px; }
+  .destacado .boton.info, #cabecera .boton:not(.reproducir) { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; color: #fff; }
+  .destacado .boton.info:hover, .destacado .boton.info:focus, #cabecera .boton:not(.reproducir):hover { background: rgba(255,255,255,.2); }
+  .boton.reproducir:focus, .destacado .boton:focus, #cabecera .boton:focus { outline: 3px solid #fff; outline-offset: 3px; }
+  /* Portada: el destacado se funde con el fondo de noche; su etiqueta y sus puntos con la marca */
+  .destacado::after { background: linear-gradient(90deg, rgba(10,9,20,.94) 0%, rgba(10,9,20,.6) 38%, rgba(10,9,20,0) 70%),
+      linear-gradient(0deg, var(--fondo) 0%, rgba(10,9,20,.55) 22%, rgba(10,9,20,0) 50%); }
+  .destacado-etiqueta { color: #d9c7ff; }
+  .destacado-etiqueta::before { background: var(--marca); }
+  .destacado-puntos .punto.activo { background: var(--marca); }
+  /* Filas: el título con una barrita de la marca delante */
+  .fila-titulo a::before { content: ''; align-self: center; width: 4px; height: .95em; border-radius: 3px; background: var(--marca); flex: none; }
+  .fila-titulo a:hover, .fila-titulo a:focus { color: #fff; }
+  .ver-todo { background: rgba(160,102,255,.14); border: 1px solid rgba(160,102,255,.4); }
+  .fila-titulo a:hover .ver-todo, .fila-titulo a:focus .ver-todo { background: var(--marca); border-color: transparent; color: #fff; }
+  .tarjeta-ver-todo .mini { background: linear-gradient(135deg, rgba(79,140,255,.22), rgba(142,78,198,.18) 50%, rgba(224,69,155,.22)); }
+  .flecha-fila:hover { background: rgba(10,9,20,.8); }
+  /* Carteles: esquinas redondeadas; al pasar el ratón se elevan con el halo de la marca y, con
+     el mando o el teclado, llevan un marco blanco */
+  .item .mini { border-radius: 12px; }
+  .item .visto { border-radius: 0 0 12px 12px; }
+  .item:hover .mini { box-shadow: 0 0 0 2px rgba(160,102,255,.75), var(--halo); }
+  .item:focus .mini { box-shadow: 0 0 0 3px #fff, var(--halo); }
+  .item .nuevo { background: var(--marca); border-radius: 8px 8px 0 0; }
+  @media (hover: hover) and (pointer: fine) {
+    .carrusel .item:not(.episodio) { transition: transform .22s ease; }
+    .carrusel .item:not(.episodio):hover { transform: translateY(-4px); }
+    .rejilla .item:not(.episodio):hover { transform: translateY(-4px) scale(1.03); }
+  }
+  /* Categorías y chips: píldoras; la elegida con la marca */
+  .chip-cat { border-color: rgba(255,255,255,.22); background: rgba(255,255,255,.05); }
+  .chip-cat:hover, .chip-cat:focus, .chip-cat.activa { background: var(--marca); border-color: transparent; color: #fff; }
+  #cabecera .chip { border-radius: 999px; }
+  /* El nombre grande de la sección, de blanco a lila y rosa */
+  .biblioteca h1 { background: linear-gradient(120deg, #fff 35%, #d9c7ff 70%, #ff9ccf); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #migas a:hover { color: #d9c7ff; }
+  /* El reproductor, con el mismo degradado de la marca */
+  .repro { --g1: var(--m-azul); --g2: var(--m-magenta); --deg: var(--marca); }
+  .sigla, .menu-audio .guardar-audios, #visor.cine #salircine:hover, #visor.cine #salircine:focus { background: var(--marca); }
+  .gran-play, #visor.cine .gran-play, .gran-play:hover, .gran-play:focus, #visor.cine .gran-play:hover, #visor.cine .gran-play:focus { background: var(--marca); }
+  .menu-audio button:hover, .menu-audio button:focus { background: linear-gradient(120deg, rgba(79,140,255,.9), rgba(142,78,198,.9) 52%, rgba(224,69,155,.9)); }
+  .menu-audio button.activo::after { color: #c9a6ff; }
+  .tele .item:focus .mini { box-shadow: 0 0 0 .45vh #fff, var(--halo); }
 </style>
 <link rel="stylesheet" href="intro.css">
 </head>
