@@ -266,6 +266,24 @@ function pintarPestanas() {
     inicio.dataset.vista = '';
     inicio.onclick = () => irA('');
     nav.append(inicio);
+    // Las secciones de e2 (cada carpeta de primer nivel), en el orden de la portada
+    // Con la rueda del ratón el menú se desliza de lado (cuando no cabe entero)
+    nav.addEventListener('wheel', (e) => {
+      if (nav.scrollWidth <= nav.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      nav.scrollLeft += e.deltaY;
+    }, { passive: false });
+    const secciones = el('span', 'secciones-menu');
+    nav.append(secciones);
+    api('/api/catalogo', { max: 1 }).then((d) => {
+      for (const { cat, suyas } of categoriasDe(d.carpetas.map((x) => x.carpeta))) {
+        const b = el('button', 'pestana seccion', cat.nombre);
+        b.dataset.seccion = suyas[0];
+        b.onclick = () => irA(suyas[0]);
+        secciones.append(b);
+      }
+      marcarPestanas();
+    }).catch(() => {});
     for (const [id, v] of Object.entries(VISTAS_PERFIL)) {
       const b = el('button', 'pestana', v.corto);
       b.dataset.vista = id;
@@ -275,8 +293,21 @@ function pintarPestanas() {
     $('#directo').after(nav);
   }
   nav.hidden = !yo;
-  nav.querySelectorAll('button').forEach((b) => b.classList.toggle('activa',
-    b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo));
+  marcarPestanas();
+}
+// La pestaña activa: Inicio, «Seguir viendo», «Favoritos» o la sección en la que se está
+function marcarPestanas() {
+  const nav = $('#pestanas');
+  if (!nav) return;
+  let activa = null;
+  nav.querySelectorAll('button').forEach((b) => {
+    const si = b.dataset.seccion ? estado.prefijo.startsWith(b.dataset.seccion)
+      : b.dataset.vista ? estado.prefijo === `:${b.dataset.vista}` : !estado.prefijo;
+    b.classList.toggle('activa', si);
+    if (si) activa = b;
+  });
+  // (en el móvil, la activa se desliza a la vista si el menú no cabe)
+  if (activa && nav.scrollWidth > nav.clientWidth) activa.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
 function pintarVistaPerfil(vista) {

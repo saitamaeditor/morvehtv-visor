@@ -1595,6 +1595,13 @@
   .tele .carrusel .tarjeta-lista .meta { font-size: 1.8vh; }
   .tele .tarjeta-lista .nota-cartel, .tele .tarjeta-lista .tipo-cartel { height: 3vh; font-size: 1.5vh; }
   .tele .carrusel.top10 .puesto { font-size: 8vh; }
+  /* Menú de arriba con las secciones de e2: en una fila que se desliza si no cabe */
+  .secciones-menu { display: contents; }
+  #pestanas { flex: 1 1 0; min-width: 0; flex-wrap: nowrap; align-items: center; white-space: nowrap; padding-right: 28px;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  #pestanas .pestana { flex: none; }
+  header .logo { flex: 1 1 0; min-width: 0; }
+  header .logo > span:not(#directo), header .logo::before { flex: none; }
   .tele .pie { display: none; }
 </style>
 <link rel="stylesheet" href="intro.css">

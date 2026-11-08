@@ -368,12 +368,15 @@ async function pintarListas(sitio) {
     ['Series mejor valoradas', d.series.valoradas],
     ['Series populares', d.series.populares],
   ];
+  let puestas = 0;
   for (const [nombreFila, lista, top] of filas) {
     if (!lista || lista.length < 3) continue;
     const f = fila(nombreFila, null, top ? 'top10' : '');
     f.s.classList.add(top ? 'fila-top' : 'fila-lista');
     lista.forEach((x, n) => f.c.append(tarjetaLista(x, lista, top ? n + 1 : 0)));
     sitio.append(f.s);
+    // Plan Básico: un anuncio cada tres filas
+    if (++puestas % 3 === 0) { const b = typeof anuncioBanner === 'function' && anuncioBanner('fila'); if (b) sitio.append(b); }
   }
 }
 
@@ -496,34 +499,7 @@ function pintarInicio(carpetas, archivos) {
     if (catalogoPedido === pedido) catalogoPedido = null; // la próxima vez, datos frescos
     if (!d || estado.prefijo || !sitio.isConnected) return;
     pintarDestacado(destacado, d, carpetas).catch(() => {});
-    let filasPuestas = 0;
-    for (const { cat, suyas } of categoriasDe(carpetas)) {
-      const entrada = d.carpetas.find((x) => x.carpeta === suyas[0]);
-      // En cada fila «Novedades en…», solo los 5 últimos (el resto, en «Ver todo»)
-      const titulos = entrada ? entrada.titulos.slice(0, 5) : [];
-      if (!titulos.length) continue;
-      // La fila lleva el nombre de la categoría («Películas anime») y «Ver todo ›» siempre a la
-      // vista; al final, una tarjeta más para ver la categoría entera
-      const f = fila(cat.nombre, () => irA(suyas[0]));
-      const total = entrada.total || entrada.titulos.length;
-      const pelis = titulos.filter((x) => x.tipo === 'archivo');
-      for (const x of titulos) {
-        if (x.tipo === 'carpeta') {
-          const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
-          f.c.append(t); conMeta(t, 'carpeta', x.key);
-        } else {
-          const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis), nuevo: nuevas.has(x.key) });
-          t.dataset.key = x.key; barraVisto(t);
-          f.c.append(t); conMeta(t, 'archivo', x.key);
-        }
-      }
-      const todo = tarjeta({ icono: '›', titulo: 'Ver todo', meta: `${total} ${total === 1 ? 'título' : 'títulos'}`, alPulsar: () => irA(suyas[0]) });
-      todo.classList.add('tarjeta-ver-todo');
-      f.c.append(todo);
-      sitio.append(f.s);
-      // Y otro cada tres filas
-      if (++filasPuestas % 3 === 0) { const b = typeof anuncioBanner === 'function' && anuncioBanner('fila'); if (b) sitio.append(b); }
-    }
+    // (Las filas de cada sección ya no salen: las secciones están en el menú de arriba)
   });
 
   if (archivos.length) {
@@ -751,7 +727,7 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   await cuandoSeVea(t);
   if (!t.isConnected) return;
   const d = await pedirMeta(clase, clave);
-  if (!d?.encontrado || !t.isConnected) return;
+  if (!d?.encontrado || !d.titulo || !t.isConnected) return;
   const temp = d.temporada;
   const apaisada = d.episodio?.imagen ?? (ancha ? d.fondo : null);
   const imagen = apaisada ?? temp?.poster ?? d.poster;
