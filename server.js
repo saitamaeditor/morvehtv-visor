@@ -1399,6 +1399,15 @@ http
       // La página nunca se guarda en caché y enlaza sus archivos con la versión
       if (ext === '.html') {
         let html = (await readFile(fichero, 'utf8')).replace(CON_VERSION, `$1="$2?v=${VERSION}"`);
+        // Google AdSense (bloques entre <!--ADSENSE--> y <!--/ADSENSE-->): fuera para VIP y
+        // administradores (su plan es sin anuncios) y dentro de una app de Android que no tenga
+        // integrada la WebView API for Ads de Google (las versiones antiguas: sin «MorvehTVAds»)
+        if (/<!--ADSENSE-->/.test(html)) {
+          const ua = String(req.headers['user-agent'] ?? '');
+          const appSinApiAnuncios = /MorvehTVApp/.test(ua) && !/MorvehTVAds/.test(ua);
+          const sinAnuncios = appSinApiAnuncios || (cuenta && (await perfiles.planDe(cuenta).catch(() => ({ tipo: 'basico' }))).tipo === 'premium');
+          html = sinAnuncios ? html.replace(/<!--ADSENSE-->[\s\S]*?<!--\/ADSENSE-->/g, '') : html.replace(/<!--\/?ADSENSE-->/g, '');
+        }
         // La oferta VIP del registro, solo con los pagos activados (y con su precio)
         if (url.pathname === '/entrar.html') {
           html = pagos.activo

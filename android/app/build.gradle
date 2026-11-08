@@ -1,5 +1,6 @@
 // App MorvehTV para móvil y Android TV: una pantalla con el visor publicado en Render.
-// Usa el mismo reproductor que la web. Sin librerías externas (solo el WebView del sistema).
+// Usa el mismo reproductor que la web. La única librería externa es el SDK de anuncios de Google,
+// para la «WebView API for Ads» (los anuncios de AdSense de la web, permitidos dentro de la app).
 plugins {
     id 'com.android.application'
 }
@@ -53,4 +54,10 @@ android {
         abortOnError false
         checkReleaseBuilds false
     }
+}
+
+dependencies {
+    // Google Mobile Ads: solo para registrar el WebView (WebView API for Ads); la app no pone
+    // anuncios propios, los de AdSense los pone la web
+    implementation 'com.google.android.gms:play-services-ads:23.6.0'
 }

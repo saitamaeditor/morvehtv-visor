@@ -31,6 +31,8 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
+import com.google.android.gms.ads.MobileAds;
+
 /**
  * MorvehTV: el visor publicado en Render a pantalla completa, para móvil y Android TV.
  * La web hace casi todo (portada, fichas, reproductor HLS, mando); aquí solo se añade lo que
@@ -90,6 +92,17 @@ public class MainActivity extends Activity {
         CookieManager.getInstance().setAcceptCookie(true);
         // Los reproductores de otros sitios suelen necesitar sus propias cookies dentro del iframe
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);
+
+        // WebView API for Ads: se registra el WebView en el SDK de Google para que los anuncios de
+        // AdSense de la web estén permitidos dentro de la app (y Google pueda medirlos bien). Si
+        // funciona, la web lo sabe por «MorvehTVAds» en el nombre del navegador y solo entonces los
+        // pone; en aparatos sin los servicios de Google (Fire TV…) no se registra y no salen.
+        try {
+            MobileAds.registerWebView(web);
+            ajustes.setUserAgentString(ajustes.getUserAgentString() + " MorvehTVAds");
+        } catch (Throwable e) {
+            // sin el SDK o sin servicios de Google: la app sigue igual, sin anuncios
+        }
 
         web.setBackgroundColor(Color.BLACK);
         web.addJavascriptInterface(new Puente(), "MorvehApp");
