@@ -395,9 +395,9 @@ async function pintarDestacado(caja, d, carpetas) {
     if (m.sinopsis) texto.append(el('p', 'destacado-sinopsis', m.sinopsis));
     const bs = el('div', 'destacado-botones');
     const ver1 = el('button', 'boton reproducir', '▶ Reproducir');
-    ver1.onclick = () => (serie ? irA(x.key) : abrir(0, [x]));
+    ver1.onclick = () => (serie ? irA(x.key) : abrir(0, [x], { ver: true, reproducir: true }));
     const info = el('button', 'boton info', 'ℹ Más información');
-    info.onclick = () => (serie ? irA(x.key) : abrir(0, [x], { ficha: true }));
+    info.onclick = () => (serie ? irA(x.key) : abrir(0, [x]));
     bs.append(ver1, info);
     texto.append(bs);
     if (aMano) reiniciar();
@@ -771,7 +771,7 @@ async function pintarCabecera(prefijo) {
       const videos = archivos.filter((x) => tipo(x.key)[1].startsWith('video') || tipo(x.key)[1] === 'enlace');
       if (videos.length) {
         const i = videos.findIndex((x) => posicionDe(x.key));
-        abrir(Math.max(0, i), videos);
+        abrir(Math.max(0, i), videos, { ver: true, reproducir: true });
       } else if (carpetas.length) irA(carpetas[0]); // una serie con temporadas: a la primera
     };
     enlaces.prepend(b);
@@ -1077,6 +1077,7 @@ function carpetaSerieDe(key) {
 function salirAFicha() {
   const serie = carpetaSerieDe(actualKey);
   // Capítulos y enlaces de otros servidores: se cierra el reproductor (en una serie, a su página)
+  if (!serie && tipo(actualKey)[1] === 'enlace' && actual >= 0) return abrir(actual, listaVisor);
   if (serie || tipo(actualKey)[1] === 'enlace') {
     cerrar();
     if (serie && estado.prefijo !== serie) irA(serie);
@@ -1751,6 +1752,8 @@ document.addEventListener('visibilitychange', () => {
 
 let listaVisor = [];
 async function abrir(i, lista = listaVisor, opciones = {}) {
+  // Desde la pantalla completa (⏮ ⏭, fin del capítulo) se sigue viendo, sin pasar por la ficha
+  const veniaDeCine = $('#visor').classList.contains('abierto') && $('#visor').classList.contains('cine');
   pararMedios();
   listaVisor = lista;
   if (i < 0 || i >= lista.length) return;
@@ -1760,7 +1763,11 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   const [, clase] = tipo(f.key);
   $('#visor').classList.add('abierto');
   // El mismo reproductor en la web, el móvil y la app de Android
-  if ((clase === 'video' || clase === 'video-raro') && !opciones.ficha) entrarCine();
+  // Una película (o un título de enlaces) se abre primero en su ficha; el reproductor, a pantalla
+  // completa, solo al pulsar «▶ Reproducir». Los capítulos de una serie van directos al vídeo.
+  const esTituloSuelto = (clase === 'video' || clase === 'video-raro' || clase === 'enlace') && !esEpisodio(f.key);
+  const soloFicha = esTituloSuelto && !opciones.ver && !opciones.reproducir && !opciones.ficha && !veniaDeCine;
+  if ((clase === 'video' || clase === 'video-raro') && !opciones.ficha && !soloFicha) entrarCine();
   else salirCine();
   $('#vtitulo').textContent = nombre(f.key);
   $('#vtitulo').title = f.key;
@@ -1770,6 +1777,7 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   actualizarFlechas(i);
   const c = $('#vcontenido'); c.innerHTML = '';
   c.classList.remove('solo-ficha');
+  if (soloFicha) return pintarSoloFicha(f, i, lista, c);
   if (clase === 'enlace') return abrirEnlace(f, i, c);
 
   try {
@@ -1824,6 +1832,23 @@ async function abrir(i, lista = listaVisor, opciones = {}) {
   } catch (e) {
     c.innerHTML = `<div class="vacio error">${e.message}</div>`;
   }
+}
+
+// Ficha de una película sin preparar aún el vídeo (no se pone a convertir nada en el servidor
+// hasta que se pulsa «▶ Reproducir», que lo abre a pantalla completa)
+async function pintarSoloFicha(f, i, lista, c) {
+  c.innerHTML = '<div class="vacio">Cargando…</div>';
+  const d = await pedirMeta('archivo', f.key);
+  if (actual !== i || actualKey !== f.key) return;
+  c.innerHTML = '';
+  c.classList.add('solo-ficha');
+  c.append(fichaHtml(d || { encontrado: false }, { archivo: f, clave: f.key }));
+  const sitio = c.querySelector('.ficha .cuerpo > .chips.acciones') || c.insertBefore(el('div', 'chips ver-ahora-sitio'), c.querySelector('.ficha'));
+  const b = el('button', 'boton reproducir ver-ahora', posicionDe(f.key) ? '▶ Reanudar' : '▶ Reproducir');
+  b.onclick = () => abrir(i, lista, { ver: true, reproducir: true });
+  sitio.prepend(b);
+  enfocarVisor();
+  b.focus({ preventScroll: true });
 }
 
 // ---------- Pasar de un capítulo o película a otro ----------
