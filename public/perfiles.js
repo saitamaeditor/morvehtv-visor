@@ -374,9 +374,22 @@ async function cargarPlan() {
   try { planInfo = await api('/api/pago/info'); } catch (e) { planInfo = null; }
   // Sin pagos no hay planes: nadie lleva la marca de VIP
   document.documentElement.classList.toggle('premium', !!(planInfo && planInfo.activo && planInfo.plan === 'premium'));
+  cargarAdsense();
   pintarBotonCuenta();
   avisoRenovar();
   return planInfo;
+}
+// Google AdSense (ca-pub-4674524691998401): solo para quien no es VIP (el VIP es sin anuncios) y no
+// dentro de la app de Android (las normas de AdSense no permiten sus anuncios en una app)
+function cargarAdsense() {
+  const vip = !!(planInfo && planInfo.activo && planInfo.plan === 'premium');
+  if (vip || window.MorvehApp || document.getElementById('adsense')) return;
+  const s = document.createElement('script');
+  s.id = 'adsense';
+  s.async = true;
+  s.crossOrigin = 'anonymous';
+  s.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4674524691998401';
+  document.head.append(s);
 }
 // Recordatorio de renovación (una vez al día por aparato): en el último mes de VIP y cuando
 // ya ha terminado
