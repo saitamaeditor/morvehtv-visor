@@ -444,6 +444,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // (vuelve a funcionar la página; el vídeo sigue en pausa hasta pulsar ▶)
+        web.onResume();
         actualizador.alVolver();
     }
 
@@ -457,6 +459,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         super.onPause();
+        // Al salir de la app (inicio, otra app, apagar la pantalla) el vídeo se para: también el
+        // de los reproductores de otras webs (enlaces), que la página no puede pausar
+        web.onPause();
         CookieManager.getInstance().flush();
     }
 

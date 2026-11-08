@@ -2034,9 +2034,16 @@ async function mantenerPantalla(si) {
 // Al cerrar o recargar la página se avisa al servidor para que pare ffmpeg
 window.addEventListener('pagehide', pararMedios);
 // Al volver a la app, si había un vídeo en marcha, se vuelve a pedir
+// Al salir (otra pestaña, botón de inicio del móvil o de la tele, apagar la pantalla) el vídeo se
+// pone en pausa: no sigue sonando por detrás. Al volver se queda en pausa donde iba, con ▶.
 document.addEventListener('visibilitychange', () => {
   const v = document.querySelector('#vcontenido video');
-  if (document.visibilityState === 'visible' && v && !v.paused) mantenerPantalla(true);
+  if (document.visibilityState === 'hidden') {
+    document.querySelectorAll('#vcontenido video, #vcontenido audio').forEach((m) => { if (!m.paused) m.pause(); });
+    mantenerPantalla(false);
+    return;
+  }
+  if (v && !v.paused) mantenerPantalla(true);
 });
 
 let listaVisor = [];
