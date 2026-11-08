@@ -292,21 +292,73 @@ function analizarUrl(u) {
   return { servidor, conocido: !!(s && id), id: id || null, url, iframe: iframeDe(url) };
 }
 
+// ---------- Idioma y calidad ----------
+// Lo que se escribe junto a los enlaces: «Latino: https://…», «CASTELLANO 1080p», «[VOSE] …».
+// En la misma línea vale para sus enlaces; en una línea sola («LATINO:»), para los de debajo
+// hasta el siguiente encabezado. El orden importa («sub español» es Subtitulado, no Castellano).
+export const IDIOMAS_ENLACE = ['Castellano', 'Latino', 'Subtitulado', 'Inglés', 'Dual'];
+const IDIOMAS = [
+  ['Subtitulado', /\b(subtitulad[oa]s?|subs?|vose|vos|v\.o\.s\.e?)\b/i],
+  ['Latino', /\b(latino|latinoamerica(no)?|lat|es-mx|es-la|español latino)\b/i],
+  ['Castellano', /\b(castellano|español|espanol|spanish|esp|cast|es-es|españa)\b/i],
+  ['Inglés', /\b(ingl[eé]s|english|eng)\b/i],
+  ['Dual', /\b(dual|multi(audio|idioma)?)\b/i],
+];
+export const CALIDADES_ENLACE = ['4K', '1080p', '720p', '480p'];
+const CALIDADES = [
+  ['4K', /\b(4k|2160p?|uhd)\b/i],
+  ['1080p', /\b(1080p?|full ?hd|fhd)\b/i],
+  ['720p', /\b(720p?|hd|hdrip)\b/i],
+  ['480p', /\b(480p?|sd|dvdrip)\b/i],
+];
+function etiquetasDe(texto) {
+  const t = texto.replace(/<[^>]*>/g, ' ');
+  return {
+    idioma: (IDIOMAS.find(([, re]) => re.test(t)) || [])[0] || null,
+    calidad: (CALIDADES.find(([, re]) => re.test(t)) || [])[0] || null,
+  };
+}
+
 // Texto con muchos enlaces (como venga: líneas, comas, iframes, HTML, BBCode…) o un array de
-// ellos → lista sin repetidos (el mismo vídeo en dos dominios espejo cuenta una vez)
+// ellos → lista sin repetidos (el mismo vídeo en dos dominios espejo cuenta una vez), cada uno
+// con su idioma y calidad si se dicen
 export function analizarEnlaces(entrada) {
-  const vistos = new Set();
+  const vistos = new Map();
   const lista = [];
   for (const t of Array.isArray(entrada) ? entrada : [entrada]) {
-    for (const bruto of extraerDirecciones(t)) {
-      const u = aUrl(bruto);
-      if (!u) continue;
-      const r = analizarUrl(u);
-      const clave = r.conocido ? `${r.servidor}|${r.id}` : r.url;
-      if (vistos.has(clave)) continue;
-      vistos.add(clave);
-      lista.push(r);
+    // (una etiqueta HTML partida en varias líneas se junta en una)
+    const lineas = String(t ?? '').replace(/<[^>]*>/g, (m) => m.replace(/\s+/g, ' ')).split(/\r?\n/);
+    let encabezado = { idioma: null, calidad: null };
+    for (const linea of lineas) {
+      const direcciones = extraerDirecciones(linea);
+      const propias = etiquetasDe(linea.replace(BUSCAR, ' '));
+      if (!direcciones.length) {
+        if (propias.idioma || propias.calidad) encabezado = propias;
+        continue;
+      }
+      const etiquetas = { idioma: propias.idioma || encabezado.idioma, calidad: propias.calidad || encabezado.calidad };
+      for (const bruto of direcciones) {
+        const u = aUrl(bruto);
+        if (!u) continue;
+        const r = { ...analizarUrl(u), ...etiquetas };
+        const clave = r.conocido ? `${r.servidor}|${r.id}` : r.url;
+        const previo = vistos.get(clave);
+        // Repetido: se queda el primero, con lo que dijera el otro de idioma y calidad
+        if (previo) { previo.idioma ||= r.idioma; previo.calidad ||= r.calidad; continue; }
+        vistos.set(clave, r);
+        lista.push(r);
+      }
     }
   }
   return lista;
+}
+
+// Contenido del archivo .url de una lista [{ url, idioma, calidad }]: formato de acceso directo
+// de Windows (URL=el principal) y debajo cada uno con su idioma y calidad delante
+export function archivoEnlaces(lista) {
+  const lineas = lista.map((x) => {
+    const etiqueta = [x.idioma, x.calidad].filter(Boolean).join(' ');
+    return `${etiqueta ? `${etiqueta}: ` : ''}${x.url}`;
+  });
+  return `[InternetShortcut]\r\nURL=${lista[0].url}\r\n${lineas.join('\r\n')}\r\n`;
 }

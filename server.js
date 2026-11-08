@@ -399,8 +399,10 @@ async function enlace(key, opcion = 0) {
   // códigos <iframe> pegados; enlaces-video.js reconoce el servidor (Voe, Streamwish,
   // Filelions…) y deja cada uno en su dirección «embed» limpia
   const contenido = (await r.Body.transformToString('utf-8')).replace(/^\s*URL=/gim, '');
-  const opciones = analizarEnlaces(contenido).slice(0, 12).map((o) => ({
+  const opciones = analizarEnlaces(contenido).slice(0, 30).map((o) => ({
     servidor: o.servidor,
+    idioma: o.idioma,
+    calidad: o.calidad,
     url: o.url,
     tipo: !o.conocido && STREAM.test(new URL(o.url).pathname) ? 'stream' : 'embed',
   }));
