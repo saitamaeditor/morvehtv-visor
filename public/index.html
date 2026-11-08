@@ -1727,6 +1727,19 @@
   .resultado-texto b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .resultado-texto small { font-size: 12.5px; color: var(--suave); }
   .con-buscador body { overflow: hidden; }
+  /* El menú, en su propia fila debajo del logo, la cuenta y «Buscar»: todas las secciones a la
+     vista (si no caben en una línea, pasan a la siguiente; nada escondido ni deslizable) */
+  header #pestanas { order: 2; flex: 1 1 100%; min-width: 0; flex-wrap: wrap; align-items: center; overflow: visible; padding: 0; margin: -2px 0 0;
+    -webkit-mask-image: none; mask-image: none; white-space: nowrap; gap: 2px clamp(14px, 1.6vw, 26px); }
+  header #pestanas .pestana { margin: 0; padding: 7px 2px; }
+  header .logo { flex: 1 1 auto; }
+  .destacado[hidden] + * { padding-top: calc(var(--alto-cabecera, 96px) + 14px) !important; }
+  html.en-portada { scroll-padding-top: calc(var(--alto-cabecera, 96px) + 16px); }
+  .destacado-texto { padding-top: calc(var(--alto-cabecera, 96px) + 10px); }
+  @media (max-width: 600px) {
+    header #pestanas { gap: 0 13px; }
+    header #pestanas .pestana { font-size: 12.5px; padding: 6px 1px; margin: 0; }
+  }
   /* Plataformas de streaming de películas: etiqueta en píldora y logotipos cuadrados redondeados */
   .plataformas-inicio { margin: clamp(6px, 1vw, 14px) 0 clamp(22px, 2.6vw, 38px); }
   .etiqueta-plataformas { border-color: rgba(0,163,255,.45); background: linear-gradient(90deg, rgba(0,163,255,.16), rgba(121,40,202,.12)); color: #fff;

@@ -286,7 +286,8 @@ function pintarPestanas() {
     const seguir = boton('Seguir viendo', () => irA(estado.prefijo === ':seguir' ? '' : ':seguir'), { vista: 'seguir' });
     const favoritos = boton('Favoritos', () => irA(estado.prefijo === ':favoritos' ? '' : ':favoritos'), { vista: 'favoritos' });
     nav.append(inicio, secciones, seguir, favoritos);
-    $('#directo').after(nav);
+    // (en su propia fila, debajo del logo y la cuenta, para que se vean todas las secciones)
+    $('header .logo').after(nav);
     api('/api/catalogo', { max: 1 }).then((d) => {
       for (const { cat, suyas } of categoriasDe(d.carpetas.map((x) => x.carpeta))) {
         secciones.append(boton(cat.nombre, () => irA(suyas[0]), { seccion: suyas[0] }));

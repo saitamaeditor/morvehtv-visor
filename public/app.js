@@ -361,6 +361,16 @@ function fila(titulo, irAlPulsar, clase = '') {
   return { s, c };
 }
 
+// La altura real de la cabecera (cambia según cuántas líneas ocupe el menú): en la portada va
+// fija encima del contenido, que empieza justo debajo
+(() => {
+  const h = document.querySelector('header');
+  if (!h) return;
+  const poner = () => document.documentElement.style.setProperty('--alto-cabecera', `${h.offsetHeight}px`);
+  poner();
+  if (window.ResizeObserver) new ResizeObserver(poner).observe(h); else addEventListener('resize', poner);
+})();
+
 // ---------- Buscador (botón «Buscar», Ctrl K) ----------
 // Busca al momento en todo el catálogo (películas y series) por su nombre; cada resultado lleva
 // su póster, título y año (de TMDB). Una película abre su ficha; una serie, su página.
