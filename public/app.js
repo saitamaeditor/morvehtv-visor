@@ -239,20 +239,27 @@ async function pintarSeccion(items) {
   espera.remove();
   if (!d || !Array.isArray(d.titulos)) { pintar.soloCarpeta = true; return pintar(); }
   const titulos = d.titulos;
+  // Como en las webs de cine: carteles con su nota, «Película»/«Serie», título y año; arriba, un
+  // subtítulo y las plataformas de ese tipo; y se van cargando de 36 en 36 con «Cargar más»
+  items.classList.add('vista-carteles');
+  const esSeries = titulos.filter((x) => x.tipo === 'carpeta').length > titulos.length / 2;
+  const cab = items.querySelector('.biblioteca');
+  if (cab && !cab.querySelector('.biblioteca-sub')) cab.append(el('p', 'biblioteca-sub', esSeries ? 'Todas las series, de la más nueva a la más antigua' : 'Las más recientes y destacadas'));
+  if (titulos.length) items.append(filaPlataformas(esSeries ? 'series' : 'peliculas'));
   const cuenta = items.querySelector('.biblioteca-cuenta');
   if (cuenta) cuenta.textContent = `${titulos.length} ${titulos.length === 1 ? 'título' : 'títulos'}`;
   if (!titulos.length) { items.append(el('div', 'vacio', 'Aún no hay nada en esta sección.')); return enfocarAlLlegar(); }
   // Orden: lo último subido primero, o de la A a la Z
   const orden = el('nav', 'categorias-chips orden-seccion');
   const tarjetas = [];
-  const colocar = () => {
-    const lista = ordenSeccion === 'az'
-      ? [...titulos].sort((a, b) => nombre(a.key).localeCompare(nombre(b.key), 'es', { numeric: true }))
-      : titulos;
-    tarjetas.forEach((t) => t.remove());
-    tarjetas.length = 0;
+  const TANDA = 36;
+  let puestos = 0;
+  let lista = titulos;
+  const masBoton = el('button', 'boton cargar-mas-seccion', 'Cargar más');
+  masBoton.onclick = () => { poner(); };
+  const poner = () => {
     const pelis = lista.filter((x) => x.tipo !== 'carpeta');
-    for (const x of lista) {
+    for (const x of lista.slice(puestos, puestos + TANDA)) {
       let t;
       if (x.tipo === 'carpeta') {
         t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: 'Serie', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
@@ -266,8 +273,20 @@ async function pintarSeccion(items) {
         conMeta(t, 'archivo', x.key); estrella(t, x.key, x);
       }
       tarjetas.push(t);
-      items.append(t);
+      items.insertBefore(t, masBoton.isConnected ? masBoton : null);
     }
+    puestos = Math.min(lista.length, puestos + TANDA);
+    if (puestos < lista.length) { if (!masBoton.isConnected) items.append(masBoton); masBoton.textContent = `Cargar más (${lista.length - puestos})`; } else masBoton.remove();
+  };
+  const colocar = () => {
+    lista = ordenSeccion === 'az'
+      ? [...titulos].sort((a, b) => nombre(a.key).localeCompare(nombre(b.key), 'es', { numeric: true }))
+      : titulos;
+    tarjetas.forEach((t) => t.remove());
+    tarjetas.length = 0;
+    puestos = 0;
+    masBoton.remove();
+    poner();
   };
   for (const [id, texto] of [['recientes', 'Más recientes'], ['az', 'A-Z']]) {
     const b = el('button', `chip-cat${id === ordenSeccion ? ' activa' : ''}`, texto);
@@ -907,6 +926,16 @@ async function conMeta(t, clase, clave, { ancha = false } = {}) {
   }
   // Película o serie: solo el cartel (el título y los datos se ven en la ficha y al pasar por encima)
   if (imagen) t.classList.add('con-imagen');
+  // En la página de una sección: título y año debajo, y la nota y «Película»/«Serie» en el cartel
+  if (t.closest('.vista-carteles')) {
+    t.querySelector('.nombre').textContent = d.titulo;
+    meta.textContent = [d.anio, d.tipo === 'serie' && d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+    if (imagen) {
+      if (d.valoracion) mini.append(el('span', 'nota-cartel', `★ ${Number(d.valoracion).toFixed(1)}`));
+      mini.append(el('span', 'tipo-cartel', d.tipo === 'serie' ? 'Serie' : 'Película'));
+    }
+    return;
+  }
   meta.textContent = [d.valoracion && `★ ${d.valoracion}`,
     d.tipo === 'serie' ? (d.temporadas && `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`) : d.duracion && `${d.duracion} min`,
     d.generos.slice(0, 2).join(', '), tam].filter(Boolean).join(' · ');
