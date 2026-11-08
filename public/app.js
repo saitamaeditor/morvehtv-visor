@@ -356,7 +356,12 @@ function iconoPlataforma(p, tipoPlat, cuantos) {
   const que = tipoPlat === 'series' ? (cuantos === 1 ? 'serie' : 'series') : (cuantos === 1 ? 'película' : 'películas');
   b.title = `${p.nombre} · ${cuantos} ${que}`;
   b.setAttribute('aria-label', b.title);
-  if (p.logo) {
+  if (p.especial) {
+    // «Sin plataforma»: lo que solo está en MorvehTV (con la nube del logo y cuántos hay)
+    b.classList.add('sin-plataforma');
+    const im = el('img'); im.src = '/icono.svg'; im.alt = '';
+    b.append(im, el('span', 'nombre-esp', 'Sin plataforma'), el('small', null, String(cuantos)));
+  } else if (p.logo) {
     const im = el('img'); im.src = p.logo; im.alt = ''; im.loading = 'lazy';
     im.onerror = () => { im.remove(); b.append(el('span', null, p.nombre)); };
     b.append(im);
@@ -385,7 +390,8 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const plat = ((d && d.plataformas) || []).find((p) => p.nombre === nombrePlat);
   // Cabecera con el logotipo de la plataforma
   const cab = el('div', 'biblioteca cabecera-plataforma');
-  if (plat && plat.logo) { const im = el('img', 'logo-plataforma'); im.src = plat.logo; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
+  const logoCab = plat && (plat.especial ? '/icono.svg' : plat.logo);
+  if (logoCab) { const im = el('img', `logo-plataforma${plat.especial ? ' especial' : ''}`); im.src = logoCab; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
   cab.append(el('h1', null, nombrePlat));
   let tipoVisto = ['peliculas', 'series'].includes(tipoInicial) ? tipoInicial : 'todo';
   // Para cambiar de plataforma sin volver a la portada (las que tienen de lo que se está viendo)
@@ -405,7 +411,9 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const lista = el('div', 'rejilla');
   const pintarLista = () => {
     lista.innerHTML = '';
-    const titulos = (plat ? plat.titulos : []).filter((x) => tipoVisto === 'todo' || (tipoVisto === 'series' ? x.tipo === 'carpeta' : x.tipo !== 'carpeta'));
+    // (series: Series, Docuseries, Series anime…; películas: Películas, Documentales, Películas anime…)
+    const esSerie = (x) => (x.serie ?? x.tipo === 'carpeta');
+    const titulos = (plat ? plat.titulos : []).filter((x) => tipoVisto === 'todo' || (tipoVisto === 'series' ? esSerie(x) : !esSerie(x)));
     if (!titulos.length) {
       lista.append(el('div', 'vacio', d && d.preparando ? 'Buscando en qué plataforma está cada título… vuelve en un par de minutos.' : `No hay nada de ${nombrePlat} todavía.`));
       return;
@@ -458,7 +466,10 @@ function pintarInicio(carpetas, archivos) {
       s.append(el('h2', 'etiqueta-plataformas', titulo));
       const fila = el('nav', 'iconos-plataformas');
       fila.setAttribute('aria-label', titulo);
-      for (const p of conAlgo) fila.append(iconoPlataforma(p, tipoPlat, p[campo]));
+      for (const p of conAlgo.filter((x) => !x.especial)) fila.append(iconoPlataforma(p, tipoPlat, p[campo]));
+      // Lo que no está en ninguna plataforma, aparte al final (con una raya que lo separa)
+      const sin = conAlgo.find((x) => x.especial);
+      if (sin) { if (fila.children.length) fila.append(el('span', 'separador-plataformas')); fila.append(iconoPlataforma(sin, tipoPlat, sin[campo])); }
       s.append(fila);
       plats.append(s);
     }

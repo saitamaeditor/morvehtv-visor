@@ -1018,6 +1018,13 @@
     border: 2px solid transparent; background: var(--color-plat); color: #fff; display: grid; place-items: center;
     box-shadow: 0 4px 14px rgba(0,0,0,.45); transition: transform .15s, border-color .15s; }
   .icono-plataforma img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* «Sin plataforma»: aparte, al final de la fila, tras una raya; la nube de MorvehTV y cuántos hay */
+  .separador-plataformas { flex: none; align-self: stretch; width: 1px; margin: 6px clamp(4px, .6vw, 10px); background: rgba(255,255,255,.18); }
+  .icono-plataforma.sin-plataforma { background: linear-gradient(150deg, #1d2a4a, #3a1d5c); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px 4px; }
+  .icono-plataforma.sin-plataforma img { width: 44%; height: auto; object-fit: contain; }
+  .icono-plataforma.sin-plataforma span { padding: 0; font-size: clamp(9.5px, .8vw, 12.5px); line-height: 1.1; }
+  .icono-plataforma.sin-plataforma small { font-size: clamp(9px, .7vw, 11px); font-weight: 700; color: #b8d4ff; }
+  .cabecera-plataforma .logo-plataforma.especial { padding: 8px; object-fit: contain; background: linear-gradient(150deg, #1d2a4a, #3a1d5c); }
   .icono-plataforma span { font: 800 clamp(11px, .9vw, 14px) system-ui, sans-serif; padding: 6px; text-align: center; line-height: 1.15; }
   .icono-plataforma:hover, .icono-plataforma:focus { transform: scale(1.08); border-color: #fff; outline: none; }
   .icono-plataforma.activa { border-color: #fff; box-shadow: 0 0 0 3px var(--acento), 0 4px 14px rgba(0,0,0,.45); }

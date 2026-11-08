@@ -991,15 +991,21 @@ async function plataformasDeTitulo(t) {
   plataformasTitulo.set(t.key, { hasta: Date.now() + (m?.encontrado ? 24 * 3600000 : 600000), lista });
   return lista;
 }
+// Películas o series según la sección: Series, Docuseries, Series anime, Novelas, Programas de TV…
+// son series (aunque el capítulo esté suelto); Películas, Documentales, Películas anime, Estrenos…
+// son películas. Lo que no está en ninguna plataforma va a su propio grupo, «Sin plataforma».
+const SIN_PLATAFORMA = 'Sin plataforma';
+const seccionDeSeries = (seccion) => /serie|novela|programa|reality|\btv\b|telenovela/i.test(seccion);
 async function construirPlataformas() {
   const c = await catalogoEntero();
-  const titulos = c.carpetas.flatMap((x) => x.titulos.map((t) => ({ ...t, seccion: x.carpeta })));
+  const titulos = c.carpetas.flatMap((x) => x.titulos.map((t) => ({ ...t, seccion: x.carpeta, serie: t.tipo === 'carpeta' || seccionDeSeries(x.carpeta) })));
   const por = new Map();
   let i = 0;
   const trabajar = async () => {
     while (i < titulos.length) {
       const t = titulos[i++];
-      for (const p of await plataformasDeTitulo(t)) {
+      const suyas = await plataformasDeTitulo(t);
+      for (const p of suyas.length ? suyas : [SIN_PLATAFORMA]) {
         if (!por.has(p)) por.set(p, []);
         por.get(p).push(t);
       }
@@ -1010,16 +1016,17 @@ async function construirPlataformas() {
   const logos = await meta.logosPlataformas().catch(() => ({}));
   // Primero las conocidas (en su orden: Netflix, Prime Video, Disney+…) y después todas las demás
   // que haya dado TMDB, de la que más títulos tiene a la que menos
-  const puesto = (n) => (orden.includes(n) ? orden.indexOf(n) : 1000);
+  const puesto = (n) => (n === SIN_PLATAFORMA ? 100000 : orden.includes(n) ? orden.indexOf(n) : 1000);
   return [...por]
     .sort((a, b) => puesto(a[0]) - puesto(b[0]) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, lista]) => ({
       nombre,
       logo: logos[nombre] ?? null,
+      ...(nombre === SIN_PLATAFORMA && { especial: true }),
       total: lista.length,
       // (para las dos filas de la portada: plataformas con películas y con series)
-      peliculas: lista.filter((t) => t.tipo !== 'carpeta').length,
-      series: lista.filter((t) => t.tipo === 'carpeta').length,
+      peliculas: lista.filter((t) => !t.serie).length,
+      series: lista.filter((t) => t.serie).length,
       titulos: lista.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)),
     }));
 }
