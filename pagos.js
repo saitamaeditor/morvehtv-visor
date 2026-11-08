@@ -316,8 +316,11 @@ const BANNER = /^[\w-]{8,80}$/.test(BANNER_KEY) && (() => {
 })();
 // Anuncios apagados salvo que se pida ANUNCIOS=1 (y haya alguna etiqueta VAST o un banner)
 export const CON_ANUNCIOS = process.env.ANUNCIOS === '1' && (VAST.length > 0 || BANNER);
+// Las redes externas (Adsterra…: vídeo antes de reproducir y su banner) están APAGADAS: los anuncios
+// de MorvehTV son solo los de Google AdSense, que pone la propia web (index.html, bloques ADSENSE)
+const REDES_EXTERNAS = false;
 async function anuncios() {
-  if (!CON_ANUNCIOS) return null;
+  if (!CON_ANUNCIOS || !REDES_EXTERNAS) return null;
   // «sonda»: el script de la red, para saber si un bloqueador (o el DNS) lo impide
   return { vast: VAST, banner: BANNER ? { ancho: BANNER_ANCHO, alto: BANNER_ALTO } : null, sonda: BANNER ? BANNER_SRC : null,
     previos: { cantidad: PREVIOS, esperaMin: 0 }, saltarEn: SALTAR, durante: { cadaMin: 0 }, pausa: false, banners: false, propios: [] };
@@ -327,7 +330,7 @@ async function anuncios() {
 // código de la red). Si el código de la red no carga (bloqueador), se avisa a la web para no
 // tener al usuario mirando un hueco vacío.
 export function paginaBanner() {
-  if (!CON_ANUNCIOS || !BANNER) return null;
+  if (!CON_ANUNCIOS || !BANNER || !REDES_EXTERNAS) return null;
   const opciones = JSON.stringify({ key: BANNER_KEY, format: 'iframe', height: BANNER_ALTO, width: BANNER_ANCHO, params: {} });
   const fuente = BANNER_SRC.replace(/[&"<>]/g, (c) => ({ '&': '&amp;', '"': '&quot;', '<': '&lt;', '>': '&gt;' })[c]);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">

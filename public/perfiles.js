@@ -410,13 +410,24 @@ function promoVIP(conBoton) {
   return c;
 }
 
+// Bloques de Google AdSense en la portada (arriba y cada tres filas) y encima de las carpetas, en
+// lugar de los de Adsterra. Solo si la página trae el código de AdSense: el servidor lo quita a
+// las cuentas VIP y administradoras y en la app de Android sin la WebView API for Ads.
 function anuncioBanner(donde) {
-  // Banners en la portada y las carpetas: solo si están activados (ANUNCIOS_BANNERS=1)
-  if (!conAnuncios() || !planInfo.anuncios.banners) return null;
-  const contenido = contenidoBanner();
-  if (!contenido) return null;
+  if (!document.querySelector('script[src*="adsbygoogle.js"]')) return null;
+  if (planInfo && planInfo.plan === 'premium') return null;
   const caja = el('aside', 'anuncio anuncio-' + donde);
-  caja.append(el('small', 'etiqueta-anuncio', 'Anuncio'), contenido);
+  caja.setAttribute('aria-label', 'Publicidad');
+  const ins = document.createElement('ins');
+  ins.className = 'adsbygoogle';
+  ins.style.display = 'block';
+  ins.dataset.adClient = 'ca-pub-4674524691998401';
+  ins.dataset.adSlot = '5877611157';
+  ins.dataset.adFormat = 'auto';
+  ins.dataset.fullWidthResponsive = 'true';
+  caja.append(el('small', 'etiqueta-anuncio', 'Publicidad'), ins);
+  // (AdSense lo rellena cuando ya está en la página: quien lo pide lo coloca justo después)
+  setTimeout(() => { if (caja.isConnected) { try { (window.adsbygoogle = window.adsbygoogle || []).push({}); } catch (e) {} } }, 0);
   return caja;
 }
 
