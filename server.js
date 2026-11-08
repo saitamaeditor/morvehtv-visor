@@ -995,6 +995,9 @@ async function plataformasDeTitulo(t) {
 // son series (aunque el capítulo esté suelto); Películas, Documentales, Películas anime, Estrenos…
 // son películas. Lo que no está en ninguna plataforma va a su propio grupo, «Sin plataforma».
 const SIN_PLATAFORMA = 'Sin plataforma';
+// Las plataformas de streaming principales (en España), en el orden en que salen
+const PRINCIPALES = ['Netflix', 'Prime Video', 'Disney+', 'HBO Max', 'Movistar Plus+', 'Apple TV+', 'SkyShowtime', 'Filmin',
+  'Atresplayer', 'Crunchyroll', 'Paramount+', 'RTVE Play'];
 const seccionDeSeries = (seccion) => /serie|novela|programa|reality|\btv\b|telenovela/i.test(seccion);
 async function construirPlataformas() {
   const c = await catalogoEntero();
@@ -1004,7 +1007,9 @@ async function construirPlataformas() {
   const trabajar = async () => {
     while (i < titulos.length) {
       const t = titulos[i++];
-      const suyas = await plataformasDeTitulo(t);
+      // Solo las plataformas principales; lo que solo está en otras (Pluto TV, Rakuten, Plex…),
+      // a «Sin plataforma»
+      const suyas = (await plataformasDeTitulo(t)).filter((p) => PRINCIPALES.includes(p));
       for (const p of suyas.length ? suyas : [SIN_PLATAFORMA]) {
         if (!por.has(p)) por.set(p, []);
         por.get(p).push(t);
@@ -1016,7 +1021,7 @@ async function construirPlataformas() {
   const logos = await meta.logosPlataformas().catch(() => ({}));
   // Primero las conocidas (en su orden: Netflix, Prime Video, Disney+…) y después todas las demás
   // que haya dado TMDB, de la que más títulos tiene a la que menos
-  const puesto = (n) => (n === SIN_PLATAFORMA ? 100000 : orden.includes(n) ? orden.indexOf(n) : 1000);
+  const puesto = (n) => (n === SIN_PLATAFORMA ? 100000 : PRINCIPALES.includes(n) ? PRINCIPALES.indexOf(n) : orden.includes(n) ? orden.indexOf(n) : 1000);
   return [...por]
     .sort((a, b) => puesto(a[0]) - puesto(b[0]) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, lista]) => ({
