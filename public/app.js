@@ -375,6 +375,7 @@ async function pintarListas(sitio) {
   ];
   let puestas = 0;
   for (const [nombreFila, lista, top] of filas) {
+    if (nombreFila === 'Tendencias de series') sitio.append(filaPlataformas('series'));
     if (!lista || lista.length < 3) continue;
     const f = fila(nombreFila, null, top ? 'top10' : '');
     f.s.classList.add(top ? 'fila-top' : 'fila-lista');
@@ -486,6 +487,27 @@ function iconoPlataforma(p, tipoPlat, cuantos) {
   b.onclick = () => irA(`:plataforma/${p.nombre}/${tipoPlat}`);
   return b;
 }
+// Fila de logotipos de las plataformas que tienen películas (o series); cada uno abre esa
+// plataforma con solo ese tipo
+function filaPlataformas(tipoPlat) {
+  const plats = el('div', 'plataformas-inicio');
+  plats.hidden = true;
+  pedirPlataformas().then((d) => {
+    if (!d || !plats.isConnected || !d.plataformas.length) return;
+    const titulo = tipoPlat === 'series' ? 'Plataformas de streaming · Series' : 'Plataformas de streaming · Películas';
+    const conAlgo = d.plataformas.filter((p) => p[tipoPlat] > 0);
+    if (!conAlgo.length) return;
+    const s = el('section', 'fila-plataformas');
+    s.append(el('h2', 'etiqueta-plataformas', titulo));
+    const fila = el('nav', 'iconos-plataformas');
+    fila.setAttribute('aria-label', titulo);
+    for (const p of conAlgo) fila.append(iconoPlataforma(p, tipoPlat, p[tipoPlat]));
+    s.append(fila);
+    plats.append(s);
+    plats.hidden = false;
+  });
+  return plats;
+}
 let plataformasPedidas = null;
 function pedirPlataformas() {
   if (!plataformasPedidas) {
@@ -509,8 +531,8 @@ async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
   const cab = el('div', 'biblioteca cabecera-plataforma');
   if (plat && plat.logo) { const im = el('img', 'logo-plataforma'); im.src = plat.logo; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
   cab.append(el('h1', null, nombrePlat));
-  // (solo películas: las series no salen en las plataformas)
-  let tipoVisto = 'peliculas';
+  // Solo películas o solo series (lo que se eligió en la portada)
+  let tipoVisto = tipoInicial === 'series' ? 'series' : 'peliculas';
   // Para cambiar de plataforma sin volver a la portada (las que tienen de lo que se está viendo)
   const chips = el('nav', 'iconos-plataformas pequenos');
   const pintarIconos = () => {
@@ -569,24 +591,8 @@ function pintarInicio(carpetas, archivos) {
   // de su fila de novedades)
   // Plataformas (Netflix, Prime Video…) con su logotipo, en dos filas: las que tienen películas y
   // las que tienen series. Cada icono abre esa plataforma con ese tipo ya elegido.
-  const plats = el('div', 'plataformas-inicio');
-  plats.hidden = true;
-  items.append(plats);
-  pedirPlataformas().then((d) => {
-    if (!d || !plats.isConnected || !d.plataformas.length) return;
-    for (const [tipoPlat, titulo, campo] of [['peliculas', 'Plataformas de streaming de películas', 'peliculas']]) {
-      const conAlgo = d.plataformas.filter((p) => p[campo] > 0);
-      if (!conAlgo.length) continue;
-      const s = el('section', 'fila-plataformas');
-      s.append(el('h2', 'etiqueta-plataformas', titulo));
-      const fila = el('nav', 'iconos-plataformas');
-      fila.setAttribute('aria-label', titulo);
-      for (const p of conAlgo) fila.append(iconoPlataforma(p, tipoPlat, p[campo]));
-      s.append(fila);
-      plats.append(s);
-    }
-    plats.hidden = !plats.children.length;
-  });
+  // (la de películas aquí arriba; la de series, delante de «Tendencias de series»)
+  items.append(filaPlataformas('peliculas'));
   // Plan Básico: un anuncio debajo de las categorías
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);

@@ -1044,8 +1044,7 @@ async function plataformasDeTitulo(t) {
 }
 async function construirPlataformas() {
   const c = await catalogoEntero();
-  // Solo películas (vídeos sueltos): las series no salen en las plataformas
-  const titulos = c.carpetas.flatMap((x) => x.titulos.filter((t) => t.tipo !== 'carpeta').map((t) => ({ ...t, seccion: x.carpeta })));
+  const titulos = c.carpetas.flatMap((x) => x.titulos.map((t) => ({ ...t, seccion: x.carpeta })));
   const por = new Map();
   let i = 0;
   const trabajar = async () => {
