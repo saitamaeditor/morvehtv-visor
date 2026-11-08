@@ -375,7 +375,20 @@ async function pintarDestacado(caja, d, carpetas) {
     const serie = x.tipo === 'carpeta';
     texto.innerHTML = '';
     texto.append(el('span', 'destacado-etiqueta', serie ? 'SERIE · NUEVO EN MORVEHTV' : 'NUEVO EN MORVEHTV'), el('h1', null, m.titulo));
-    const datos = [m.valoracion && `★ ${Number(m.valoracion).toFixed(1)}`, m.anio,
+    // Insignias: la calidad (por el nombre del archivo: 4K, HDR, Full HD…) y la nota de TMDB
+    const insignias = el('div', 'destacado-insignias');
+    const nombreArchivo = String(x.key || '');
+    const calidad = /2160|\b4k\b|uhd/i.test(nombreArchivo) ? '4K UHD' : /1080/.test(nombreArchivo) ? 'Full HD' : /720/.test(nombreArchivo) ? 'HD' : null;
+    if (calidad) insignias.append(el('span', 'insignia calidad', calidad));
+    if (/hdr|dolby.?vision|\bdv\b/i.test(nombreArchivo)) insignias.append(el('span', 'insignia', 'HDR'));
+    if (/atmos/i.test(nombreArchivo)) insignias.append(el('span', 'insignia', 'Dolby Atmos'));
+    if (m.valoracion) {
+      const nota = el('span', 'insignia nota', '★ ');
+      nota.append(el('b', null, Number(m.valoracion).toFixed(1)), document.createTextNode(' TMDB'));
+      insignias.append(nota);
+    }
+    if (insignias.childNodes.length) texto.append(insignias);
+    const datos = [m.anio,
       serie ? (m.temporadas && `${m.temporadas} temporada${m.temporadas > 1 ? 's' : ''}`) : m.duracion && `${Math.floor(m.duracion / 60) ? `${Math.floor(m.duracion / 60)} h ` : ''}${m.duracion % 60} min`,
       (m.generos || []).slice(0, 3).join(' · ')].filter(Boolean);
     texto.append(el('div', 'destacado-datos', datos.join('   ·   ')));

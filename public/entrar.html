@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MorvehTV · Películas y series en todas tus pantallas</title>
 <meta name="description" content="MorvehTV: películas y series en HD en la web, el móvil, la tele y el iPhone, con tu propia lista de «Seguir viendo» y favoritos.">
-<meta name="theme-color" content="#0a0914">
+<meta name="theme-color" content="#0b0c0e">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icono.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icono-192.png">
@@ -26,7 +26,7 @@
     transform: rotate(-12deg); opacity: .8; filter: blur(1px) saturate(1.15); pointer-events: none; }
   .muro i { display: block; aspect-ratio: 2 / 3; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
   .velo { position: fixed; inset: 0; z-index: 1; pointer-events: none;
-    background: radial-gradient(ellipse at 75% 20%, rgba(224,69,155,.22), transparent 55%),
+    background: radial-gradient(ellipse at 75% 20%, rgba(0,163,255,.22), transparent 55%),
       radial-gradient(ellipse at 15% 85%, rgba(139,92,246,.18), transparent 55%),
       linear-gradient(90deg, rgba(11,11,16,.96) 0%, rgba(11,11,16,.8) 45%, rgba(11,11,16,.55) 100%),
       linear-gradient(0deg, rgba(11,11,16,1) 0%, rgba(11,11,16,0) 30%); }
@@ -39,25 +39,25 @@
   .marca img { width: 38px; height: 38px; }
   .marca span { color: var(--acento); }
   .boton-vip { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 0; border-radius: 999px; cursor: pointer;
-    background: linear-gradient(135deg, var(--acento), #b8327c); color: #fff; font: 700 15px system-ui, sans-serif; text-decoration: none;
-    box-shadow: 0 8px 24px rgba(224,69,155,.35); }
-  .boton-vip:hover, .boton-vip:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.45), 0 8px 24px rgba(224,69,155,.45); }
+    background: linear-gradient(135deg, #00a3ff, #7928ca); color: #fff; font: 700 15px system-ui, sans-serif; text-decoration: none;
+    box-shadow: 0 8px 24px rgba(0,163,255,.35); }
+  .boton-vip:hover, .boton-vip:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,255,255,.45), 0 8px 24px rgba(0,163,255,.45); }
 
   /* ---------- Portada: texto a la izquierda, tarjeta a la derecha ---------- */
   .portada { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 56px; align-items: center; min-height: calc(100vh - 170px); }
   .insignia { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
-    letter-spacing: .08em; text-transform: uppercase; color: #ff8cc6; border: 1px solid rgba(224,69,155,.45); background: rgba(224,69,155,.1); }
-  .insignia::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--acento); box-shadow: 0 0 0 0 rgba(224,69,155,.7); animation: latido 2s infinite; }
-  @keyframes latido { 70% { box-shadow: 0 0 0 8px rgba(224,69,155,0); } 100% { box-shadow: 0 0 0 0 rgba(224,69,155,0); } }
+    letter-spacing: .08em; text-transform: uppercase; color: #7cd0ff; border: 1px solid rgba(0,163,255,.45); background: rgba(0,163,255,.1); }
+  .insignia::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--acento); box-shadow: 0 0 0 0 rgba(0,163,255,.7); animation: latido 2s infinite; }
+  @keyframes latido { 70% { box-shadow: 0 0 0 8px rgba(0,163,255,0); } 100% { box-shadow: 0 0 0 0 rgba(0,163,255,0); } }
   h1.titulo { margin: 18px 0 2px; font-size: clamp(46px, 7vw, 84px); line-height: 1; font-weight: 900; letter-spacing: -.03em; }
   h1.titulo span { color: var(--acento); }
   .lema { margin: 8px 0 18px; font-size: clamp(22px, 2.6vw, 34px); font-weight: 800; line-height: 1.15;
-    background: linear-gradient(90deg, #ff6fb5, var(--acento2) 60%, var(--azul)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    background: linear-gradient(90deg, #5cc8ff, #00a3ff 45%, #9b5cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .intro { margin: 0 0 30px; max-width: 600px; font-size: 18px; color: #c9ced8; }
   .intro b { color: #fff; }
   .ventajas { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 18px; max-width: 760px; }
   .ventaja { display: flex; gap: 12px; align-items: flex-start; }
-  .ventaja .ico { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--borde); background: rgba(255,255,255,.04); color: #ff8cc6; }
+  .ventaja .ico { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; border: 1px solid var(--borde); background: rgba(255,255,255,.04); color: #7cd0ff; }
   .ventaja svg { width: 20px; height: 20px; }
   .ventaja b { display: block; font-size: 15px; line-height: 1.2; margin: 2px 0 4px; }
   .ventaja span { display: block; color: var(--tenue); font-size: 13px; line-height: 1.35; }
@@ -75,7 +75,7 @@
   .opcional { color: var(--tenue); font-weight: 400; }
   .campo { position: relative; margin-top: 6px; }
   input { width: 100%; padding: 12px 14px; font: 16px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.4); border: 1px solid #353a46; border-radius: 11px; }
-  input:focus { border-color: var(--acento); outline: none; box-shadow: 0 0 0 3px rgba(224,69,155,.25); }
+  input:focus { border-color: var(--acento); outline: none; box-shadow: 0 0 0 3px rgba(0,163,255,.25); }
   input.con-ojo { padding-right: 76px; }
   .ojo { position: absolute; right: 6px; top: 50%; margin-top: -16px; height: 32px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--suave); font: 600 13px system-ui, sans-serif; cursor: pointer; }
   .ojo:hover, .ojo:focus { color: #fff; background: #2a2e3a; outline: none; }
@@ -92,7 +92,7 @@
   .vip b { color: #ffb224; font-size: 16px; }
   .vip span { color: #c9ced8; font-size: 13.5px; line-height: 1.45; }
   .vip .vip-boton { margin-top: 6px; background: #ffb224; color: #111; }
-  .enlace { background: none; border: 0; padding: 0; color: #ff8cc6; font: inherit; font-weight: 600; cursor: pointer; }
+  .enlace { background: none; border: 0; padding: 0; color: #7cd0ff; font: inherit; font-weight: 600; cursor: pointer; }
   .enlace:focus { outline: 2px solid var(--acento); outline-offset: 2px; border-radius: 4px; }
   .acepto { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; color: var(--suave); font-size: 13.5px; line-height: 1.45; margin: 4px 0 14px; cursor: pointer; }
   .acepto input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; padding: 0; accent-color: var(--acento); }
@@ -136,8 +136,8 @@
   .plan small { color: var(--tenue); font-size: 12.5px; }
   .plan em { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 10px; border-radius: 999px;
     background: #ffb224; color: #111; font: 700 11px system-ui, sans-serif; font-style: normal; letter-spacing: .02em; }
-  .plan:hover, .plan:focus { outline: none; border-color: rgba(224,69,155,.6); transform: translateY(-2px); }
-  .plan.activo { border-color: var(--acento); background: rgba(224,69,155,.14); box-shadow: 0 0 0 2px var(--acento); }
+  .plan:hover, .plan:focus { outline: none; border-color: rgba(0,163,255,.6); transform: translateY(-2px); }
+  .plan.activo { border-color: var(--acento); background: rgba(0,163,255,.14); box-shadow: 0 0 0 2px var(--acento); }
   .plan.activo b { color: #fff; }
   .enviar.secundario { margin-top: 10px; background: #2a2e3a; }
   .enviar.secundario:hover, .enviar.secundario:focus { background: #353a48; }
@@ -153,7 +153,7 @@
     .portada { grid-template-columns: minmax(0, 1fr); gap: 28px; min-height: 0; padding-top: 6px; }
     .intro { font-size: 16.5px; margin-bottom: 22px; }
     .muro { grid-template-columns: repeat(6, 1fr); opacity: .35; }
-    .velo { background: radial-gradient(ellipse at 70% 0%, rgba(224,69,155,.25), transparent 60%), linear-gradient(0deg, rgba(11,11,16,1) 35%, rgba(11,11,16,.82) 100%); }
+    .velo { background: radial-gradient(ellipse at 70% 0%, rgba(0,163,255,.25), transparent 60%), linear-gradient(0deg, rgba(11,11,16,1) 35%, rgba(11,11,16,.82) 100%); }
   }
   @media (max-width: 560px) {
     .marca { font-size: 21px; } .marca img { width: 32px; height: 32px; }
@@ -174,17 +174,17 @@
   .cf-turnstile { margin: 0 0 12px; }
   @media (prefers-reduced-motion: reduce) { .insignia::before { animation: none; } .plataforma { transition: none; } }
   /* Estilo «Aurora» (el mismo de dentro): noche azul-violeta y el degradado del logo */
-  :root { --fondo: #0a0914; --marca: linear-gradient(120deg, #4f8cff 0%, #8e4ec6 52%, #e0459b 100%); }
-  body { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+  :root { --fondo: #0b0c0e; --marca: linear-gradient(110deg, #00a3ff 0%, #7928ca 100%); --acento: #00a3ff; --acento2: #7928ca; }
+  body { font-family: Inter, "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "SF Pro Display", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
   h1, h2 { letter-spacing: -.025em; }
   .marca span, h1.titulo span { background: var(--marca); -webkit-background-clip: text; background-clip: text; color: transparent; }
-  .tarjeta { background: rgba(19,17,31,.88); border-color: rgba(255,255,255,.09); box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05); }
-  .pestanas { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); border-radius: 999px; }
-  .pestana { border-radius: 999px; }
+  .tarjeta { background: rgba(18,19,22,.88); border-color: rgba(255,255,255,.09); box-shadow: 0 30px 80px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05); }
+  .pestanas { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); border-radius: 14px; }
+  .pestana { border-radius: 10px; }
   .pestana.activa { background: rgba(255,255,255,.12); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
   input { border-radius: 12px; }
-  input:focus { border-color: #a066ff; box-shadow: 0 0 0 3px rgba(160,102,255,.28); }
-  .enviar { background: var(--marca); border-radius: 999px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 10px 30px rgba(142,78,198,.38); transition: filter .2s; }
+  input:focus { border-color: #00a3ff; box-shadow: 0 0 0 3px rgba(0,163,255,.25); }
+  .enviar { background: var(--marca); border-radius: 12px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 12px 32px rgba(0,163,255,.28); transition: filter .2s; }
   .enviar:hover, .enviar:focus { filter: brightness(1.12); }
 </style>
 <!--TURNSTILE--><script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script><!--/TURNSTILE-->
