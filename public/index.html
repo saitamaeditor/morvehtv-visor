@@ -991,6 +991,15 @@
   .chip-cat { transition: background .15s, color .15s, transform .15s; }
   .tele .chip-cat { font-size: 2.4vh; padding: 1vh 1.6vw; }
   .tele .chip-cat:focus { transform: scale(1.08); }
+  /* Plataformas: cada botón con el color de la suya */
+  .plataformas-chips { align-items: center; margin-top: calc(-1 * clamp(8px, 1.2vw, 20px)); }
+  .chips-titulo { font: 700 clamp(12px, .9vw, 14px) system-ui, sans-serif; text-transform: uppercase; letter-spacing: .08em; opacity: .7; margin-right: 4px; }
+  .chip-plataforma { border-color: var(--color-plat); background: color-mix(in srgb, var(--color-plat) 22%, transparent); }
+  .chip-plataforma:hover, .chip-plataforma:focus, .chip-plataforma.activa { background: var(--color-plat); color: #fff; border-color: #fff; }
+  .chip-cat.activa { background: #fff; color: #0a0a0c; border-color: #fff; }
+  .chip-plataforma.activa { background: var(--color-plat); color: #fff; }
+  .vista-plataforma .plataformas-chips, .vista-plataforma .filtro-tipo { margin: 0 0 14px; }
+  .tele .chips-titulo { font-size: 2vh; }
   /* Filas */
   .fila-titulo { font-weight: 800; }
   .fila-titulo a:hover, .fila-titulo a:focus { color: #fff; }

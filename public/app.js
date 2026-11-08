@@ -61,6 +61,7 @@ async function cargar(mas = false) {
   if (estado.prefijo.startsWith(':')) {
     $('#cabecera').hidden = true; $('#mas').hidden = true;
     pintarMigas();
+    if (estado.prefijo.startsWith(':plataforma/')) return pintarPlataforma(estado.prefijo.slice(':plataforma/'.length));
     return pintarVistaPerfil(estado.prefijo.slice(1));
   }
   if (!mas) {
@@ -109,7 +110,7 @@ function pintarMigas() {
   m.append(casa);
   if (estado.prefijo.startsWith(':')) {
     separador();
-    m.append(el('span', 'actual', VISTAS_PERFIL[estado.prefijo.slice(1)]?.titulo ?? ''));
+    m.append(el('span', 'actual', estado.prefijo.startsWith(':plataforma/') ? estado.prefijo.slice(':plataforma/'.length) : VISTAS_PERFIL[estado.prefijo.slice(1)]?.titulo ?? ''));
   } else {
     partes.forEach((p, i) => { separador(); enlace(p, partes.slice(0, i + 1).join('/') + '/', i === partes.length - 1); });
   }
@@ -336,6 +337,77 @@ async function pintarDestacado(caja, d, carpetas) {
   caja.hidden = false;
 }
 
+// ---------- Plataformas ----------
+// Colores de cada una para su botón
+const COLOR_PLATAFORMA = {
+  Netflix: '#e50914', 'Prime Video': '#00a8e1', 'Disney+': '#113ccf', 'HBO Max': '#5822b4', 'Movistar Plus+': '#019df4',
+  'Apple TV+': '#555', SkyShowtime: '#0b6bff', Filmin: '#e3007e', Atresplayer: '#ff6600', Crunchyroll: '#f47521',
+  'Paramount+': '#0064ff', 'RTVE Play': '#d62c1f', Mitele: '#00b1e1', 'Rakuten TV': '#bf0000', 'Pluto TV': '#2e2e2e',
+};
+let plataformasPedidas = null;
+function pedirPlataformas() {
+  if (!plataformasPedidas) {
+    plataformasPedidas = api('/api/plataformas').catch(() => null);
+    // (mientras el servidor aún las está preparando, la próxima vez se vuelven a pedir)
+    plataformasPedidas.then((d) => { if (!d || d.preparando) setTimeout(() => { plataformasPedidas = null; }, 20000); else setTimeout(() => { plataformasPedidas = null; }, 300000); });
+  }
+  return plataformasPedidas;
+}
+function chipPlataforma(p, activa = false) {
+  const b = el('button', `chip-cat chip-plataforma${activa ? ' activa' : ''}`, p.nombre);
+  b.style.setProperty('--color-plat', COLOR_PLATAFORMA[p.nombre] || '#444');
+  b.title = `${p.total} título${p.total === 1 ? '' : 's'} en ${p.nombre}`;
+  b.onclick = () => irA(`:plataforma/${p.nombre}`);
+  return b;
+}
+async function pintarPlataforma(nombrePlat) {
+  const items = $('#items');
+  items.className = 'vista-plataforma';
+  items.innerHTML = '<div class="vacio">Cargando…</div>';
+  document.documentElement.classList.remove('en-portada');
+  const d = await pedirPlataformas();
+  if (estado.prefijo !== `:plataforma/${nombrePlat}`) return;
+  items.innerHTML = '';
+  const cab = el('div', 'biblioteca');
+  cab.append(el('h1', null, nombrePlat));
+  // Para cambiar de plataforma sin volver a la portada
+  const chips = el('nav', 'categorias-chips plataformas-chips');
+  for (const p of (d && d.plataformas) || []) chips.append(chipPlataforma(p, p.nombre === nombrePlat));
+  // Filtro: todo, solo películas o solo series
+  const plat = ((d && d.plataformas) || []).find((p) => p.nombre === nombrePlat);
+  const filtro = el('nav', 'categorias-chips filtro-tipo');
+  const lista = el('div', 'rejilla');
+  let tipoVisto = 'todo';
+  const pintarLista = () => {
+    lista.innerHTML = '';
+    const titulos = (plat ? plat.titulos : []).filter((x) => tipoVisto === 'todo' || (tipoVisto === 'series' ? x.tipo === 'carpeta' : x.tipo !== 'carpeta'));
+    if (!titulos.length) {
+      lista.append(el('div', 'vacio', d && d.preparando ? 'Buscando en qué plataforma está cada título… vuelve en un par de minutos.' : `No hay nada de ${nombrePlat} todavía.`));
+      return;
+    }
+    const pelis = titulos.filter((x) => x.tipo !== 'carpeta');
+    for (const x of titulos) {
+      if (x.tipo === 'carpeta') {
+        const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key) });
+        lista.append(t); conMeta(t, 'carpeta', x.key);
+      } else {
+        const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis) });
+        t.dataset.key = x.key; barraVisto(t);
+        lista.append(t); conMeta(t, 'archivo', x.key);
+      }
+    }
+  };
+  for (const [id, texto] of [['todo', 'Todo'], ['peliculas', 'Películas'], ['series', 'Series']]) {
+    const b = el('button', `chip-cat${id === tipoVisto ? ' activa' : ''}`, texto);
+    b.onclick = () => { tipoVisto = id; filtro.querySelectorAll('button').forEach((x) => x.classList.toggle('activa', x === b)); pintarLista(); };
+    filtro.append(b);
+  }
+  items.append(cab, chips, filtro, lista);
+  pintarLista();
+  const conMando = esTele || document.documentElement.classList.contains('usa-mando');
+  if (conMando && actual < 0) { const p = lista.querySelector('.item') || chips.querySelector('.activa'); if (p) p.focus(); }
+}
+
 let catalogoPedido = null;
 function pintarInicio(carpetas, archivos) {
   const items = $('#items');
@@ -355,6 +427,17 @@ function pintarInicio(carpetas, archivos) {
     cats.append(b);
   }
   items.append(cats);
+  // Plataformas (Netflix, Prime Video…): lo que se puede ver en cada una, esté en la carpeta que esté
+  const plats = el('nav', 'categorias-chips plataformas-chips');
+  plats.setAttribute('aria-label', 'Plataformas');
+  plats.hidden = true;
+  items.append(plats);
+  pedirPlataformas().then((d) => {
+    if (!d || !plats.isConnected || !d.plataformas.length) return;
+    plats.append(el('span', 'chips-titulo', 'Plataformas'));
+    for (const p of d.plataformas) plats.append(chipPlataforma(p));
+    plats.hidden = false;
+  });
   // Plan Básico: un anuncio debajo de las categorías
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);

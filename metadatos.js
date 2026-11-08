@@ -80,6 +80,44 @@ export function esAgrupadora(nombre) {
   return palabras.length > 0 && palabras.every((p) => AGRUPAN.has(p));
 }
 
+// ---------- Plataformas ----------
+// Dónde se puede ver cada título en España (TMDB «watch providers», datos de JustWatch), con un
+// nombre fijo por plataforma (TMDB tiene variantes: «Netflix basic with Ads», «Amazon Prime
+// Video with Ads»…). Solo las de suscripción (flatrate) y las gratuitas; no las de alquiler.
+// También cuentan las carpetas con su nombre («PELICULAS NETFLIX»).
+export const PLATAFORMAS = [
+  ['Netflix', /netflix/i],
+  ['Prime Video', /prime ?video|amazon/i],
+  ['Disney+', /disney/i],
+  ['HBO Max', /hbo|^max$|\bmax\b/i],
+  ['Movistar Plus+', /movistar/i],
+  ['Apple TV+', /apple ?tv/i],
+  ['SkyShowtime', /sky ?showtime/i],
+  ['Filmin', /filmin/i],
+  ['Atresplayer', /atres ?player|atresplayer/i],
+  ['Crunchyroll', /crunchyroll/i],
+  ['Paramount+', /paramount/i],
+  ['RTVE Play', /rtve/i],
+  ['Mitele', /mitele/i],
+  ['Rakuten TV', /rakuten/i],
+  ['Pluto TV', /pluto/i],
+];
+const REGION_PLATAFORMAS = () => process.env.TMDB_REGION || 'ES';
+function plataformaDe(nombre) {
+  return (PLATAFORMAS.find(([, re]) => re.test(String(nombre))) || [])[0] || null;
+}
+function plataformasTmdb(wp) {
+  const r = wp?.results?.[REGION_PLATAFORMAS()] ?? {};
+  const todas = [...(r.flatrate ?? []), ...(r.free ?? []), ...(r.ads ?? [])].map((p) => plataformaDe(p.provider_name)).filter(Boolean);
+  return [...new Set(todas)];
+}
+// Las carpetas de la ruta que nombran una plataforma («PELICULAS NETFLIX/», «DISNEY+/»…). Solo
+// las que únicamente agrupan: así «Mad Max - 2015/» nunca es HBO Max
+export function plataformasDeRuta(key) {
+  const carpetas = String(key).split('/').slice(0, -1);
+  return [...new Set(carpetas.filter((c) => esAgrupadora(c)).map(plataformaDe).filter(Boolean))];
+}
+
 // Las fichas de TMDB se reutilizan entre todos los episodios de una serie
 const fichas = new Map();
 const temporadas = new Map();
@@ -88,7 +126,7 @@ function ficha(tmdbId, tipo) {
   const clave = `${tipo}:${tmdbId}`;
   if (!fichas.has(clave)) {
     const ruta = `/${tipo === 'serie' ? 'tv' : 'movie'}/${tmdbId}`;
-    const p = pedir(ruta, { append_to_response: 'videos,credits' }).then(async (d) => {
+    const p = pedir(ruta, { append_to_response: 'videos,credits,watch/providers' }).then(async (d) => {
       const trailer = (d.videos?.results ?? []).find((v) => v.site === 'YouTube' && v.type === 'Trailer');
       // Sin sinopsis o cartel en español: los de la ficha en inglés
       const en = !d.overview || !d.poster_path ? await pedir(ruta, { language: 'en-US' }).catch(() => null) : null;
@@ -110,6 +148,7 @@ function ficha(tmdbId, tipo) {
         creadores: (d.created_by ?? []).map((c) => c.name),
         temporadas: d.number_of_seasons ?? null,
         trailer: trailer ? `https://www.youtube.com/watch?v=${trailer.key}` : null,
+        plataformas: plataformasTmdb(d['watch/providers']),
         tmdb: `https://www.themoviedb.org/${tipo === 'serie' ? 'tv' : 'movie'}/${d.id}`,
         web: `https://www.themoviedb.org/${tipo === 'serie' ? 'tv' : 'movie'}/${d.id}`,
       };

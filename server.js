@@ -974,6 +974,58 @@ async function catalogo(max) {
   }
   return r;
 }
+// ---------- Plataformas (Netflix, Prime Video, Disney+…) ----------
+// Cada título del catálogo, esté en la carpeta que esté, en las plataformas donde se puede ver
+// en España (su ficha de TMDB) o en la que diga su carpeta («PELICULAS NETFLIX»). El índice se
+// hace en segundo plano y se rehace cuando cambia el contenido; lo de cada título se recuerda
+// un día (las plataformas cambian su catálogo).
+const plataformasTitulo = new Map(); // clave → { hasta, lista }
+const indicePlat = { huella: null, construyendo: null, datos: null };
+async function plataformasDeTitulo(t) {
+  const c = plataformasTitulo.get(t.key);
+  if (c && c.hasta > Date.now()) return c.lista;
+  let m = null;
+  try { m = t.tipo === 'carpeta' ? await meta.deCarpeta(t.key) : await meta.deArchivo(t.key); } catch (e) {}
+  const lista = [...new Set([...meta.plataformasDeRuta(t.key), ...(m?.plataformas ?? [])])];
+  // (sin ficha todavía, p. ej. TMDB caído: se vuelve a mirar en 10 minutos, no en un día)
+  plataformasTitulo.set(t.key, { hasta: Date.now() + (m?.encontrado ? 24 * 3600000 : 600000), lista });
+  return lista;
+}
+async function construirPlataformas() {
+  const c = await catalogoEntero();
+  const titulos = c.carpetas.flatMap((x) => x.titulos.map((t) => ({ ...t, seccion: x.carpeta })));
+  const por = new Map();
+  let i = 0;
+  const trabajar = async () => {
+    while (i < titulos.length) {
+      const t = titulos[i++];
+      for (const p of await plataformasDeTitulo(t)) {
+        if (!por.has(p)) por.set(p, []);
+        por.get(p).push(t);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, trabajar));
+  const orden = meta.PLATAFORMAS.map(([n]) => n);
+  return [...por]
+    .sort((a, b) => orden.indexOf(a[0]) - orden.indexOf(b[0]))
+    .map(([nombre, lista]) => ({ nombre, total: lista.length, titulos: lista.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)) }));
+}
+async function plataformas() {
+  if (indicePlat.huella !== huella && !indicePlat.construyendo) {
+    const para = huella;
+    indicePlat.construyendo = construirPlataformas()
+      .then((datos) => { indicePlat.datos = datos; indicePlat.huella = para; })
+      .catch((e) => console.error(`Plataformas: ${e.message}`))
+      .finally(() => { indicePlat.construyendo = null; });
+  }
+  // La primera vez se espera un poco; después, lo último hecho mientras se rehace
+  if (!indicePlat.datos && indicePlat.construyendo) await Promise.race([indicePlat.construyendo, new Promise((ok) => setTimeout(ok, 8000))]);
+  return { preparando: !indicePlat.datos || !!indicePlat.construyendo, plataformas: indicePlat.datos ?? [] };
+}
+// (se empieza solo a los 2 minutos de arrancar, para que esté listo cuando alguien entre)
+setTimeout(() => plataformas().catch(() => {}), 120000).unref();
+
 async function catalogoEntero() {
   let objetos;
   if (foto) {
@@ -1058,6 +1110,7 @@ const rutas = {
   }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
   '/api/catalogo': (p) => catalogo(p.get('max')),
+  '/api/plataformas': () => plataformas(),
   // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
   '/api/tmdb-buscar': async (p, req, quien) => {
     if (!quien.admin) throw Object.assign(new Error('Solo los administradores pueden corregir fichas'), { status: 403 });
