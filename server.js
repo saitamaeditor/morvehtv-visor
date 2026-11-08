@@ -819,10 +819,17 @@ async function hlsIniciar(p, quien) {
   // Un 4K/HDR tarda más en convertirse: en vez de esperar 20 s de margen hacia atrás antes de
   // arrancar, se empieza 4 s antes del punto pedido (arranca mucho antes)
   if (!copiaVideo && pesado && margen > 4) { desde += margen - 4; margen = 4; }
+  // Si hay que convertir la imagen y el servidor ya está convirtiendo otro vídeo (o este es
+  // 4K/HDR), un ajuste de x264 más rápido: un poco menos de calidad por megabyte, pero va por
+  // delante de la reproducción en vez de quedarse atrás (y pararse)
+  const convirtiendo = [...sesionesHls.values()].filter((s) => s.convierte && s.ff.exitCode === null).length;
+  const preset = process.env.VISOR_PRESET || (pesado || convirtiendo >= 1 ? 'superfast' : 'veryfast');
   const args = [
     // -multiple_requests reutiliza la conexión con e2 al buscar el minuto (salta el doble de rápido)
     // -reconnect…: si e2 corta la conexión a mitad de película, ffmpeg la retoma donde iba
-    '-v', 'error', '-readrate', '3', ...RAFAGA, '-multiple_requests', '1',
+    // -progress: cada 2 s dice a qué velocidad va (para saber si va por delante del vídeo)
+    '-v', 'error', '-nostats', '-progress', 'pipe:1', '-stats_period', '2',
+    '-readrate', '3', ...RAFAGA, '-multiple_requests', '1',
     '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_on_network_error', '1', '-reconnect_delay_max', '10',
     '-ss', String(desde), '-i', url,
     // «?»: si una pista no está donde decía ffprobe, se sigue sin ella en vez de fallar
@@ -831,7 +838,7 @@ async function hlsIniciar(p, quien) {
       ? ['-c:v', 'copy', ...(copiaHevc ? ['-tag:v', 'hvc1'] : [])]
       // Fotograma clave justo cada 4 s (cada trozo empieza en uno: saltar es más fino) y tope de
       // caudal, para que una escena con mucho movimiento no pida de golpe más de lo que da la wifi
-      : ['-vf', filtro, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-maxrate', '10M', '-bufsize', '20M',
+      : ['-vf', filtro, '-c:v', 'libx264', '-preset', preset, '-crf', '21', '-maxrate', '10M', '-bufsize', '20M',
         '-profile:v', 'high', '-force_key_frames', 'expr:gte(t,n_forced*4)']),
     // El AAC estéreo se copia; el 5.1/7.1 (aunque sea AAC) se pasa a estéreo: muchas teles
     // Android no lo decodifican y se queda sin sonido
@@ -847,18 +854,40 @@ async function hlsIniciar(p, quien) {
       : ['-hls_segment_filename', path.join(carpeta, 's%05d.ts')]),
     path.join(carpeta, 'index.m3u8'),
   ];
-  const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
-  const sesion = { ff, carpeta, ultimo: Date.now(), errores: '', usuario: quien?.cuenta.usuario };
+  const ff = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  const sesion = {
+    ff, carpeta, ultimo: Date.now(), errores: '', usuario: quien?.cuenta.usuario,
+    convierte: !copiaVideo, preset: copiaVideo ? 'copia' : preset, inicio: Date.now(), velocidad: null, avisado: false,
+    tipo: `${info.video || '?'} ${info.resolucion || ''}`.trim(),
+  };
   sesionesHls.set(id, sesion);
   ff.stderr.on('data', (d) => (sesion.errores = (sesion.errores + d).slice(-2000)));
+  // Velocidad de la conversión (1x = tan rápido como se ve; por debajo, el vídeo acaba parándose)
+  let resto = '';
+  ff.stdout.on('data', (d) => {
+    resto += d;
+    const lineas = resto.split('\n'); resto = lineas.pop();
+    for (const l of lineas) {
+      const v = l.match(/^speed=\s*([\d.]+)x/);
+      if (!v) continue;
+      sesion.velocidad = Number(v[1]);
+      // Tras el arranque (que va a ráfagas), si va más lento que el vídeo se deja anotado
+      if (!sesion.avisado && Date.now() - sesion.inicio > 40000 && sesion.velocidad < 1) {
+        sesion.avisado = true;
+        console.warn(`Conversión lenta: ${sesion.velocidad}x (${sesion.tipo}, ${sesion.preset}, ${[...sesionesHls.values()].filter((s) => s.ff.exitCode === null).length} vídeos a la vez)`);
+      }
+    }
+  });
   ff.on('close', (code) => code && sesion.errores && console.error(`ffmpeg (${key} @${desde}s): ${sesion.errores.trim().slice(-300)}`));
 
   // Espera a que la lista cubra los segundos pedidos («margen»: el cliente empieza un poco
-  // antes del punto elegido para poder retroceder sin volver a preparar)
+  // antes del punto elegido para poder retroceder sin volver a preparar) y unos 10 s más de
+  // colchón, para que un bache al empezar no pare la imagen (si tarda, con 2 s basta)
   for (let i = 0; i < 150; i++) {
     const lista = await readFile(path.join(carpeta, 'index.m3u8'), 'utf8').catch(() => '');
     const preparado = [...lista.matchAll(/#EXTINF:([\d.]+)/g)].reduce((s, m) => s + Number(m[1]), 0);
-    if (preparado > 0 && (preparado >= margen + 2 || ff.exitCode !== null)) return { id, url: `/hls/${id}/index.m3u8`, desde, hevc: copiaHevc };
+    const listo = preparado >= margen + 10 || (preparado >= margen + 2 && i >= 30);
+    if (preparado > 0 && (listo || ff.exitCode !== null)) return { id, url: `/hls/${id}/index.m3u8`, desde, hevc: copiaHevc };
     if (ff.exitCode !== null) break;
     await new Promise((r) => setTimeout(r, 200));
   }
@@ -1292,7 +1321,9 @@ http
         return enviar(res, 200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }, pagina);
       }
       // Para que Render sepa que está viva
-      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, intros: estadoIntros, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, prueba: pruebaVideo } });
+      if (url.pathname === '/api/salud') return json(res, 200, { ok: true, version: VERSION, mantenimiento: (await enMantenimiento()).activo, intros: estadoIntros, arranque: ARRANQUE, perfiles: perfiles.escritura, telegram: telegram.estado, tmdb: await meta.saludTmdb(), pagos: pagos.estado, video: { maxAlto: MAX_ALTO, hdrASdr: HAY_TONEMAP && TONEMAP, nucleos: os.cpus().length, carga: os.loadavg().map((x) => Math.round(x * 10) / 10), prueba: pruebaVideo,
+        // Lo que se está preparando ahora (sin nombres ni de quién): velocidad (1x = tan rápido como se ve)
+        sesiones: [...sesionesHls.values()].filter((s) => s.ff.exitCode === null).map((s) => ({ tipo: s.tipo, preset: s.preset, velocidad: s.velocidad, minutos: Math.round((Date.now() - s.inicio) / 6000) / 10 })) } });
       // Panel de gestión: otra web, entra con su token (y CORS solo para ella)
       if (panel.esRuta(url.pathname)) return await panel.atender(url.pathname, req, res, json, acceso.ipDe(req));
       // Reproductores tipo Xtream: entran con usuario y contraseña en cada petición, sin cookie
