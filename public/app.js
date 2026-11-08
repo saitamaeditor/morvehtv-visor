@@ -2044,12 +2044,16 @@ async function abrirEnlace(f, i, c, opcion = 0) {
     return;
   }
   if (actual !== i) return;
-  // Al abrir el título (sin elegir servidor), el primero en el idioma que eligió esta persona la
-  // última vez, si lo hay
+  // Al abrir el título (sin elegir servidor), el que eligió esta persona la última vez: mismo
+  // servidor e idioma; si no está, el idioma; si no, el servidor (el que le fue fluido)
   if (opcion === 0 && d.opciones && d.opciones.length > 1) {
-    let preferido = null;
-    try { preferido = localStorage.getItem('morvehtv-idioma-enlace'); } catch (e) {}
-    const n = preferido ? d.opciones.findIndex((o) => o.idioma === preferido) : -1;
+    let idioma = null, servidor = null;
+    try { idioma = localStorage.getItem('morvehtv-idioma-enlace'); servidor = localStorage.getItem('morvehtv-servidor-enlace'); } catch (e) {}
+    const buscar = (fn) => d.opciones.findIndex(fn);
+    let n = -1;
+    if (idioma && servidor) n = buscar((o) => o.idioma === idioma && o.servidor === servidor);
+    if (n < 0 && idioma) n = buscar((o) => o.idioma === idioma);
+    if (n < 0 && servidor) n = buscar((o) => o.servidor === servidor);
     if (n > 0) return abrirEnlace(f, i, c, n);
   }
   // Con varios servidores en el archivo, una fila para cambiar de uno a otro (siempre visible,
@@ -2062,7 +2066,10 @@ async function abrirEnlace(f, i, c, opcion = 0) {
       const extra = [o.idioma, o.calidad].filter(Boolean).join(' · ');
       const b = el('button', `boton${n === d.opcion ? ' activo' : ''}`, `${o.servidor} ${n + 1}${extra ? ` · ${extra}` : ''}`);
       b.onclick = () => {
-        if (o.idioma) { try { localStorage.setItem('morvehtv-idioma-enlace', o.idioma); } catch (e) {} }
+        try {
+          if (o.idioma) localStorage.setItem('morvehtv-idioma-enlace', o.idioma);
+          localStorage.setItem('morvehtv-servidor-enlace', o.servidor);
+        } catch (e) {}
         if (n !== d.opcion) abrirEnlace(f, i, c, n);
       };
       fila.append(b);
