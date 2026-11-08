@@ -788,9 +788,14 @@ async function pintarCabecera(prefijo) {
 const pista = (p, n) => [(p.titulo || p.idioma || `Pista ${n + 1}`).toUpperCase(), p.codec].filter(Boolean).join(' · ');
 
 // Ficha completa: datos de TMDB + datos técnicos del archivo (si se pasan)
+// Diseño «héroe»: título grande, eslogan, una línea de datos (nota, año, duración, géneros),
+// los botones y la sinopsis con «Ver más»; detrás, el fondo de la película a lo grande
 function fichaHtml(d, { archivo, medio, clave } = {}) {
-  const f = el('div', 'ficha');
+  const f = el('div', 'ficha heroe');
   const poster = d?.encontrado && (d.temporada?.poster ?? d.poster ?? d.episodio?.imagen);
+  // Con fondo grande (película en el visor) el póster no hace falta; en la cabecera de una
+  // serie el fondo lo pone #cabecera
+  if (d?.encontrado && d.fondo && archivo) { f.classList.add('con-fondo'); f.style.setProperty('--fondo-img', `url("${d.fondo}")`); }
   if (poster) {
     const img = el('img', 'cartel'); img.src = poster; img.alt = ''; f.append(img);
   }
@@ -798,14 +803,26 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
   f.append(cuerpo);
 
   if (d?.encontrado) {
-    cuerpo.append(el('h2', null, `${d.titulo}${d.anio ? ` (${d.anio})` : ''}`));
-    if (d.tituloOriginal && d.tituloOriginal !== d.titulo) cuerpo.append(el('div', 'suave', d.tituloOriginal));
+    // En el visor (película): «← Volver» arriba, como en las webs de cine
+    if (archivo) {
+      const volver = el('button', 'boton volver-ficha', '← Volver');
+      volver.onclick = () => cerrar();
+      cuerpo.append(volver);
+    }
+    cuerpo.append(el('h2', 'titulo-heroe', d.titulo));
+    if (d.tituloOriginal && d.tituloOriginal !== d.titulo) cuerpo.append(el('div', 'suave original', d.tituloOriginal));
+    if (d.eslogan) cuerpo.append(el('p', 'eslogan', `«${d.eslogan.replace(/^["«“]|["»”]$/g, '')}»`));
     const chips = el('div', 'chips datos');
-    const chip = (t) => t && chips.append(el('span', 'chip', t));
-    chip(d.valoracion && `★ ${d.valoracion}`);
-    chip(d.tipo === 'serie' ? `Serie${d.temporadas ? ` · ${d.temporadas} temp.` : ''}` : 'Película');
-    chip((d.episodio?.duracion ?? d.duracion) && `${d.episodio?.duracion ?? d.duracion} min`);
-    d.generos.forEach(chip);
+    if (d.valoracion) {
+      // La nota en %, con color según lo buena que sea
+      const pct = Math.round(Number(d.valoracion) * 10);
+      chips.append(el('span', `nota-pct ${pct >= 70 ? 'alta' : pct >= 50 ? 'media' : 'baja'}`, `★ ${pct}%`));
+    }
+    if (d.anio) chips.append(el('span', 'dato', d.anio));
+    const dur = d.episodio?.duracion ?? d.duracion;
+    if (d.tipo === 'serie' && d.temporadas) chips.append(el('span', 'dato', `${d.temporadas} temporada${d.temporadas > 1 ? 's' : ''}`));
+    if (dur) chips.append(el('span', 'dato duracion', `${Math.floor(dur / 60) ? `${Math.floor(dur / 60)} h ` : ''}${dur % 60} min`));
+    d.generos.forEach((g) => chips.append(el('span', 'chip', g)));
     cuerpo.append(chips);
     if (d.temporada) {
       const t = d.temporada;
@@ -817,7 +834,20 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
       if (d.episodio.fecha) cuerpo.append(el('div', 'suave', `Emitido el ${new Date(d.episodio.fecha).toLocaleDateString('es-ES')}`));
       if (d.episodio.sinopsis) cuerpo.append(el('p', null, d.episodio.sinopsis));
     }
-    if (d.sinopsis) cuerpo.append(el('p', d.episodio || (d.temporada && d.temporada.sinopsis) ? 'suave' : null, d.sinopsis));
+    // Botones (aquí se pone delante «▶ Reproducir»): favoritos, tráiler y de dónde salen los datos
+    const enlaces = el('div', 'chips acciones');
+    const objetivo = archivo ? archivo.key : clave;
+    if (yo && objetivo) enlaces.append(botonFavorito(objetivo, archivo));
+    if (d.trailer) {
+      const t = Object.assign(el('a', 'boton trailer'), { href: d.trailer, target: '_blank', rel: 'noopener' });
+      t.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>TRÁILER';
+      enlaces.append(t);
+    }
+    // (TMDB o, si no lo tenía, TVmaze, AniList o Wikipedia)
+    const web = d.web || d.tmdb;
+    if (web) enlaces.append(Object.assign(el('a', 'boton fuente', `${d.fuente || 'TMDB'} ↗`), { href: web, target: '_blank', rel: 'noopener' }));
+    cuerpo.append(enlaces);
+    if (d.sinopsis) cuerpo.append(el('p', `sinopsis${d.episodio || (d.temporada && d.temporada.sinopsis) ? ' suave' : ''}`, d.sinopsis));
     const linea = (t, v) => {
       if (!v?.length) return;
       const l = el('div', 'linea');
@@ -827,18 +857,29 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
     linea('Dirección', d.direccion);
     linea('Creada por', d.creadores);
     linea('Reparto', d.reparto);
-    // En el móvil la sinopsis y el reparto se recortan para que se vea antes lo de debajo
-    const mas = el('button', 'boton ver-mas', 'Ver más ▾');
+    // La sinopsis se recorta a 3 líneas (y el reparto se esconde) hasta pulsar «Ver más»
+    const mas = el('button', 'ver-mas', 'Ver más ▾');
     mas.onclick = () => { const si = f.classList.toggle('entera'); mas.textContent = si ? 'Ver menos ▴' : 'Ver más ▾'; };
     cuerpo.append(mas);
-    const enlaces = el('div', 'chips');
-    if (d.trailer) enlaces.append(Object.assign(el('a', 'boton', '▶ Tráiler'), { href: d.trailer, target: '_blank', rel: 'noopener' }));
-    // De dónde salen los datos: TMDB o, si no lo tenía, TVmaze, AniList o Wikipedia
-    const web = d.web || d.tmdb;
-    if (web) enlaces.append(Object.assign(el('a', 'boton', `${d.fuente || 'TMDB'} ↗`), { href: web, target: '_blank', rel: 'noopener' }));
-    const objetivo = archivo ? archivo.key : clave;
-    if (yo && objetivo) enlaces.prepend(botonFavorito(objetivo, archivo));
-    cuerpo.append(enlaces);
+    // Compartir: el enlace a su carpeta (el mismo que el «Ver ahora» de Telegram)
+    const carpeta = objetivo ? (objetivo.endsWith('/') ? objetivo : objetivo.slice(0, objetivo.lastIndexOf('/') + 1)) : '';
+    if (carpeta) {
+      const comp = el('div', 'compartir');
+      comp.append(el('span', null, `Compartir ${d.tipo === 'serie' ? 'serie' : 'película'} en:`));
+      const b = el('button', 'boton compartir-boton');
+      b.title = 'Compartir'; b.setAttribute('aria-label', 'Compartir');
+      b.innerHTML = '<svg class="icono" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>';
+      b.onclick = async () => {
+        const url = `${location.origin}/#${encodeURIComponent(carpeta)}`;
+        const datos = { title: `${d.titulo} · MorvehTV`, text: `Mira «${d.titulo}» en MorvehTV`, url };
+        try {
+          if (navigator.share) return await navigator.share(datos);
+        } catch (e) { if (e && e.name === 'AbortError') return; }
+        try { await navigator.clipboard.writeText(url); aviso('Enlace copiado'); } catch (e) { prompt('Copia el enlace:', url); }
+      };
+      comp.append(b);
+      cuerpo.append(comp);
+    }
   } else if (d) {
     cuerpo.append(el('h2', null, 'Sin datos en ninguna fuente'));
     cuerpo.append(el('p', 'suave', d.buscado ? `No se encontró «${d.buscado}». Puedes buscarlo a mano:` : 'Puedes buscarlo a mano:'));
@@ -857,7 +898,10 @@ function fichaHtml(d, { archivo, medio, clave } = {}) {
       fila('Audio', medio.audios.map((p, n) => [nombres[n], p.codec && p.codec.toUpperCase()].filter(Boolean).join(' · ')).join(' | '));
       fila('Subtítulos', medio.subtitulos?.map(pista).join(' | '));
     }
-    cuerpo.append(tec);
+    // Los datos del archivo, plegados: no son lo primero que se busca en la ficha
+    const det = el('details', 'detalles-tecnicos');
+    det.append(el('summary', null, 'Detalles técnicos'), tec);
+    cuerpo.append(det);
   }
   if (clave && d && typeof yo !== 'undefined' && yo && yo.admin) cuerpo.append(corrector(clave, d));
   return f;

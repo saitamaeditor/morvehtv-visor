@@ -1474,6 +1474,98 @@
   .pie p { margin: 0; max-width: 70ch; }
   .pie a { color: #c7c7cc; text-decoration: none; }
   .pie a:hover, .pie a:focus-visible { color: #fff; text-decoration: underline; }
+
+  /* ================= Ficha «héroe» (película y serie) =================
+     El fondo de la película a lo grande a la derecha, fundido hacia la izquierda y hacia abajo;
+     a la izquierda, título enorme, eslogan, la línea de datos, los botones grandes, la sinopsis
+     de 3 líneas con «Ver más» y la caja de compartir */
+  .ficha.heroe { background: transparent; border: 0; border-radius: 0; padding: 0; max-width: none; }
+  .ficha.heroe .cuerpo { max-width: 780px; gap: 14px; }
+  .ficha.heroe.con-fondo img.cartel { display: none; }
+  #vcontenido.solo-ficha { padding: 0; justify-content: flex-start; align-items: stretch; }
+  #vcontenido.solo-ficha > .ficha.heroe:not(.con-fondo) { padding: clamp(70px, 9vh, 110px) clamp(18px, 6vw, 110px) 40px; }
+  #vcontenido .ficha.heroe.con-fondo { flex: 1 0 auto; min-height: 100%; align-items: center;
+    padding: clamp(80px, 12vh, 150px) clamp(18px, 6vw, 110px) clamp(32px, 6vh, 70px);
+    background: linear-gradient(90deg, var(--fondo) 0%, rgba(11,12,14,.94) 26%, rgba(11,12,14,.55) 54%, rgba(11,12,14,.12) 100%),
+      linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,14,0) 36%), var(--fondo-img) right top / cover no-repeat, var(--fondo); }
+  /* La barra de arriba del visor flota sobre la ficha, transparente */
+  #visor:not(.cine):has(#vcontenido.solo-ficha) { background: var(--fondo); }
+  #visor:not(.cine):has(#vcontenido.solo-ficha) .barra { position: absolute; top: 0; left: 0; right: 0; z-index: 3; border: 0;
+    background: linear-gradient(180deg, rgba(11,12,14,.85), rgba(11,12,14,0)); padding: 14px clamp(14px, 3vw, 40px) 26px; }
+  #visor:not(.cine):has(#vcontenido.solo-ficha) #vtitulo, #visor:not(.cine):has(#vcontenido.solo-ficha) #vmeta { visibility: hidden; }
+  #visor:not(.cine):has(#vcontenido.solo-ficha) #vfav { display: none; }
+  .volver-ficha { align-self: flex-start; margin-bottom: clamp(8px, 3vh, 36px); border-radius: 999px !important; padding: 8px 18px; font-weight: 700;
+    background: rgba(11,12,14,.35) !important; border: 1px solid rgba(255,255,255,.22) !important; color: #fff; }
+  .volver-ficha:hover, .volver-ficha:focus { background: rgba(255,255,255,.14) !important; }
+  .ficha.heroe .chips.acciones .boton .icono { width: 1.25em; height: 1.25em; }
+  .ficha.heroe .chips.acciones .boton.trailer { letter-spacing: .04em; }
+  .ficha:not(.heroe) .volver-ficha { display: none; }
+  #visor:not(.cine):has(#vcontenido.solo-ficha) #vcerrar { border-radius: 999px; background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.18); }
+  /* Título, eslogan y datos */
+  .titulo-heroe { margin: 0; font-size: clamp(36px, 5.6vw, 92px) !important; font-weight: 800 !important; letter-spacing: -.045em; line-height: .95 !important;
+    color: #fff; text-shadow: 0 4px 30px rgba(0,0,0,.55); text-wrap: balance; }
+  .ficha.heroe .original { font-size: 14px; margin-top: -4px; }
+  .ficha.heroe .eslogan { margin: 0; display: block !important; font-style: italic; color: #c7c7cc; font-size: clamp(14px, 1.2vw, 19px); }
+  .ficha.heroe .chips.datos { gap: 10px 16px; font-size: clamp(14px, 1.1vw, 17px); color: #d1d1d6; font-weight: 500; }
+  .nota-pct { font-weight: 800; }
+  .nota-pct.alta { color: #30d158; } .nota-pct.media { color: #ffd60a; } .nota-pct.baja { color: #ff6b6b; }
+  .dato.duracion::before { content: '◷ '; opacity: .85; }
+  .ficha.heroe .chips.datos .chip { font-size: .86em; font-weight: 600; color: #fff; padding: 3px 12px; border-radius: 999px;
+    background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); }
+  /* Botones grandes */
+  .ficha.heroe .chips.acciones { gap: 12px; margin-top: 6px; }
+  .ficha.heroe .chips.acciones .boton { height: clamp(46px, 4.4vw, 58px); padding: 0 clamp(18px, 1.8vw, 30px); font-size: clamp(15px, 1.15vw, 18px); font-weight: 700;
+    border-radius: 12px; gap: 10px; }
+  .ficha.heroe .chips.acciones .boton.reproducir { font-weight: 800; min-width: clamp(150px, 13vw, 220px); justify-content: center; }
+  .ficha.heroe .chips.acciones .boton:not(.reproducir) { background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); color: #fff; }
+  .ficha.heroe .chips.acciones .boton:not(.reproducir):hover, .ficha.heroe .chips.acciones .boton:not(.reproducir):focus { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.35); }
+  .ficha.heroe .chips.acciones .boton.trailer { background: rgba(0,163,255,.16); border-color: rgba(0,163,255,.55); }
+  .ficha.heroe .chips.acciones .boton.trailer:hover, .ficha.heroe .chips.acciones .boton.trailer:focus { background: rgba(0,163,255,.3); border-color: #00a3ff; }
+  .ficha.heroe .chips.acciones .boton.fuente { height: auto; padding: 8px 12px; font-size: 13px; font-weight: 600; background: transparent; border-color: transparent; color: var(--suave); }
+  /* Sinopsis: 3 líneas hasta «Ver más»; el reparto y la dirección, al desplegar */
+  .ficha.heroe .sinopsis { margin: 4px 0 0; font-size: clamp(15px, 1.25vw, 19px); line-height: 1.6; color: #e5e5ea; max-width: 68ch; }
+  .ficha.heroe:not(.entera) .sinopsis { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .ficha.heroe:not(.entera) .linea { display: none; }
+  .ficha.heroe .linea { font-size: 14px; color: #c7c7cc; }
+  .ficha.heroe .linea b { color: #fff; }
+  .ficha.heroe .ver-mas { display: inline-flex; align-self: flex-start; justify-self: start; margin-top: -6px; padding: 2px 0; background: none; border: 0;
+    color: var(--acento); font: 700 14px/1.4 inherit; font-family: inherit; cursor: pointer; }
+  .ficha.heroe .ver-mas:hover, .ficha.heroe .ver-mas:focus { color: #5cc8ff; text-decoration: underline; }
+  /* Compartir */
+  .compartir { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 10px; max-width: 560px; padding: 12px 12px 12px 20px;
+    border-radius: 16px; background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1); font-size: 14px; font-weight: 700; color: #e5e5ea; }
+  .compartir-boton { width: 46px; height: 46px; padding: 0 !important; justify-content: center; border-radius: 12px !important; }
+  .compartir-boton .icono { width: 20px; height: 20px; }
+  /* Datos del archivo, plegados */
+  .detalles-tecnicos { margin-top: 4px; max-width: 780px; }
+  .detalles-tecnicos summary { cursor: pointer; color: var(--suave); font-size: 13px; font-weight: 600; }
+  .detalles-tecnicos summary:hover { color: #fff; }
+  .detalles-tecnicos .tecnico { margin-top: 8px; border-top-color: rgba(255,255,255,.08); }
+  /* Serie: la cabecera usa el mismo diseño (el fondo lo pone #cabecera) */
+  #cabecera .ficha.heroe .cuerpo { max-width: 820px; }
+  /* Móvil: el fondo arriba, el texto debajo; botones a lo ancho */
+  @media (max-width: 600px) {
+    .ficha.heroe { display: flex; flex-direction: column; }
+    .ficha.heroe .cuerpo { display: flex; }
+    .ficha.heroe .cuerpo > * { grid-column: auto; }
+    #vcontenido .ficha.heroe.con-fondo { padding: 42vh 16px 28px;
+      background: linear-gradient(0deg, var(--fondo) 0%, rgba(11,12,14,.75) 28%, rgba(11,12,14,0) 62%) center top / 100% 52vh no-repeat,
+        var(--fondo-img) center top / cover no-repeat, var(--fondo);
+      background-size: 100% 52vh, auto 52vh, auto; }
+    #vcontenido.solo-ficha > .ficha.heroe:not(.con-fondo) { padding: 70px 16px 28px; }
+    .titulo-heroe { font-size: clamp(32px, 10vw, 44px) !important; }
+    .ficha.heroe .chips.acciones { display: grid; grid-template-columns: 1fr 1fr; }
+    .ficha.heroe .chips.acciones .boton { justify-content: center; }
+    .ficha.heroe .chips.acciones .boton.reproducir { grid-column: 1 / -1; }
+    .ficha.heroe .chips.acciones .boton.fuente { grid-column: 1 / -1; }
+  }
+  /* Tele: más grande, para el sofá */
+  .tele .titulo-heroe { font-size: 9vh !important; }
+  .tele .ficha.heroe .eslogan { font-size: 2.6vh; }
+  .tele .ficha.heroe .chips.datos { font-size: 2.6vh; }
+  .tele .ficha.heroe .chips.acciones .boton { height: 7.4vh; font-size: 2.6vh; padding: 0 2.4vw; }
+  .tele .ficha.heroe .sinopsis { font-size: 2.7vh; }
+  .tele .compartir { font-size: 2.2vh; }
   .tele .pie { display: none; }
 </style>
 <link rel="stylesheet" href="intro.css">

@@ -179,6 +179,7 @@ function ficha(tmdbId, tipo) {
         titulo: d.title ?? d.name,
         tituloOriginal: d.original_title ?? d.original_name,
         sinopsis: d.overview || en?.overview || '',
+        eslogan: d.tagline || en?.tagline || null,
         anio: (d.release_date ?? d.first_air_date ?? '').slice(0, 4),
         duracion: d.runtime ?? d.episode_run_time?.[0] ?? null,
         generos: (d.genres ?? []).map((g) => g.name),
