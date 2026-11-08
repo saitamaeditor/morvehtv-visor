@@ -16,7 +16,7 @@ import http from 'node:http';
 import https from 'node:https';
 import * as meta from './metadatos.js';
 import * as enlaces from './enlaces.js';
-import { analizarEnlaces, archivoEnlaces, IDIOMAS_ENLACE, CALIDADES_ENLACE } from './enlaces-video.js';
+import { analizarEnlaces, archivoEnlaces, detectarEtiquetas, IDIOMAS_ENLACE, CALIDADES_ENLACE } from './enlaces-video.js';
 
 // Subidas desde enlace en marcha y recientes (en memoria: id → estado)
 const trabajosEnlace = new Map();
@@ -82,6 +82,36 @@ export function iniciar(opciones) {
 
 export const esRuta = (ruta) => ruta.startsWith('/api/panel/');
 const error = (status, message) => Object.assign(new Error(message), { status });
+
+// Idioma y calidad que dice la página de un reproductor (su <title>, og:title o descripción).
+// Como mucho 7 s y 400 KB; si no responde (Cloudflare, caído…), sin nada. Solo direcciones
+// públicas (enlaces.abrir comprueba cada redirección).
+async function etiquetasDePagina(url) {
+  let control;
+  const lectura = (async () => {
+    const a = await enlaces.abrir(url);
+    control = a.control;
+    if (enlaces.esArchivo(a.r)) { a.control.abort(); return detectarEtiquetas(enlaces.nombreDe(a.r, a.url)); }
+    const lector = a.r.body.getReader();
+    let html = '';
+    const dec = new TextDecoder();
+    while (html.length < 400000) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      html += dec.decode(value, { stream: true });
+      if (/<\/head>/i.test(html)) break;
+    }
+    a.control.abort();
+    const trozos = [
+      html.match(/<title[^>]*>([^<]*)/i)?.[1],
+      ...[...html.matchAll(/<meta[^>]+(?:property|name)=["'](?:og:title|og:description|description|twitter:title)["'][^>]*>/gi)].map((m) => m[0].match(/content=["']([^"']*)/i)?.[1]),
+    ].filter(Boolean).join(' ');
+    return detectarEtiquetas(trozos);
+  })();
+  const nada = { idioma: null, calidad: null };
+  const tope = new Promise((ok) => setTimeout(() => { try { control?.abort(); } catch {} ok(nada); }, 7000));
+  return Promise.race([lectura.catch(() => nada), tope]);
+}
 
 // ---------- Rutas y nombres permitidos ----------
 const interna = (k) => k.split('/').some((x) => x.startsWith('_'));
@@ -725,16 +755,32 @@ export async function atender(ruta, req, res, json, ip) {
     return json(res, 200, { key, enlaces: analizarEnlaces(texto).slice(0, 30).map(({ servidor, conocido, url: u, idioma, calidad }) => ({ servidor, conocido, url: u, idioma, calidad })) });
   }
   if (ruta === '/api/panel/enlaces-video') {
-    const vista = (l) => l.map(({ servidor, conocido, id, url: u, idioma, calidad }) => ({ servidor, conocido, id, url: u, idioma, calidad }));
+    const ver = (l) => l.map(({ servidor, conocido, id, url: u, idioma, calidad }) => ({ servidor, conocido, id, url: u, idioma, calidad }));
     // Del texto pegado, o de la lista ya ordenada y etiquetada en el gestor (cada dirección se
     // vuelve a analizar aquí: el idioma y la calidad, solo de los permitidos)
     const lista = Array.isArray(datos.enlaces)
       ? datos.enlaces.slice(0, 30).map((x) => {
         const r = analizarEnlaces(String(x?.url ?? ''))[0];
-        return r && { ...r, idioma: IDIOMAS_ENLACE.includes(x.idioma) ? x.idioma : null, calidad: CALIDADES_ENLACE.includes(x.calidad) ? x.calidad : null };
+        // (al guardar manda lo elegido en el gestor, también «sin idioma»; al consultar, si no
+        // hay nada elegido vale lo que diga la dirección)
+        return r && {
+          ...r,
+          idioma: IDIOMAS_ENLACE.includes(x.idioma) ? x.idioma : datos.vista ? r.idioma : null,
+          calidad: CALIDADES_ENLACE.includes(x.calidad) ? x.calidad : datos.vista ? r.calidad : null,
+        };
       }).filter(Boolean)
       : analizarEnlaces(String(datos.texto ?? '').slice(0, 50000)).slice(0, 30);
-    if (datos.vista) return json(res, 200, { enlaces: vista(lista) });
+    if (datos.vista) {
+      // A los que no dicen idioma o calidad, se les busca en el título de la página del reproductor
+      // (suele llevar el nombre del archivo: «Pelicula.2026.CASTELLANO.1080p.mkv»)
+      const sin = lista.filter((x) => !x.idioma || !x.calidad).slice(0, 12);
+      await Promise.all(sin.map(async (x) => {
+        const e = await etiquetasDePagina(x.url);
+        if (!x.idioma && e.idioma) { x.idioma = e.idioma; x.detectado = true; }
+        if (!x.calidad && e.calidad) { x.calidad = e.calidad; x.detectado = true; }
+      }));
+      return json(res, 200, { enlaces: ver(lista).map((x, n) => ({ ...x, detectado: !!lista[n].detectado })) });
+    }
     if (!lista.length) throw error(400, 'No hay ningún enlace válido (tienen que empezar por https:// o ser un código <iframe>)');
     const carpeta = carpetaValida(datos.carpeta);
     if (carpeta.split('/').length < 2 || !puede(carpeta)) throw fuera();

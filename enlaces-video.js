@@ -298,7 +298,7 @@ function analizarUrl(u) {
 // hasta el siguiente encabezado. El orden importa («sub español» es Subtitulado, no Castellano).
 export const IDIOMAS_ENLACE = ['Castellano', 'Latino', 'Subtitulado', 'Inglés', 'Dual'];
 const IDIOMAS = [
-  ['Subtitulado', /\b(subtitulad[oa]s?|subs?|vose|vos|v\.o\.s\.e?)\b/i],
+  ['Subtitulado', /\b(subtitulad[oa]s?|subs?|vose|vos|v o s e?)\b/i],
   ['Latino', /\b(latino|latinoamerica(no)?|lat|es-mx|es-la|español latino)\b/i],
   ['Castellano', /\b(castellano|español|espanol|spanish|esp|cast|es-es|españa)\b/i],
   ['Inglés', /\b(ingl[eé]s|english|eng)\b/i],
@@ -311,8 +311,18 @@ const CALIDADES = [
   ['720p', /\b(720p?|hd|hdrip)\b/i],
   ['480p', /\b(480p?|sd|dvdrip)\b/i],
 ];
+// (también para el título de la página de un reproductor: «Pelicula.2026.LATINO.1080p.mkv»)
+export const detectarEtiquetas = (texto) => etiquetasDe(String(texto ?? ''));
+// Lo que dice la propia dirección del vídeo, sin el dominio ni el ID: el nombre del archivo que
+// llevan algunos enlaces («/v/ID/Pelicula.CASTELLANO.1080p.mp4», «?title=…»)
+function etiquetasDeUrl(u, id) {
+  let t = `${u.pathname} ${[...u.searchParams.values()].join(' ')}`;
+  try { t = decodeURIComponent(t); } catch (e) {}
+  if (id) t = t.split(id).join(' ');
+  return etiquetasDe(t.replace(/[._+/=-]+/g, ' '));
+}
 function etiquetasDe(texto) {
-  const t = texto.replace(/<[^>]*>/g, ' ');
+  const t = texto.replace(/<[^>]*>/g, ' ').replace(/[._]+/g, ' ');
   return {
     idioma: (IDIOMAS.find(([, re]) => re.test(t)) || [])[0] || null,
     calidad: (CALIDADES.find(([, re]) => re.test(t)) || [])[0] || null,
@@ -336,11 +346,17 @@ export function analizarEnlaces(entrada) {
         if (propias.idioma || propias.calidad) encabezado = propias;
         continue;
       }
-      const etiquetas = { idioma: propias.idioma || encabezado.idioma, calidad: propias.calidad || encabezado.calidad };
       for (const bruto of direcciones) {
         const u = aUrl(bruto);
         if (!u) continue;
-        const r = { ...analizarUrl(u), ...etiquetas };
+        const base = analizarUrl(u);
+        // Lo escrito en la línea manda; luego el encabezado; si no, lo que diga la dirección
+        const enUrl = etiquetasDeUrl(u, base.id);
+        const r = {
+          ...base,
+          idioma: propias.idioma || encabezado.idioma || enUrl.idioma,
+          calidad: propias.calidad || encabezado.calidad || enUrl.calidad,
+        };
         const clave = r.conocido ? `${r.servidor}|${r.id}` : r.url;
         const previo = vistos.get(clave);
         // Repetido: se queda el primero, con lo que dijera el otro de idioma y calidad
