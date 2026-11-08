@@ -1025,6 +1025,71 @@ async function catalogo(max) {
   }
   return r;
 }
+// ---------- Plataformas (Netflix, Prime Video, Disney+…) ----------
+// Cada título del catálogo, esté en la carpeta que esté, en las plataformas donde se puede ver
+// en España (su ficha de TMDB) o en la que diga su carpeta («PELICULAS NETFLIX»). El índice se
+// hace en segundo plano y se rehace cuando cambia el contenido; lo de cada título se recuerda
+// un día (las plataformas cambian su catálogo).
+const plataformasTitulo = new Map(); // clave → { hasta, lista }
+const indicePlat = { huella: null, construyendo: null, datos: null };
+async function plataformasDeTitulo(t) {
+  const c = plataformasTitulo.get(t.key);
+  if (c && c.hasta > Date.now()) return c.lista;
+  let m = null;
+  try { m = t.tipo === 'carpeta' ? await meta.deCarpeta(t.key) : await meta.deArchivo(t.key); } catch (e) {}
+  const lista = [...new Set([...meta.plataformasDeRuta(t.key), ...(m?.plataformas ?? [])])];
+  // (sin ficha todavía, p. ej. TMDB caído: se vuelve a mirar en 10 minutos, no en un día)
+  plataformasTitulo.set(t.key, { hasta: Date.now() + (m?.encontrado ? 24 * 3600000 : 600000), lista });
+  return lista;
+}
+async function construirPlataformas() {
+  const c = await catalogoEntero();
+  // Solo películas (vídeos sueltos): las series no salen en las plataformas
+  const titulos = c.carpetas.flatMap((x) => x.titulos.filter((t) => t.tipo !== 'carpeta').map((t) => ({ ...t, seccion: x.carpeta })));
+  const por = new Map();
+  let i = 0;
+  const trabajar = async () => {
+    while (i < titulos.length) {
+      const t = titulos[i++];
+      for (const p of await plataformasDeTitulo(t)) {
+        if (!por.has(p)) por.set(p, []);
+        por.get(p).push(t);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, trabajar));
+  const orden = meta.PLATAFORMAS.map(([n]) => n);
+  const logos = await meta.logosPlataformas().catch(() => ({}));
+  // Primero las conocidas (en su orden: Netflix, Prime Video, Disney+…) y después todas las demás
+  // que haya dado TMDB, de la que más títulos tiene a la que menos
+  const puesto = (n) => (orden.includes(n) ? orden.indexOf(n) : 1000);
+  return [...por]
+    .sort((a, b) => puesto(a[0]) - puesto(b[0]) || b[1].length - a[1].length || a[0].localeCompare(b[0], 'es'))
+    .map(([nombre, lista]) => ({
+      nombre,
+      logo: logos[nombre] ?? null,
+      total: lista.length,
+      // (para las dos filas de la portada: plataformas con películas y con series)
+      peliculas: lista.filter((t) => t.tipo !== 'carpeta').length,
+      series: lista.filter((t) => t.tipo === 'carpeta').length,
+      titulos: lista.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)),
+    }));
+}
+async function plataformas() {
+  if (indicePlat.huella !== huella && !indicePlat.construyendo) {
+    const para = huella;
+    indicePlat.construyendo = construirPlataformas()
+      .then((datos) => { indicePlat.datos = datos; indicePlat.huella = para; })
+      .catch((e) => console.error(`Plataformas: ${e.message}`))
+      .finally(() => { indicePlat.construyendo = null; });
+  }
+  // La primera vez se espera un poco; después, lo último hecho mientras se rehace
+  if (!indicePlat.datos && indicePlat.construyendo) await Promise.race([indicePlat.construyendo, new Promise((ok) => setTimeout(ok, 8000))]);
+  return { preparando: !indicePlat.datos || !!indicePlat.construyendo, plataformas: indicePlat.datos ?? [] };
+}
+// (se empieza solo a los 2 minutos de arrancar, para que esté listo cuando alguien entre)
+setTimeout(() => plataformas().catch(() => {}), 120000).unref();
+
 async function catalogoEntero() {
   let objetos;
   if (foto) {
@@ -1181,6 +1246,7 @@ const rutas = {
     const c = await catalogo(0);
     return { seccion, titulos: c.carpetas.find((x) => x.carpeta === seccion)?.titulos ?? [] };
   },
+  '/api/plataformas': () => plataformas(),
   // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
   '/api/tmdb-buscar': async (p, req, quien) => {
     if (!quien.admin) throw Object.assign(new Error('Solo los administradores pueden corregir fichas'), { status: 403 });

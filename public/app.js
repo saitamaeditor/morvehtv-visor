@@ -61,6 +61,10 @@ async function cargar(mas = false) {
   if (estado.prefijo.startsWith(':')) {
     $('#cabecera').hidden = true; $('#mas').hidden = true;
     pintarMigas();
+    if (estado.prefijo.startsWith(':plataforma/')) {
+      const [nombrePlat, tipoPlat] = estado.prefijo.slice(':plataforma/'.length).split('/');
+      return pintarPlataforma(nombrePlat, tipoPlat || 'todo');
+    }
     return pintarVistaPerfil(estado.prefijo.slice(1));
   }
   if (!mas) {
@@ -109,7 +113,8 @@ function pintarMigas() {
   m.append(casa);
   if (estado.prefijo.startsWith(':')) {
     separador();
-    m.append(el('span', 'actual', VISTAS_PERFIL[estado.prefijo.slice(1)]?.titulo ?? ''));
+    const [plat, tipoPlat] = estado.prefijo.startsWith(':plataforma/') ? estado.prefijo.slice(':plataforma/'.length).split('/') : [];
+    m.append(el('span', 'actual', plat ? `${plat}${tipoPlat === 'peliculas' ? ' · Películas' : tipoPlat === 'series' ? ' · Series' : ''}` : VISTAS_PERFIL[estado.prefijo.slice(1)]?.titulo ?? ''));
   } else {
     partes.forEach((p, i) => { separador(); enlace(p, partes.slice(0, i + 1).join('/') + '/', i === partes.length - 1); });
   }
@@ -458,6 +463,100 @@ async function pintarDestacado(caja, d, carpetas) {
   caja.hidden = false;
 }
 
+// ---------- Plataformas ----------
+// Colores de cada una para su botón
+const COLOR_PLATAFORMA = {
+  Netflix: '#e50914', 'Prime Video': '#00a8e1', 'Disney+': '#113ccf', 'HBO Max': '#5822b4', 'Movistar Plus+': '#019df4',
+  'Apple TV+': '#555', SkyShowtime: '#0b6bff', Filmin: '#e3007e', Atresplayer: '#ff6600', Crunchyroll: '#f47521',
+  'Paramount+': '#0064ff', 'RTVE Play': '#d62c1f', Mitele: '#00b1e1', 'Rakuten TV': '#bf0000', 'Pluto TV': '#2e2e2e',
+  Fubo: '#fa4616', Hayu: '#ff2e63',
+};
+// Icono cuadrado con el logotipo (si TMDB no lo da, el nombre sobre el color de la plataforma)
+function iconoPlataforma(p, tipoPlat, cuantos) {
+  const b = el('button', 'icono-plataforma');
+  b.style.setProperty('--color-plat', COLOR_PLATAFORMA[p.nombre] || '#444');
+  const que = tipoPlat === 'series' ? (cuantos === 1 ? 'serie' : 'series') : (cuantos === 1 ? 'película' : 'películas');
+  b.title = `${p.nombre} · ${cuantos} ${que}`;
+  b.setAttribute('aria-label', b.title);
+  if (p.logo) {
+    const im = el('img'); im.src = p.logo; im.alt = ''; im.loading = 'lazy';
+    im.onerror = () => { im.remove(); b.append(el('span', null, p.nombre)); };
+    b.append(im);
+  } else b.append(el('span', null, p.nombre));
+  b.onclick = () => irA(`:plataforma/${p.nombre}/${tipoPlat}`);
+  return b;
+}
+let plataformasPedidas = null;
+function pedirPlataformas() {
+  if (!plataformasPedidas) {
+    plataformasPedidas = api('/api/plataformas').catch(() => null);
+    // (mientras el servidor aún las está preparando, la próxima vez se vuelven a pedir)
+    plataformasPedidas.then((d) => { if (!d || d.preparando) setTimeout(() => { plataformasPedidas = null; }, 20000); else setTimeout(() => { plataformasPedidas = null; }, 300000); });
+  }
+  return plataformasPedidas;
+}
+async function pintarPlataforma(nombrePlat, tipoInicial = 'todo') {
+  const items = $('#items');
+  items.className = 'vista-plataforma';
+  items.innerHTML = '<div class="vacio">Cargando…</div>';
+  document.documentElement.classList.remove('en-portada');
+  const ruta = estado.prefijo;
+  const d = await pedirPlataformas();
+  if (estado.prefijo !== ruta) return;
+  items.innerHTML = '';
+  const plat = ((d && d.plataformas) || []).find((p) => p.nombre === nombrePlat);
+  // Cabecera con el logotipo de la plataforma
+  const cab = el('div', 'biblioteca cabecera-plataforma');
+  if (plat && plat.logo) { const im = el('img', 'logo-plataforma'); im.src = plat.logo; im.alt = ''; im.onerror = () => im.remove(); cab.append(im); }
+  cab.append(el('h1', null, nombrePlat));
+  // (solo películas: las series no salen en las plataformas)
+  let tipoVisto = 'peliculas';
+  // Para cambiar de plataforma sin volver a la portada (las que tienen de lo que se está viendo)
+  const chips = el('nav', 'iconos-plataformas pequenos');
+  const pintarIconos = () => {
+    chips.innerHTML = '';
+    for (const p of (d && d.plataformas) || []) {
+      const n = tipoVisto === 'todo' ? p.total : p[tipoVisto];
+      if (!n) continue;
+      const b = iconoPlataforma(p, tipoVisto, n);
+      if (p.nombre === nombrePlat) b.classList.add('activa');
+      chips.append(b);
+    }
+  };
+  // Filtro: todo, solo películas o solo series
+  const filtro = el('nav', 'categorias-chips filtro-tipo');
+  const lista = el('div', 'rejilla');
+  const pintarLista = () => {
+    lista.innerHTML = '';
+    const titulos = (plat ? plat.titulos : []).filter((x) => tipoVisto === 'todo' || (tipoVisto === 'series' ? x.tipo === 'carpeta' : x.tipo !== 'carpeta'));
+    if (!titulos.length) {
+      lista.append(el('div', 'vacio', d && d.preparando ? 'Buscando en qué plataforma está cada título… vuelve en un par de minutos.' : `No hay nada de ${nombrePlat} todavía.`));
+      return;
+    }
+    const pelis = titulos.filter((x) => x.tipo !== 'carpeta');
+    for (const x of titulos) {
+      if (x.tipo === 'carpeta') {
+        const t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: '', alPulsar: () => irA(x.key) });
+        lista.append(t); conMeta(t, 'carpeta', x.key);
+      } else {
+        const t = tarjeta({ icono: '🎬', titulo: nombre(x.key), meta: '', alPulsar: () => abrir(pelis.indexOf(x), pelis) });
+        t.dataset.key = x.key; barraVisto(t);
+        lista.append(t); conMeta(t, 'archivo', x.key);
+      }
+    }
+  };
+  for (const [id, texto] of [['todo', 'Todo'], ['peliculas', 'Películas'], ['series', 'Series']]) {
+    const b = el('button', `chip-cat${id === tipoVisto ? ' activa' : ''}`, texto);
+    b.onclick = () => { tipoVisto = id; filtro.querySelectorAll('button').forEach((x) => x.classList.toggle('activa', x === b)); pintarLista(); pintarIconos(); };
+    filtro.append(b);
+  }
+  items.append(cab, chips, lista);
+  pintarIconos();
+  pintarLista();
+  const conMando = esTele || document.documentElement.classList.contains('usa-mando');
+  if (conMando && actual < 0) { const p = lista.querySelector('.item') || chips.querySelector('.activa'); if (p) p.focus(); }
+}
+
 let catalogoPedido = null;
 function pintarInicio(carpetas, archivos) {
   const items = $('#items');
@@ -468,6 +567,26 @@ function pintarInicio(carpetas, archivos) {
   items.append(destacado);
   // (La fila de botones de categorías ya no sale: a cada categoría se llega por el «Ver todo ›»
   // de su fila de novedades)
+  // Plataformas (Netflix, Prime Video…) con su logotipo, en dos filas: las que tienen películas y
+  // las que tienen series. Cada icono abre esa plataforma con ese tipo ya elegido.
+  const plats = el('div', 'plataformas-inicio');
+  plats.hidden = true;
+  items.append(plats);
+  pedirPlataformas().then((d) => {
+    if (!d || !plats.isConnected || !d.plataformas.length) return;
+    for (const [tipoPlat, titulo, campo] of [['peliculas', 'Plataformas de streaming de películas', 'peliculas']]) {
+      const conAlgo = d.plataformas.filter((p) => p[campo] > 0);
+      if (!conAlgo.length) continue;
+      const s = el('section', 'fila-plataformas');
+      s.append(el('h2', 'etiqueta-plataformas', titulo));
+      const fila = el('nav', 'iconos-plataformas');
+      fila.setAttribute('aria-label', titulo);
+      for (const p of conAlgo) fila.append(iconoPlataforma(p, tipoPlat, p[campo]));
+      s.append(fila);
+      plats.append(s);
+    }
+    plats.hidden = !plats.children.length;
+  });
   // Plan Básico: un anuncio debajo de las categorías
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('inicio');
   if (banner) items.append(banner);
@@ -2282,7 +2401,7 @@ const CODIGOS = { 10009: 'atras', 461: 'atras', 415: 'play', 19: 'play', 10252: 
 const tecla = (e) => (e.shiftKey && (e.key === 'N' || e.key === 'n') ? 'siguiente' : e.shiftKey && (e.key === 'P' || e.key === 'p') ? 'anterior' : null)
   || TECLAS[e.key] || CODIGOS[e.keyCode] || null;
 
-const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
+const ENFOCABLES_APP = '.destacado .boton, #pestanas button, #mi-cuenta, #salir-app, #migas a, #cabecera summary, #cabecera a, #cabecera button, .chip-cat, .icono-plataforma, .fila-titulo a, .cat:not(.vacia), #items .item, #mas:not([hidden])';
 // (la barra de progreso no: con el mando se avanza y retrocede desde el propio vídeo con ← →)
 const ENFOCABLES_VISOR = '.anuncio-pausa button, .anuncio-pausa a, .anuncio-previo button, .siguiente button, .repro .de-cero, #visor .barra .boton:not([hidden]), #visor .flecha:not([hidden]), .controles .boton, .controles select, #vcontenido > video, .repro video, .ficha a, .ficha summary, .ficha input, .ficha select, .ficha button, .fallo-enlace button, .servidores button, #vcontenido > iframe.incrustado';
 
@@ -2353,7 +2472,7 @@ function moverFoco(dir) {
   // carátulas (al llegar al final no salta a otra fila), ni de las categorías de arriba
   const horizontal = dir === 'izq' || dir === 'der';
   // (en la cuadrícula de una sección, ← → no se escapan al menú de arriba: siguen por las tarjetas)
-  const fila = horizontal && a.closest && (a.closest('.controles, .carrusel, .categorias-chips, .destacado-botones') || (a.matches('#items > .item') && $('#items')));
+  const fila = horizontal && a.closest && (a.closest('.controles, .carrusel, .categorias-chips, .iconos-plataformas, .destacado-botones') || (a.matches('#items > .item') && $('#items')));
   const opciones = [];
   for (const c of cands) {
     if (fila && !fila.contains(c)) continue;
@@ -2475,7 +2594,7 @@ if (esTele) {
     const a = document.activeElement;
     if (++intentos > 50 || (a && a !== document.body)) return clearInterval(vigia);
     if (actual >= 0 || document.documentElement.classList.contains('con-cuenta')) return;
-    const primero = document.querySelector('.destacado:not([hidden]) .boton.reproducir') || (intentos > 15 && document.querySelector('.chip-cat, .cat:not(.vacia), #items .item'));
+    const primero = document.querySelector('.destacado:not([hidden]) .boton.reproducir') || (intentos > 15 && document.querySelector('.icono-plataforma, .chip-cat, .cat:not(.vacia), #items .item'));
     if (primero) { primero.focus({ preventScroll: true }); clearInterval(vigia); }
   }, 300);
 }
