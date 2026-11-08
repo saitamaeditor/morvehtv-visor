@@ -198,6 +198,9 @@ function pintar() {
   // Plan Básico: un anuncio a lo ancho encima de la carpeta
   const banner = typeof anuncioBanner === 'function' && anuncioBanner('carpeta');
   if (banner) items.append(banner);
+  // En una sección (Películas, Series…): su catálogo completo de una vez
+  if (raiz && !pintar.soloCarpeta) { pintarSeccion(items); return; }
+  pintar.soloCarpeta = false;
   for (const c of carpetas) {
     const t = tarjeta({ icono: '📁', titulo: nombre(c), meta: 'Carpeta', alPulsar: () => irA(c), nuevo: [...nuevas].some((k) => k.startsWith(c)) });
     t.dataset.carpeta = c;
@@ -216,6 +219,69 @@ function pintar() {
   });
   if (!carpetas.length && !archivos.length) items.innerHTML = '<div class="vacio">No hay nada aquí.</div>';
   $('#mas').hidden = !estado.token;
+  enfocarAlLlegar();
+}
+
+// ---------- Sección entera ----------
+// Todas las películas y series de la sección (también las de sus subcarpetas que solo agrupan,
+// como «PELICULAS NETFLIX»), sin páginas ni «Cargar más», con el número exacto de títulos y el
+// orden a elegir. Si el catálogo no llega, se ve la carpeta como antes.
+let ordenSeccion = (() => { try { return localStorage.getItem('morvehtv-orden-seccion') || 'recientes'; } catch (e) { return 'recientes'; } })();
+async function pintarSeccion(items) {
+  const pref = estado.prefijo;
+  $('#mas').hidden = true;
+  const espera = el('div', 'vacio', 'Cargando el catálogo…');
+  espera.style.gridColumn = '1 / -1';
+  items.append(espera);
+  let d = null;
+  try { d = await api('/api/catalogo', { seccion: pref }); } catch (e) { d = null; }
+  if (estado.prefijo !== pref || !items.isConnected) return;
+  espera.remove();
+  if (!d || !Array.isArray(d.titulos)) { pintar.soloCarpeta = true; return pintar(); }
+  const titulos = d.titulos;
+  const cuenta = items.querySelector('.biblioteca-cuenta');
+  if (cuenta) cuenta.textContent = `${titulos.length} ${titulos.length === 1 ? 'título' : 'títulos'}`;
+  if (!titulos.length) { items.append(el('div', 'vacio', 'Aún no hay nada en esta sección.')); return enfocarAlLlegar(); }
+  // Orden: lo último subido primero, o de la A a la Z
+  const orden = el('nav', 'categorias-chips orden-seccion');
+  const tarjetas = [];
+  const colocar = () => {
+    const lista = ordenSeccion === 'az'
+      ? [...titulos].sort((a, b) => nombre(a.key).localeCompare(nombre(b.key), 'es', { numeric: true }))
+      : titulos;
+    tarjetas.forEach((t) => t.remove());
+    tarjetas.length = 0;
+    const pelis = lista.filter((x) => x.tipo !== 'carpeta');
+    for (const x of lista) {
+      let t;
+      if (x.tipo === 'carpeta') {
+        t = tarjeta({ icono: '📺', titulo: nombre(x.key), meta: 'Serie', alPulsar: () => irA(x.key), nuevo: nuevas.has(x.ultimo) });
+        t.dataset.carpeta = x.key;
+        conMeta(t, 'carpeta', x.key); estrella(t, x.key);
+      } else {
+        const [, , icono] = tipo(x.key);
+        t = tarjeta({ icono, titulo: nombre(x.key), meta: bytes(x.tamano), alPulsar: () => abrir(pelis.indexOf(x), pelis), nuevo: nuevas.has(x.key) });
+        t.dataset.key = x.key; t.dataset.tamano = x.tamano;
+        barraVisto(t);
+        conMeta(t, 'archivo', x.key); estrella(t, x.key, x);
+      }
+      tarjetas.push(t);
+      items.append(t);
+    }
+  };
+  for (const [id, texto] of [['recientes', 'Más recientes'], ['az', 'A-Z']]) {
+    const b = el('button', `chip-cat${id === ordenSeccion ? ' activa' : ''}`, texto);
+    b.onclick = () => {
+      if (ordenSeccion === id) return;
+      ordenSeccion = id;
+      try { localStorage.setItem('morvehtv-orden-seccion', id); } catch (e) {}
+      orden.querySelectorAll('button').forEach((x) => x.classList.toggle('activa', x === b));
+      colocar();
+    };
+    orden.append(b);
+  }
+  items.append(orden);
+  colocar();
   enfocarAlLlegar();
 }
 

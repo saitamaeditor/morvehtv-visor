@@ -1121,7 +1121,15 @@ const rutas = {
     return videos.length;
   }),
   '/api/portada': (p) => meta.portadaCategoria(p.get('cat')),
-  '/api/catalogo': (p) => catalogo(p.get('max')),
+  // Con «seccion»: el catálogo completo de esa sección (todas sus películas y series, también las
+  // de sus subcarpetas que solo agrupan), para verla entera de una vez
+  '/api/catalogo': async (p) => {
+    const seccion = p.get('seccion');
+    if (!seccion) return catalogo(p.get('max'));
+    if (prohibido(seccion) || !/^[^/]+\/$/.test(seccion)) throw Object.assign(new Error('Sección no válida'), { status: 400 });
+    const c = await catalogo(0);
+    return { seccion, titulos: c.carpetas.find((x) => x.carpeta === seccion)?.titulos ?? [] };
+  },
   '/api/plataformas': () => plataformas(),
   // Corregir la ficha de un vídeo o una serie: solo administradores (afecta a todo el mundo)
   '/api/tmdb-buscar': async (p, req, quien) => {
