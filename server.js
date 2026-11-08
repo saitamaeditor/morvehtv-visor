@@ -1297,8 +1297,11 @@ http
       if (!paraProgramas && defensa.esBot(req)) return json(res, 403, { error: 'Acceso automático no permitido' });
       // ads.txt de la red de anuncios (público: lo lee su rastreador)
       if (url.pathname === '/ads.txt') {
-        const t = pagos.adsTxt();
-        if (!t) return json(res, 404, { error: 'Sin ads.txt' });
+        // Google AdSense (cuenta ca-pub-4674524691998401) siempre; y las líneas de la otra red de
+        // anuncios, si está activada (ANUNCIOS_ADSTXT)
+        const lineas = ['google.com, pub-4674524691998401, DIRECT, f08c47fec0942fa0', ...String(pagos.adsTxt() ?? '').split('\n')]
+          .map((l) => l.trim()).filter(Boolean);
+        const t = [...new Set(lineas)].join('\n') + '\n';
         res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'max-age=3600' });
         return res.end(t);
       }
