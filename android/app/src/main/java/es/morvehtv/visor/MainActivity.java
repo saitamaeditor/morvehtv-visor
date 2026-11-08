@@ -235,7 +235,10 @@ public class MainActivity extends Activity {
             if (!"http".equals(esquema) && !"https".equals(esquema)) return true; // intent:, market:…
             // MorvehTV y lo que abras tú con un toque (tráiler, TMDB) se quedan dentro de la app;
             // una redirección automática a otro sitio, no
-            return !(esNuestra(u) || esDePago(u) || pedido.hasGesture());
+            // (el toque tiene que ser en la propia página: uno dentro de un reproductor de otro sitio
+            // también cuenta como «gesto», pero no avisa a la app con permitir())
+            boolean toqueMio = pedido.hasGesture() && android.os.SystemClock.uptimeMillis() - toqueNuestro < 1500;
+            return !(esNuestra(u) || esDePago(u) || toqueMio);
         }
     }
 
@@ -319,6 +322,13 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void permitir() {
             toqueNuestro = android.os.SystemClock.uptimeMillis();
+        }
+
+        // Solo una marca para la web: esta app bloquea las navegaciones que no vienen de un toque en
+        // MorvehTV, así que puede meter reproductores de otros sitios sin aislar (Byse lo exige)
+        @JavascriptInterface
+        public boolean sinAislar() {
+            return true;
         }
 
         @JavascriptInterface

@@ -1947,8 +1947,8 @@ async function abrirEnlace(f, i, c, opcion = 0) {
     servidores();
     return enfocarVisor();
   }
-  if (!bien) { falloEnlace(c, motivo(d), otraVez, () => { incrustar(c, d.url, otraVez); servidores(); }); return servidores(); }
-  incrustar(c, d.url, otraVez);
+  if (!bien) { falloEnlace(c, motivo(d), otraVez, () => { incrustar(c, d.url, otraVez, d.servidor); servidores(); }); return servidores(); }
+  incrustar(c, d.url, otraVez, d.servidor);
   servidores();
 }
 
@@ -1962,10 +1962,19 @@ const ventanasEnIframe = !window.MorvehApp || typeof window.MorvehApp.permitir =
 // Cada toque en la propia página de MorvehTV (no dentro de un iframe) se avisa a la app: solo en
 // el segundo siguiente puede abrirse una ventana (Tráiler, TMDB, Ko-fi…)
 document.addEventListener('click', () => { try { if (window.MorvehApp && window.MorvehApp.permitir) window.MorvehApp.permitir(); } catch (e) {} }, true);
-function incrustar(c, url, otraVez) {
+// Algunos servidores (Byse…) no reproducen en un marco aislado, dé los permisos que dé. Los
+// servidores de vídeo reconocidos van sin aislar donde MorvehTV sigue protegida igualmente: en el
+// navegador (si el reproductor intenta llevarte a otra web, el navegador pregunta antes de salir)
+// y en la app que bloquea las navegaciones que no vienen de un toque tuyo (sinAislar, 1.0.20+).
+const sinAislarPermitido = !window.MorvehApp || typeof window.MorvehApp.sinAislar === 'function';
+const SERVIDORES_AISLADOS = ['Genérico', 'YouTube', 'Vimeo', 'Dailymotion'];
+window.addEventListener('beforeunload', (e) => { if (document.querySelector('iframe.incrustado.libre')) { e.preventDefault(); e.returnValue = ''; } });
+function incrustar(c, url, otraVez, servidor = 'Genérico') {
   c.innerHTML = '';
   const fr = el('iframe', 'incrustado');
-  fr.setAttribute('sandbox', `allow-scripts allow-same-origin allow-presentation allow-forms${ventanasEnIframe ? ' allow-popups' : ''}`);
+  const libre = sinAislarPermitido && !SERVIDORES_AISLADOS.includes(servidor);
+  if (libre) fr.classList.add('libre');
+  else fr.setAttribute('sandbox', `allow-scripts allow-same-origin allow-presentation allow-forms${ventanasEnIframe ? ' allow-popups' : ''}`);
   fr.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
   fr.setAttribute('allowfullscreen', '');
   fr.referrerPolicy = 'strict-origin-when-cross-origin';
