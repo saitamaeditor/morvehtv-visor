@@ -36,21 +36,32 @@ if ! grep -qs '^EMBY_API_KEY=.\+' "$ENV"; then
   printf 'EMBY_URL=http://127.0.0.1:8096\nEMBY_API_KEY=%s\nEMBY_PUBLICA=https://emby.morvehtv.com\n' "$CLAVE" > "$ENV"
   unset CLAVE
 fi
+# Telegram (opcional): avisos de lo nuevo de Emby en el grupo. Se pregunta una sola vez; para
+# ponerlo después: sed -i '/^TELEGRAM_TOKEN=/d' $ENV y volver a lanzar el instalador.
+if ! grep -qs '^TELEGRAM_TOKEN=' "$ENV"; then
+  echo "Token del bot de Telegram para avisar de lo nuevo (@BotFather → /mybots → API Token)."
+  echo "Pulsa Enter sin escribir nada para no activarlo. No se verá al pegarlo:"
+  read -rs TG </dev/tty; echo
+  if [[ -n $TG && ! $TG =~ ^[0-9]{5,}:[A-Za-z0-9_-]{30,}$ ]]; then echo "Ese token no parece válido: Telegram queda sin activar."; TG=; fi
+  printf 'TELEGRAM_TOKEN=%s\n' "$TG" >> "$ENV"
+  unset TG
+fi
 chmod 600 "$ENV"
 
 echo "== 3/6 Datos"
 install -d -m 700 -o 1000 -g 1000 "$DATOS"
-if [[ ! -f $DATOS/datos.json && -r /mnt/e2/_morvehtv/usuarios.json ]]; then
-  # Solo se copia para sacar lo de Emby y revendedores; el servidor lo borra al importarlo
+if [[ -r /mnt/e2/_morvehtv/usuarios.json ]] && { [[ ! -f $DATOS/datos.json ]] || ! grep -q '"telegram"' "$DATOS/datos.json"; }; then
+  # Solo se copia para sacar lo de Emby, revendedores y el grupo de Telegram (lo que aún no esté);
+  # el servidor lo borra al importarlo
   install -m 600 -o 1000 -g 1000 /mnt/e2/_morvehtv/usuarios.json "$DATOS/importar.json"
-  echo "   Se importarán las cuentas de Emby y los revendedores que había"
+  echo "   Se importará lo que había de Emby, revendedores y Telegram"
 fi
 
 echo "== 4/6 Servidor"
 docker compose -f "$APP/docker-compose.yml" up -d --build --quiet-pull >/dev/null
 for _ in $(seq 1 20); do curl -fsS -o /dev/null http://127.0.0.1:10100/api/salud && break; sleep 2; done
 curl -fsS http://127.0.0.1:10100/api/salud >/dev/null || { echo "No arranca. Mira: docker logs --tail 50 morvehtv-cuentas"; exit 1; }
-docker logs morvehtv-cuentas 2>&1 | tail -n 3 | sed 's/^/   /'
+docker logs morvehtv-cuentas 2>&1 | tail -n 4 | sed 's/^/   /'
 
 echo "== 5/6 Panel en https://$DOMINIO, Caddy y actualizaciones"
 # La web del panel (los archivos de morvehtv-gestor) se sirve desde la propia VPS

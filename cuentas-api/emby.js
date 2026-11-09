@@ -44,6 +44,18 @@ async function llamar(ruta, { metodo = 'GET', datos } = {}) {
   try { return JSON.parse(texto); } catch { return texto; }
 }
 
+// Para otros módulos (avisos de Telegram): la API de Emby y sus imágenes, con la clave del servidor
+export const consultar = (ruta) => llamar(ruta);
+export const direccionPublica = () => PUBLICA;
+export async function imagen(ruta) {
+  if (!configurado()) return null;
+  try {
+    const r = await fetch(BASE + ruta, { headers: { 'X-Emby-Token': CLAVE }, signal: AbortSignal.timeout(20000) });
+    if (!r.ok) return null;
+    return { datos: Buffer.from(await r.arrayBuffer()), tipo: r.headers.get('content-type') || 'image/jpeg' };
+  } catch { return null; }
+}
+
 // ---------- Datos propios (caducidad y nota) ----------
 const extras = async () => (await p.leerAjuste(AJUSTE)) ?? {};
 async function cambiarExtra(id, cambio) {

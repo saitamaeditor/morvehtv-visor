@@ -9,14 +9,15 @@
 // administradores del panel («admins», contraseñas con scrypt), sus sesiones (solo la huella del
 // token) y el registro de acciones. Cada día guarda una copia y conserva las 7 últimas.
 //
-// Primer arranque: si no hay datos y existe /datos/importar.json (el archivo de cuentas antiguo de
-// MorvehTV), copia SOLO lo de Emby y revendedores y borra ese archivo.
+// Si existe /datos/importar.json (el archivo de cuentas antiguo de MorvehTV), copia SOLO lo de Emby,
+// revendedores y Telegram que aún no tenga, y borra ese archivo.
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypto';
 import * as emby from './emby.js';
 import * as revendedores from './revendedores.js';
+import * as telegram from './telegram.js';
 
 const PUERTO = Number(process.env.PUERTO ?? 10100);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -24,7 +25,7 @@ const DATOS = process.env.DATOS ?? '/datos/datos.json';
 const PRODUCCION = process.env.NODE_ENV === 'production';
 const ORIGENES = String(process.env.PANEL_ORIGENES ?? 'https://saitamaeditor.github.io').split(',').map((o) => o.trim()).filter(Boolean);
 const DIAS_TOKEN = 30;
-const IMPORTABLES = ['emby', 'embyRevendedores', 'embyMovimientos'];
+const IMPORTABLES = ['emby', 'embyRevendedores', 'embyMovimientos', 'telegram'];
 
 const error = (status, message) => Object.assign(new Error(message), { status });
 
@@ -37,17 +38,17 @@ async function cargar() {
   await fs.mkdir(path.dirname(DATOS), { recursive: true });
   try {
     datos = JSON.parse(await fs.readFile(DATOS, 'utf8'));
-    return;
   } catch (e) {
     if (e.code !== 'ENOENT') throw new Error(`No se puede leer ${DATOS}: ${e.message}`);
   }
-  // Primera vez: importar lo de Emby del archivo de cuentas antiguo, si lo han dejado
+  // Importar del archivo de cuentas antiguo (si lo han dejado) lo que aún no esté: Emby,
+  // revendedores y el grupo de Telegram con sus temas. Nada más, y luego se borra.
   const importar = path.join(path.dirname(DATOS), 'importar.json');
   try {
     const viejo = JSON.parse(await fs.readFile(importar, 'utf8'));
-    for (const k of IMPORTABLES) if (viejo[k] != null) datos[k] = viejo[k];
-    const n = Object.keys(datos.embyRevendedores ?? {}).length;
-    console.log(`Importado de la copia antigua: ${Object.keys(datos.emby ?? {}).length} cuentas de Emby con datos, ${n} revendedores`);
+    const traidos = IMPORTABLES.filter((k) => viejo[k] != null && datos[k] == null);
+    for (const k of traidos) datos[k] = viejo[k];
+    console.log(`Importado de la copia antigua: ${traidos.join(', ') || 'nada nuevo'}`);
   } catch (e) {
     if (e.code !== 'ENOENT') console.error(`No se pudo importar ${importar}: ${e.message}`);
   }
@@ -203,7 +204,7 @@ async function atender(req, res) {
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('x-frame-options', 'DENY');
   const ruta = new URL(req.url, 'http://x').pathname.replace(/\/+$/, '') || '/';
-  if (ruta === '/api/salud') return json(res, 200, { ok: true, emby: emby.configurado() });
+  if (ruta === '/api/salud') return json(res, 200, { ok: true, emby: emby.configurado(), telegram: telegram.estado });
   if (!ruta.startsWith('/api/panel/')) return json(res, 404, { error: 'No existe' });
   cors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
@@ -259,6 +260,7 @@ async function iniciar() {
   await cargar();
   emby.iniciar({ perfiles: almacen, nube: true });
   revendedores.iniciar({ perfiles: almacen });
+  telegram.iniciar({ perfiles: almacen });
 }
 
 async function escuchar() {
