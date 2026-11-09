@@ -1,7 +1,7 @@
 // Avisos de contenido nuevo de Emby en un grupo de Telegram con temas.
 //
 // Qué hace:
-//  · Cada 5 minutos mira lo que Emby ha añadido. Espera a que una cosa lleve 10 minutos en Emby
+//  · Cada 2 minutos mira lo que Emby ha añadido. Espera a que una cosa lleve 5 minutos en Emby
 //    antes de avisar, para que ya tenga su ficha completa (cartel, sinopsis, reparto…).
 //  · Cada biblioteca de Emby tiene su tema en el grupo, que se crea solo. Si el grupo ya tenía
 //    los temas de la web antigua (uno por carpeta de e2), se reutilizan.
@@ -24,8 +24,8 @@ import * as emby from './emby.js';
 
 const TOKEN = String(process.env.TELEGRAM_TOKEN ?? '').trim();
 const API = (process.env.TELEGRAM_API ?? 'https://api.telegram.org').replace(/\/$/, '');
-const CADA = Number(process.env.TELEGRAM_CADA_MS ?? 5 * 60000);
-const MADURO = Number(process.env.TELEGRAM_ESPERA_MS ?? 10 * 60000); // tiempo en Emby antes de avisar
+const CADA = Number(process.env.TELEGRAM_CADA_MS ?? 2 * 60000);
+const MADURO = Number(process.env.TELEGRAM_ESPERA_MS ?? 5 * 60000); // tiempo en Emby antes de avisar (ficha completa)
 const MUCHOS = 12; // más avisos que esto en una biblioteca y un repaso → un resumen
 const PAUSA = Number(process.env.TELEGRAM_PAUSA_MS ?? 3000); // entre mensajes (Telegram limita ~20/min por grupo)
 const COLORES = [7322096, 16766590, 13338331, 9367192, 16749490, 16478047]; // los que admite Telegram

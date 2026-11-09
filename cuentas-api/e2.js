@@ -3,6 +3,7 @@
 // este servidor solo abre la subida, firma la dirección de cada trozo (válida 1 hora) y la cierra.
 // Las claves de e2 (E2_*) están solo en /etc/morvehtv-cuentas/cuentas.env; el navegador nunca las ve.
 // Sin dependencias: la firma de S3 (AWS Signature V4) está hecha aquí con node:crypto.
+// Además vigila e2 cada minuto: lo que se suba por cualquier vía se le dice a Emby al momento (abajo).
 import { createHmac, createHash, randomBytes } from 'node:crypto';
 
 const ENDPOINT = String(process.env.E2_ENDPOINT ?? '').trim().replace(/\/+$/, '');
@@ -108,9 +109,14 @@ const guardar = (s) => p.guardarAjuste(AJUSTE, s);
 export async function iniciar(opciones) {
   p = opciones.perfiles;
   escanear = opciones.escanear ?? null;
+  avisarEmby = opciones.avisarEmby ?? null;
   if (!configurado()) return;
   setTimeout(limpiarViejas, 30000).unref();
   setInterval(limpiarViejas, 6 * 3600000).unref();
+  if (avisarEmby || escanear) {
+    setTimeout(vigilar, 5000).unref();
+    setInterval(vigilar, VIGILAR).unref();
+  }
   try { await ponerCors(opciones.origenes ?? []); estado = 'ok'; } catch (e) { estado = `error: ${e.message}`; console.error(`e2: no se pudo preparar el CORS del bucket (${e.message})`); }
 }
 
@@ -184,7 +190,8 @@ export async function cerrar({ id, etags }, usuario) {
   const { texto } = await s3('POST', { key: x.key, query: { uploadId: x.uploadId }, cuerpo, cabeceras: { 'content-type': 'application/xml' } });
   if (/<Error>/.test(texto)) throw error(502, `e2 no ha podido juntar el archivo (${xml(texto, 'Code')[0] ?? 'error'})`);
   delete s[id]; await guardar(s);
-  programarEscaneo();
+  vistos?.set(x.key, limpiarEtag(xml(texto, 'ETag')[0] ?? ''));
+  notificar([x.key]);
   return { key: x.key, tamano: x.tamano };
 }
 
@@ -208,12 +215,72 @@ async function limpiarViejas() {
   } catch (e) { console.error(`e2: limpieza de subidas (${e.message})`); }
 }
 
-// Al terminar una subida, Emby escanea las bibliotecas en ~2 minutos (lo que tarda el montaje de
-// e2 en la VPS en ver el archivo nuevo). Varias subidas seguidas → un solo escaneo.
+// ---------- Vigilar e2: lo que se sube (desde el panel, la web de iDrive o rclone) llega a Emby ----------
+// e2 no avisa de nada, así que cada minuto se mira qué hay en las carpetas de las bibliotecas (las
+// que no empiezan por «_»). Un archivo nuevo o cambiado → se le dice a Emby su ruta exacta
+// (/Library/Media/Updated) y Emby añade solo eso, en segundos. Se espera un poco antes de avisar
+// porque el montaje de e2 en la VPS guarda las listas de carpetas ~1 minuto (--dir-cache-time 1m).
+// La primera vuelta solo apunta lo que hay. Lo que se escape lo recoge el escaneo programado de Emby.
+const VIGILAR = Number(process.env.E2_VIGILAR_MS ?? 60000);
+const ESPERA_MONTAJE = Number(process.env.E2_ESPERA_MONTAJE_MS ?? 75000);
+const RUTA_EMBY = String(process.env.EMBY_RUTA_E2 ?? '/e2').replace(/\/+$/, '');
+const MEDIOS = /\.(mkv|mp4|m4v|avi|mov|webm|ts|m2ts|wmv|mpg|mpeg|srt|ass|ssa|vtt|sub|idx|sup)$/i;
+const limpiarEtag = (e) => desXml(String(e)).replace(/"/g, '');
+let avisarEmby = null;
+let vistos = null; // Map ruta → ETag
+let vigilando = false;
+let falloVigilar = '';
+
+async function listarTodo(prefijo) {
+  const salida = []; let token;
+  do {
+    const { texto } = await s3('GET', { query: { 'list-type': '2', prefix: prefijo, ...(token && { 'continuation-token': token }) } });
+    for (const c of xml(texto, 'Contents')) salida.push({ key: desXml(xml(c, 'Key')[0] ?? ''), etag: limpiarEtag(xml(c, 'ETag')[0] ?? '') });
+    token = /<IsTruncated>true<\/IsTruncated>/.test(texto) ? desXml(xml(texto, 'NextContinuationToken')[0] ?? '') : null;
+  } while (token);
+  return salida;
+}
+
+export async function vigilar() {
+  if (vigilando || !configurado()) return;
+  vigilando = true;
+  try {
+    const ahora = new Map();
+    for (const raiz of await carpetas()) {
+      for (const o of await listarTodo(`${raiz}/`)) if (MEDIOS.test(o.key)) ahora.set(o.key, o.etag);
+    }
+    if (vistos) {
+      const nuevos = [...ahora].filter(([k, e]) => vistos.get(k) !== e).map(([k]) => k);
+      if (nuevos.length) notificar(nuevos);
+    }
+    vistos = ahora;
+    if (falloVigilar) { console.log('e2: vigilancia de subidas otra vez en marcha'); falloVigilar = ''; }
+  } catch (e) {
+    // Si falla una vuelta no se toca lo apuntado (no se confunde con «todo es nuevo»)
+    if (falloVigilar !== e.message) console.error(`e2: no se pudo mirar si hay subidas nuevas (${e.message})`);
+    falloVigilar = e.message;
+  } finally { vigilando = false; }
+}
+
+// Junta lo nuevo de unos segundos y se lo dice a Emby cuando el montaje ya lo ve
+const porAvisar = new Set();
 let temporizador = null;
-function programarEscaneo() {
-  if (!escanear) return;
-  clearTimeout(temporizador);
-  temporizador = setTimeout(() => escanear().catch((e) => console.error(`Escaneo de Emby: ${e.message}`)), 120000);
+function notificar(keys) {
+  for (const k of keys) if (MEDIOS.test(k)) porAvisar.add(k);
+  if (!porAvisar.size || temporizador || (!avisarEmby && !escanear)) return;
+  temporizador = setTimeout(async () => {
+    temporizador = null;
+    const lista = [...porAvisar]; porAvisar.clear();
+    const nombre = lista[0].split('/').pop();
+    try {
+      if (!avisarEmby) throw new Error('sin aviso directo');
+      await avisarEmby(lista.map((k) => `${RUTA_EMBY}/${k}`));
+      console.log(`e2: ${lista.length} archivo${lista.length === 1 ? '' : 's'} nuevo${lista.length === 1 ? '' : 's'} → Emby («${nombre}»${lista.length > 1 ? ' y más' : ''})`);
+    } catch (e) {
+      // Si Emby no acepta el aviso directo, escaneo completo de las bibliotecas
+      console.error(`e2: aviso directo a Emby falló (${e.message}); escaneo completo`);
+      await escanear?.().catch((x) => console.error(`Escaneo de Emby: ${x.message}`));
+    }
+  }, ESPERA_MONTAJE);
   temporizador.unref?.();
 }

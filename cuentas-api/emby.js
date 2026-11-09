@@ -48,6 +48,9 @@ async function llamar(ruta, { metodo = 'GET', datos } = {}) {
 export const consultar = (ruta) => llamar(ruta);
 // Escanear las bibliotecas (tras subir algo a e2 desde el gestor)
 export const escanear = () => llamar('/Library/Refresh', { metodo: 'POST' });
+// Avisar a Emby de archivos nuevos concretos (rutas como las ve Emby: /e2/…): solo mira esas
+// carpetas, en segundos, sin escanear las bibliotecas enteras
+export const avisarCambios = (rutas) => llamar('/Library/Media/Updated', { metodo: 'POST', datos: { Updates: rutas.map((Path) => ({ Path, UpdateType: 'Created' })) } });
 export const direccionPublica = () => PUBLICA;
 export async function imagen(ruta) {
   if (!configurado()) return null;
