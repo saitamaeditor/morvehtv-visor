@@ -82,9 +82,18 @@ export async function iniciar(opciones) {
     setInterval(repaso, CADA).unref();
   } catch (e) {
     estado = `error: ${e.message}`;
-    console.error(`Telegram: ${e.message}`);
+    // Un fallo de red al arrancar (la VPS recién reiniciada, Telegram caído un momento…) no deja el
+    // bot apagado para siempre: se reintenta cada vez más espaciado (30 s, 1 min, 2 min… hasta 10 min).
+    // Un token rechazado (401/404) no se arregla solo y no se reintenta.
+    const rechazado = /unauthorized|not found/i.test(e.message);
+    if (!rechazado) {
+      reintento = Math.min((reintento || 15000) * 2, 600000);
+      console.error(`Telegram: ${e.message} (se vuelve a intentar en ${Math.round(reintento / 1000)} s)`);
+      setTimeout(() => iniciar(opciones), reintento).unref?.();
+    } else console.error(`Telegram: ${e.message}`);
   }
 }
+let reintento = 0;
 
 // Busca el grupo con temas en los mensajes recientes del bot
 async function buscarGrupo() {
