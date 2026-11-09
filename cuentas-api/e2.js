@@ -88,6 +88,13 @@ export async function carpetas(prefijo = '') {
   return salida.sort((a, b) => a.localeCompare(b, 'es', { numeric: true }));
 }
 
+// Todos los archivos que hay debajo de una carpeta (rutas relativas a ella)
+export async function archivos(prefijo) {
+  const pre = limpiarRuta(prefijo, { carpeta: true });
+  if (!pre) return [];
+  return (await listarTodo(pre)).map((x) => x.key.slice(pre.length)).filter(Boolean);
+}
+
 // Comprueba una ruta del bucket: carpeta de primer nivel que ya exista (y no interna), sin «..» ni
 // caracteres raros. Devuelve la ruta limpia.
 function limpiarRuta(ruta, { carpeta = false } = {}) {

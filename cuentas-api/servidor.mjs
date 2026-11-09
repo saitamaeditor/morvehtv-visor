@@ -21,7 +21,9 @@ import * as revendedores from './revendedores.js';
 import * as telegram from './telegram.js';
 import * as e2 from './e2.js';
 import * as fichas from './fichas.js';
+import * as episodios from './episodios.js';
 
+const pedirEpisodios = (url) => episodios.listar(Object.fromEntries(['imdb', 'nombre', 'ano', 'carpeta', 'serie'].map((k) => [k, url.searchParams.get(k) ?? ''])));
 const PUERTO = Number(process.env.PUERTO ?? 10100);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DATOS = process.env.DATOS ?? '/datos/datos.json';
@@ -325,6 +327,11 @@ async function atender(req, res) {
       return json(res, 200, { carpetas: en ? lista : lista.filter(permitida) });
     }
     if (ruta === '/api/panel/e2/ficha') return json(res, 200, await fichas.buscar(url.searchParams.get('q'), url.searchParams.get('tipo')));
+    if (ruta === '/api/panel/e2/episodios') {
+      const c = url.searchParams.get('carpeta') ?? '';
+      if (c && !permitida(c.replace(/^\/+/, '').split('/')[0])) throw error(403, 'No tienes acceso a esa carpeta');
+      return json(res, 200, await pedirEpisodios(url));
+    }
     if (req.method === 'POST' && ruta === '/api/panel/e2/abrir') {
       if (!permitida(String(d.ruta ?? '').replace(/^\/+/, '').split('/')[0])) throw error(403, 'No puedes subir a esa carpeta');
       try { return json(res, 200, await e2.abrir({ ...d, reemplazar: false }, quien)); } catch (e) {
@@ -357,6 +364,7 @@ async function atender(req, res) {
   // Subir a e2: administradores (y, con límites, los subidores de arriba)
   if (ruta === '/api/panel/e2/carpetas') return json(res, 200, { carpetas: await e2.carpetas(url.searchParams.get('en') ?? '') });
   if (ruta === '/api/panel/e2/ficha') return json(res, 200, await fichas.buscar(url.searchParams.get('q'), url.searchParams.get('tipo')));
+  if (ruta === '/api/panel/e2/episodios') return json(res, 200, await pedirEpisodios(url));
   if (ruta.startsWith('/api/panel/e2/') && req.method === 'POST') {
     if (ruta === '/api/panel/e2/abrir') return json(res, 200, await e2.abrir(d, usuario));
     if (ruta === '/api/panel/e2/trozos') return json(res, 200, await e2.trozos(d, usuario));
