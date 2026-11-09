@@ -157,7 +157,17 @@ export async function resumen() {
     const pol = u.Policy ?? {};
     const x = extra[u.Id] ?? {};
     const viendo = (sesiones ?? []).filter((s) => s.UserId === u.Id && s.NowPlayingItem)
-      .map((s) => ({ titulo: [s.NowPlayingItem.SeriesName, s.NowPlayingItem.Name].filter(Boolean).join(' · '), dispositivo: [s.Client, s.DeviceName].filter(Boolean).join(' · ') }));
+      .map((s) => {
+        const it = s.NowPlayingItem; const pos = s.PlayState?.PositionTicks ?? 0; const total = it.RunTimeTicks ?? 0;
+        return {
+          titulo: [it.SeriesName, it.Name].filter(Boolean).join(' · '),
+          tipo: it.Type === 'Episode' ? 'episodio' : it.Type === 'Movie' ? 'pelicula' : 'otro',
+          dispositivo: [s.Client, s.DeviceName].filter(Boolean).join(' · '),
+          progreso: total ? Math.min(100, Math.round((pos / total) * 100)) : null,
+          pausado: Boolean(s.PlayState?.IsPaused),
+          convertido: Boolean(s.TranscodingInfo && s.TranscodingInfo.IsVideoDirect === false),
+        };
+      });
     const conectado = (sesiones ?? []).some((s) => s.UserId === u.Id && ahora - new Date(s.LastActivityDate).getTime() < 10 * 60000);
     return {
       id: u.Id,
@@ -165,6 +175,7 @@ export async function resumen() {
       admin: Boolean(pol.IsAdministrator),
       desactivada: Boolean(pol.IsDisabled),
       caduca: x.caduca ?? null,
+      desde: x.desde ?? x.creada ?? u.DateCreated ?? null,
       caducada: Boolean(x.caduca && new Date(x.caduca).getTime() <= ahora),
       nota: x.nota ?? '',
       creada: u.DateCreated ?? x.creada ?? null,
@@ -213,7 +224,8 @@ export async function crear(datos, por) {
     await llamar(`/Users/${encodeURIComponent(nuevo.Id)}`, { metodo: 'DELETE' }).catch(() => {});
     throw e;
   }
-  await cambiarExtra(nuevo.Id, { caduca, nota, creada: new Date().toISOString(), por });
+  const ahora = new Date().toISOString();
+  await cambiarExtra(nuevo.Id, { caduca, nota, creada: ahora, desde: ahora, por });
   return { id: nuevo.Id, usuario: nombre };
 }
 
@@ -226,7 +238,7 @@ export async function editar(id, datos) {
   if ('bibliotecas' in datos) cambios.carpetas = carpetasElegidas(datos.bibliotecas, await bibliotecas());
   const extra = {};
   if ('nota' in datos) extra.nota = String(datos.nota ?? '').trim().slice(0, 200);
-  if ('caduca' in datos) extra.caduca = caducidadValida(datos.caduca);
+  if ('caduca' in datos) { extra.caduca = caducidadValida(datos.caduca); extra.desde = new Date().toISOString(); }
   // Con una fecha nueva en el futuro (o sin caducidad), la cuenta vuelve a funcionar
   const reactivar = 'caduca' in datos && (await extras())[id]?.caducadaSola;
   await ponerPolitica(id, politica(u.Policy ?? {}, { ...cambios, desactivada: reactivar ? false : u.Policy?.IsDisabled }));
@@ -273,7 +285,7 @@ export async function renovar(id, { dias, fecha } = {}) {
     caduca = new Date(desde + n * 864e5).toISOString();
   }
   await ponerPolitica(id, { ...u.Policy, IsDisabled: false });
-  await cambiarExtra(id, { caduca, caducadaSola: false });
+  await cambiarExtra(id, { caduca, desde: x.caduca && new Date(x.caduca).getTime() > Date.now() ? (x.desde ?? new Date().toISOString()) : new Date().toISOString(), caducadaSola: false });
   return { ok: true, caduca };
 }
 
