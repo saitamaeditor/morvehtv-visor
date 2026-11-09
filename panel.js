@@ -17,6 +17,7 @@ import https from 'node:https';
 import * as meta from './metadatos.js';
 import * as enlaces from './enlaces.js';
 import * as emby from './emby.js';
+import * as revendedores from './revendedores.js';
 import { analizarEnlaces, archivoEnlaces, detectarEtiquetas, IDIOMAS_ENLACE, CALIDADES_ENLACE } from './enlaces-video.js';
 
 // Subidas desde enlace en marcha y recientes (en memoria: id → estado)
@@ -71,6 +72,7 @@ export function iniciar(opciones) {
   pagosEstado = opciones.pagosEstado ?? pagosEstado;
   pagos = opciones.pagos ?? null;
   emby.iniciar({ perfiles: p, nube });
+  revendedores.iniciar({ perfiles: p });
   // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
   if (nube) { setTimeout(purgar, 120000).unref(); setInterval(purgar, 6 * 3600000).unref(); }
   // Borra las IPs que guardó el registro antes de dejar de apuntarlas
@@ -315,7 +317,20 @@ export async function atender(ruta, req, res, json, ip) {
     return json(res, 200, { token: await p.tokenPanel(c), usuario: c.usuario, nombre: c.nombre, rol: esAdm ? 'admin' : 'colaborador', secciones: esAdm ? null : (await p.colaboradorDe(c)).secciones });
   }
 
-  const c = await p.cuentaDeToken(String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, ''));
+  const tk = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+  // Revendedores de Emby: entran con su propio usuario y token («rv_…») y solo usan /api/panel/emby
+  if (ruta === '/api/panel/emby/entrar') return json(res, 200, await revendedores.entrar(datos));
+  if (tk.startsWith('rv_')) {
+    const a = await revendedores.actorDeToken(tk);
+    if (!a) throw error(401, 'La sesión ha caducado: vuelve a entrar');
+    if (ruta === '/api/panel/yo') return json(res, 200, revendedores.yo(a));
+    if (ruta === '/api/panel/emby/salir') { await revendedores.salir(tk); return json(res, 200, { ok: true }); }
+    if (!ruta.startsWith('/api/panel/emby')) throw error(403, 'No tienes acceso a eso');
+    const r = await revendedores.atender(ruta, req.method, datos, a);
+    if (r.registro) await registrar({ usuario: `${a.usuario} (revendedor)` }, ip, r.registro);
+    return json(res, 200, r.datos);
+  }
+  const c = await p.cuentaDeToken(tk);
   if (!c) throw error(401, 'La sesión ha caducado: vuelve a entrar');
   // Dos papeles: administrador (todo) y colaborador (subir y crear carpetas, solo en sus secciones;
   // nunca borrar, mover, ni la papelera, el registro, los anuncios, los pagos o los colaboradores).
@@ -405,38 +420,11 @@ export async function atender(ruta, req, res, json, ip) {
     return json(res, 200, { ok: true });
   }
 
-  // ---------- Cuentas de Emby (solo administradores) ----------
-  if (ruta === '/api/panel/emby' && req.method === 'GET') return json(res, 200, await emby.resumen());
-  if (ruta === '/api/panel/emby/crear') {
-    const r = await emby.crear(datos, c.usuario);
-    await registrar(c, ip, `crea la cuenta de Emby ${r.usuario}`);
-    return json(res, 200, r);
-  }
-  if (ruta === '/api/panel/emby/editar') {
-    await emby.editar(datos.id, datos.cambios ?? {});
-    await registrar(c, ip, `cambia la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
-    return json(res, 200, { ok: true });
-  }
-  if (ruta === '/api/panel/emby/clave') {
-    await emby.cambiarClave(datos.id, datos.clave);
-    await registrar(c, ip, `cambia la contraseña de la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
-    return json(res, 200, { ok: true });
-  }
-  if (ruta === '/api/panel/emby/activar') {
-    await emby.activar(datos.id, Boolean(datos.activa));
-    await registrar(c, ip, `${datos.activa ? 'activa' : 'desactiva'} la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
-    return json(res, 200, { ok: true });
-  }
-  if (ruta === '/api/panel/emby/renovar') {
-    const r = await emby.renovar(datos.id, { dias: datos.dias, ...('fecha' in datos && { fecha: datos.fecha }) });
-    await registrar(c, ip, `renueva la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
-    return json(res, 200, r);
-  }
-  if (ruta === '/api/panel/emby/cortar') return json(res, 200, await emby.cortar(datos.id));
-  if (ruta === '/api/panel/emby/borrar') {
-    const r = await emby.borrar(datos.id);
-    await registrar(c, ip, `borra la cuenta de Emby ${r.usuario}`);
-    return json(res, 200, r);
+  // ---------- Cuentas de Emby y revendedores ----------
+  if (ruta.startsWith('/api/panel/emby')) {
+    const r = await revendedores.atender(ruta, req.method, datos, { admin: true, usuario: c.usuario });
+    if (r.registro) await registrar(c, ip, r.registro);
+    return json(res, 200, r.datos);
   }
 
   // Contenido de una carpeta (sus subcarpetas y sus archivos)

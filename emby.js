@@ -175,6 +175,7 @@ export async function resumen() {
       admin: Boolean(pol.IsAdministrator),
       desactivada: Boolean(pol.IsDisabled),
       caduca: x.caduca ?? null,
+      dueno: x.dueno ?? null,
       desde: x.desde ?? x.creada ?? u.DateCreated ?? null,
       caducada: Boolean(x.caduca && new Date(x.caduca).getTime() <= ahora),
       nota: x.nota ?? '',
@@ -202,7 +203,7 @@ export async function resumen() {
 }
 
 // ---------- Acciones ----------
-export async function crear(datos, por) {
+export async function crear(datos, por, dueno = null) {
   const nombre = nombreValido(datos.usuario);
   const clave = claveValida(datos.clave);
   const pantallas = pantallasValidas(datos.pantallas);
@@ -225,7 +226,7 @@ export async function crear(datos, por) {
     throw e;
   }
   const ahora = new Date().toISOString();
-  await cambiarExtra(nuevo.Id, { caduca, nota, creada: ahora, desde: ahora, por });
+  await cambiarExtra(nuevo.Id, { caduca, nota, creada: ahora, desde: ahora, por, ...(dueno && { dueno }) });
   return { id: nuevo.Id, usuario: nombre };
 }
 
@@ -304,6 +305,25 @@ export async function cortar(id) {
   const sesiones = ((await llamar('/Sessions')) ?? []).filter((s) => s.UserId === id && s.NowPlayingItem);
   for (const s of sesiones) await llamar(`/Sessions/${encodeURIComponent(s.Id)}/Playing/Stop`, { metodo: 'POST' }).catch(() => {});
   return { ok: true, cortadas: sesiones.length };
+}
+
+// ---------- Para los revendedores ----------
+export const extrasEmby = () => extras();
+export async function cambiarDueno(id, dueno) {
+  id = idValido(id);
+  await noAdmin(id);
+  const todo = await extras();
+  todo[id] = { ...(todo[id] ?? {}) };
+  if (dueno) todo[id].dueno = dueno; else delete todo[id].dueno;
+  await p.guardarAjuste(AJUSTE, todo);
+}
+// Pasa las cuentas de unos revendedores a otro (o al administrador, con null)
+export async function reasignar(de, a) {
+  const todo = await extras();
+  let n = 0;
+  for (const x of Object.values(todo)) if (x.dueno && de.has(x.dueno)) { if (a) x.dueno = a; else delete x.dueno; n += 1; }
+  if (n) await p.guardarAjuste(AJUSTE, todo);
+  return n;
 }
 
 // ---------- Caducidad automática ----------
