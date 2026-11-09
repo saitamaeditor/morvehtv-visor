@@ -366,7 +366,10 @@ export async function repaso() {
     const conocidos = {}; // id biblioteca → Set
     for (const lib of libs) {
       const items = await idsDe(lib);
-      if (!datos.conocidos[lib.id]) {
+      // Mientras una biblioteca esté vacía tampoco cuenta como apuntada: si Emby la vació (montaje de
+      // e2 caído durante un escaneo) y luego vuelve todo, no se avisa de todo otra vez
+      if (!datos.conocidos[lib.id]?.length) {
+        if (!items.length) { datos.conocidos[lib.id] = []; continue; }
         datos.conocidos[lib.id] = items.map((x) => x.id);
         console.log(`Telegram: biblioteca «${lib.nombre}» apuntada (${items.length} elementos; solo se avisará de lo que llegue a partir de ahora)`);
         continue;
