@@ -1,8 +1,9 @@
 // Avisos de contenido nuevo de Emby en un grupo de Telegram con temas.
 //
 // Qué hace:
-//  · Cada 2 minutos mira lo que Emby ha añadido. Espera a que una cosa lleve 5 minutos en Emby
-//    antes de avisar, para que ya tenga su ficha completa (cartel, sinopsis, reparto…).
+//  · Mira lo que Emby ha añadido cada minuto, y al momento cuando el vigilante de e2 (e2.js) le
+//    dice a Emby que ha llegado algo. Avisa en cuanto Emby tiene el cartel (la ficha ya está
+//    completa); si no llega, a los 5 minutos avisa igual.
 //  · Cada biblioteca de Emby tiene su tema en el grupo, que se crea solo. Si el grupo ya tenía
 //    los temas de la web antigua (uno por carpeta de e2), se reutilizan.
 //  · Película → un aviso con cartel, nota, duración, géneros, dirección, reparto, sinopsis y
@@ -24,8 +25,11 @@ import * as emby from './emby.js';
 
 const TOKEN = String(process.env.TELEGRAM_TOKEN ?? '').trim();
 const API = (process.env.TELEGRAM_API ?? 'https://api.telegram.org').replace(/\/$/, '');
-const CADA = Number(process.env.TELEGRAM_CADA_MS ?? 2 * 60000);
-const MADURO = Number(process.env.TELEGRAM_ESPERA_MS ?? 5 * 60000); // tiempo en Emby antes de avisar (ficha completa)
+const CADA = Number(process.env.TELEGRAM_CADA_MS ?? 60000);
+// Se avisa en cuanto Emby tiene el cartel (señal de que ya bajó la ficha: sinopsis, reparto…).
+// Si el cartel no llega, se avisa igual pasado MADURO. MINIMO: margen para que termine de guardarla.
+const MADURO = Number(process.env.TELEGRAM_ESPERA_MS ?? 5 * 60000);
+const MINIMO = Number(process.env.TELEGRAM_MINIMO_MS ?? 15000);
 const MUCHOS = 12; // más avisos que esto en una biblioteca y un repaso → un resumen
 const PAUSA = Number(process.env.TELEGRAM_PAUSA_MS ?? 3000); // entre mensajes (Telegram limita ~20/min por grupo)
 const COLORES = [7322096, 16766590, 13338331, 9367192, 16749490, 16478047]; // los que admite Telegram
@@ -346,9 +350,21 @@ async function fichas(ids) {
   return m;
 }
 
+// Mirar Emby enseguida (lo llama e2.js al avisar a Emby de algo nuevo, y el propio repaso
+// mientras algo espera su cartel)
+let prontoT = null;
+export function pronto(ms = 10000) {
+  if (!activo || prontoT) return;
+  prontoT = setTimeout(() => { prontoT = null; repaso(); }, ms);
+  prontoT.unref?.();
+}
+
+let faltaCartel = false;
 export async function repaso() {
-  if (!activo || ocupado) return;
+  if (!activo) return;
+  if (ocupado) { pronto(15000); return; }
   ocupado = true;
+  faltaCartel = false;
   try {
     if (!datos.chat && !(await buscarGrupo())) { estado = 'falta el grupo'; return; }
     if (!servidorId) servidorId = (await emby.consultar('/System/Info').catch(() => null))?.Id ?? null;
@@ -386,7 +402,7 @@ export async function repaso() {
       conocidos[libId] = s; datos.conocidos[libId] = [...s];
     };
     for (const lib of libs) {
-      const listos = Object.entries(datos.esperando).filter(([, e]) => e.lib === lib.id && ahora - e.visto >= MADURO).map(([id]) => id);
+      const listos = Object.entries(datos.esperando).filter(([, e]) => e.lib === lib.id && ahora - e.visto >= MINIMO).map(([id]) => id);
       if (!listos.length) continue;
       const f = await fichas(listos);
       const pelis = []; const porSerie = new Map(); const sueltos = [];
@@ -413,6 +429,11 @@ export async function repaso() {
         grupos.push({ ficha: s, episodios: eps, nuevosEpisodios: yaEstaban.has(sid), ids: [...eps.map((e) => String(e.Id)), sid] });
       }
       if (sueltos.length) conocer(lib.id, sueltos);
+      // Solo lo que ya tiene cartel en Emby (o lleva esperando MADURO); lo demás, en otra vuelta
+      const desde = (g) => Math.min(...g.ids.map((id) => datos.esperando[id]?.visto ?? ahora));
+      for (let i = grupos.length - 1; i >= 0; i--) {
+        if (!grupos[i].ficha.ImageTags?.Primary && ahora - desde(grupos[i]) < MADURO) { grupos.splice(i, 1); faltaCartel = true; }
+      }
       if (!grupos.length) { await guardarDatos(); continue; }
       if (grupos.length > MUCHOS) {
         const tema = await mandarA(lib, resumen(lib, grupos));
@@ -433,6 +454,8 @@ export async function repaso() {
     for (const [id, e] of Object.entries(datos.esperando)) if (!libs.some((l) => l.id === e.lib)) delete datos.esperando[id];
     await guardarDatos();
     estado = 'ok';
+    // Algo espera su cartel: se vuelve a mirar en 20 s en vez de esperar al minuto
+    if (faltaCartel || Object.values(datos.esperando).some((e) => Date.now() - e.visto < MINIMO)) pronto(20000);
   } catch (e) {
     estado = `error: ${e.message}`;
     console.error(`Telegram: ${e.message}`);

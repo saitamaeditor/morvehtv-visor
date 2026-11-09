@@ -110,6 +110,7 @@ export async function iniciar(opciones) {
   p = opciones.perfiles;
   escanear = opciones.escanear ?? null;
   avisarEmby = opciones.avisarEmby ?? null;
+  alAvisar = opciones.alAvisar ?? null;
   if (!configurado()) return;
   setTimeout(limpiarViejas, 30000).unref();
   setInterval(limpiarViejas, 6 * 3600000).unref();
@@ -227,6 +228,7 @@ const RUTA_EMBY = String(process.env.EMBY_RUTA_E2 ?? '/e2').replace(/\/+$/, '');
 const MEDIOS = /\.(mkv|mp4|m4v|avi|mov|webm|ts|m2ts|wmv|mpg|mpeg|srt|ass|ssa|vtt|sub|idx|sup)$/i;
 const limpiarEtag = (e) => desXml(String(e)).replace(/"/g, '');
 let avisarEmby = null;
+let alAvisar = null; // Telegram: mirar Emby enseguida
 let vistos = null; // Map ruta → ETag
 let vigilando = false;
 let falloVigilar = '';
@@ -281,6 +283,7 @@ function notificar(keys) {
       console.error(`e2: aviso directo a Emby falló (${e.message}); escaneo completo`);
       await escanear?.().catch((x) => console.error(`Escaneo de Emby: ${x.message}`));
     }
+    try { alAvisar?.(); } catch {}
   }, ESPERA_MONTAJE);
   temporizador.unref?.();
 }

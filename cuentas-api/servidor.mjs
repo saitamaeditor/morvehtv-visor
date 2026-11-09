@@ -279,7 +279,7 @@ async function iniciar() {
   emby.iniciar({ perfiles: almacen, nube: true });
   revendedores.iniciar({ perfiles: almacen });
   telegram.iniciar({ perfiles: almacen });
-  e2.iniciar({ perfiles: almacen, origenes: [PANEL_PUBLICO, ...ORIGENES], escanear: emby.configurado() ? emby.escanear : null, avisarEmby: emby.configurado() ? emby.avisarCambios : null });
+  e2.iniciar({ perfiles: almacen, origenes: [PANEL_PUBLICO, ...ORIGENES], escanear: emby.configurado() ? emby.escanear : null, avisarEmby: emby.configurado() ? emby.avisarCambios : null, alAvisar: () => telegram.pronto(10000) });
 }
 
 async function escuchar() {
