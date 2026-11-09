@@ -3,6 +3,7 @@
 // gestor (saitamaeditor.github.io/morvehtv-gestor) y /api/salud. Sin dependencias: solo Node.
 // Los administradores se crean desde la VPS con admin.mjs (habla con este servidor por un enchufe
 // Unix local, así nadie puede hacerlo desde internet).
+// Los administradores (y solo ellos) pueden subir a e2 desde el gestor: ver e2.js.
 //
 // Datos: un archivo JSON (DATOS, por defecto /datos/datos.json) con los ajustes que usan
 // emby.js y revendedores.js («emby», «embyRevendedores», «embyMovimientos»), más los
@@ -18,12 +19,15 @@ import { randomBytes, scryptSync, timingSafeEqual, createHash } from 'node:crypt
 import * as emby from './emby.js';
 import * as revendedores from './revendedores.js';
 import * as telegram from './telegram.js';
+import * as e2 from './e2.js';
 
 const PUERTO = Number(process.env.PUERTO ?? 10100);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DATOS = process.env.DATOS ?? '/datos/datos.json';
 const PRODUCCION = process.env.NODE_ENV === 'production';
 const ORIGENES = String(process.env.PANEL_ORIGENES ?? 'https://saitamaeditor.github.io').split(',').map((o) => o.trim()).filter(Boolean);
+// Dirección pública del panel (para el CORS del bucket de e2: el navegador sube allí directamente)
+const PANEL_PUBLICO = String(process.env.PANEL_PUBLICO ?? 'https://panel.morvehtv.com').trim();
 const DIAS_TOKEN = 30;
 const IMPORTABLES = ['emby', 'embyRevendedores', 'embyMovimientos', 'telegram'];
 
@@ -150,7 +154,7 @@ async function entrarAdmin(d, ip) {
   ses[huella(token)] = { usuario, caduca: ahora + DIAS_TOKEN * 86400000 };
   await almacen.guardarAjuste('sesiones', ses);
   await registrar(usuario, 'entra en el panel');
-  return { token, usuario, nombre: usuario, rol: 'admin' };
+  return { token, usuario, nombre: usuario, rol: 'admin', e2: e2.configurado() };
 }
 async function adminDeToken(token) {
   const ses = (await almacen.leerAjuste('sesiones')) ?? {};
@@ -188,10 +192,10 @@ function cors(req, res) {
     res.setHeader('access-control-max-age', '3600');
   }
 }
-async function cuerpo(req) {
+async function cuerpo(req, max = 64 * 1024) {
   if (req.method !== 'POST') return {};
   let largo = 0; const trozos = [];
-  for await (const t of req) { largo += t.length; if (largo > 64 * 1024) throw error(413, 'Demasiado grande'); trozos.push(t); }
+  for await (const t of req) { largo += t.length; if (largo > max) throw error(413, 'Demasiado grande'); trozos.push(t); }
   if (!largo) return {};
   try { const d = JSON.parse(Buffer.concat(trozos).toString('utf8')); return d && typeof d === 'object' ? d : {}; } catch { throw error(400, 'JSON no válido'); }
 }
@@ -203,14 +207,16 @@ async function atender(req, res) {
   res.setHeader('x-content-type-options', 'nosniff');
   res.setHeader('referrer-policy', 'no-referrer');
   res.setHeader('x-frame-options', 'DENY');
-  const ruta = new URL(req.url, 'http://x').pathname.replace(/\/+$/, '') || '/';
-  if (ruta === '/api/salud') return json(res, 200, { ok: true, emby: emby.configurado(), telegram: telegram.estado });
+  const url = new URL(req.url, 'http://x');
+  const ruta = url.pathname.replace(/\/+$/, '') || '/';
+  if (ruta === '/api/salud') return json(res, 200, { ok: true, emby: emby.configurado(), telegram: telegram.estado, e2: e2.estado });
   if (!ruta.startsWith('/api/panel/')) return json(res, 404, { error: 'No existe' });
   cors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   if (!['GET', 'POST'].includes(req.method)) return json(res, 405, { error: 'Método no permitido' });
 
-  const d = await cuerpo(req);
+  // Cerrar una subida grande lleva la lista de trozos (hasta 9000): más sitio solo para esa ruta
+  const d = await cuerpo(req, ruta === '/api/panel/e2/cerrar' ? 1024 * 1024 : 64 * 1024);
   const ip = ipDe(req);
   if (ruta === '/api/panel/entrar') return json(res, 200, await entrarAdmin(d, ip));
   if (ruta === '/api/panel/emby/entrar') return json(res, 200, await revendedores.entrar(d));
@@ -233,9 +239,21 @@ async function atender(req, res) {
   // Administradores
   const usuario = tk.startsWith('ad_') ? await adminDeToken(tk) : null;
   if (!usuario) throw error(401, 'La sesión ha caducado: vuelve a entrar');
-  if (ruta === '/api/panel/yo') return json(res, 200, { usuario, nombre: usuario, rol: 'admin' });
+  if (ruta === '/api/panel/yo') return json(res, 200, { usuario, nombre: usuario, rol: 'admin', e2: e2.configurado() });
   if (ruta === '/api/panel/salir') { await salirAdmin(tk); return json(res, 200, { ok: true }); }
   if (ruta === '/api/panel/registro') return json(res, 200, (await almacen.leerAjuste('registro')) ?? []);
+  // Subir a e2: SOLO administradores (los revendedores ya se han quedado fuera arriba)
+  if (ruta === '/api/panel/e2/carpetas') return json(res, 200, { carpetas: await e2.carpetas(url.searchParams.get('en') ?? '') });
+  if (ruta.startsWith('/api/panel/e2/') && req.method === 'POST') {
+    if (ruta === '/api/panel/e2/abrir') return json(res, 200, await e2.abrir(d, usuario));
+    if (ruta === '/api/panel/e2/trozos') return json(res, 200, await e2.trozos(d, usuario));
+    if (ruta === '/api/panel/e2/cancelar') return json(res, 200, await e2.cancelar(d, usuario));
+    if (ruta === '/api/panel/e2/cerrar') {
+      const r = await e2.cerrar(d, usuario);
+      await registrar(usuario, `sube a e2 «${r.key}» (${(r.tamano / 1073741824).toFixed(2)} GB)`);
+      return json(res, 200, r);
+    }
+  }
   if (ruta.startsWith('/api/panel/emby')) {
     const r = await revendedores.atender(ruta, req.method, d, { admin: true, usuario });
     if (r.registro) await registrar(usuario, r.registro);
@@ -261,6 +279,7 @@ async function iniciar() {
   emby.iniciar({ perfiles: almacen, nube: true });
   revendedores.iniciar({ perfiles: almacen });
   telegram.iniciar({ perfiles: almacen });
+  e2.iniciar({ perfiles: almacen, origenes: [PANEL_PUBLICO, ...ORIGENES], escanear: emby.configurado() ? emby.escanear : null });
 }
 
 async function escuchar() {

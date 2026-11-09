@@ -46,6 +46,8 @@ async function llamar(ruta, { metodo = 'GET', datos } = {}) {
 
 // Para otros módulos (avisos de Telegram): la API de Emby y sus imágenes, con la clave del servidor
 export const consultar = (ruta) => llamar(ruta);
+// Escanear las bibliotecas (tras subir algo a e2 desde el gestor)
+export const escanear = () => llamar('/Library/Refresh', { metodo: 'POST' });
 export const direccionPublica = () => PUBLICA;
 export async function imagen(ruta) {
   if (!configurado()) return null;

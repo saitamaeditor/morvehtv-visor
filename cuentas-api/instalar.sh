@@ -26,7 +26,7 @@ else
 fi
 chmod +x "$APP"/*.sh
 
-echo "== 2/6 Clave de Emby"
+echo "== 2/6 Claves (Emby, Telegram y e2)"
 install -d -m 700 /etc/morvehtv-cuentas
 if ! grep -qs '^EMBY_API_KEY=.\+' "$ENV"; then
   echo "Pega la clave de API de Emby (Panel de Emby → Avanzado → Claves de API). No se verá al pegarla:"
@@ -45,6 +45,26 @@ if ! grep -qs '^TELEGRAM_TOKEN=' "$ENV"; then
   if [[ -n $TG && ! $TG =~ ^[0-9]{5,}:[A-Za-z0-9_-]{30,}$ ]]; then echo "Ese token no parece válido: Telegram queda sin activar."; TG=; fi
   printf 'TELEGRAM_TOKEN=%s\n' "$TG" >> "$ENV"
   unset TG
+fi
+# e2 (para «Subir» en el panel, solo administradores): las claves se copian del montaje de rclone
+# de esta VPS (el mismo bucket que ve Emby). Se vuelven a copiar cada vez: si cambias las claves en
+# rclone, basta con relanzar el instalador.
+MONTAJE=$(ps -eo args | awk '$1 ~ /rclone$/ && $2 == "mount" {print $3; exit}')
+REMOTO=${MONTAJE%%:*}; REMOTO=${REMOTO:-e2}
+BUCKET_E2=${MONTAJE#*:}; BUCKET_E2=${BUCKET_E2%%/*}; [[ -n $MONTAJE ]] || BUCKET_E2=morvehtv
+if command -v rclone >/dev/null && RC=$(rclone config show "$REMOTO" 2>/dev/null) && [[ -n $RC ]]; then
+  val() { awk -F' = ' -v k="$1" '$1 == k {print $2; exit}' <<<"$RC"; }
+  E2K=$(val access_key_id); E2S=$(val secret_access_key); E2E=$(val endpoint); E2R=$(val region)
+  if [[ -n $E2K && -n $E2S && -n $E2E && -n $BUCKET_E2 ]]; then
+    sed -i '/^E2_/d' "$ENV"
+    printf 'E2_ENDPOINT=%s\nE2_REGION=%s\nE2_BUCKET=%s\nE2_ACCESS_KEY_ID=%s\nE2_SECRET_ACCESS_KEY=%s\n' "$E2E" "$E2R" "$BUCKET_E2" "$E2K" "$E2S" >> "$ENV"
+    echo "   Subida a e2 activada (bucket $BUCKET_E2, claves del montaje de rclone)"
+  else
+    echo "   AVISO: no encuentro las claves de e2 en rclone («$REMOTO»): la subida desde el panel queda desactivada"
+  fi
+  unset RC E2K E2S
+else
+  echo "   AVISO: no encuentro el remoto «$REMOTO» de rclone: la subida desde el panel queda desactivada"
 fi
 chmod 600 "$ENV"
 
