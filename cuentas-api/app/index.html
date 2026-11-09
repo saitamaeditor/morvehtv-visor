@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MorvehTV</title>
+<meta name="theme-color" content="#0b0c0e">
+<meta name="robots" content="noindex">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="app.css?v=1">
+</head>
+<body>
+
+<!-- Entrar -->
+<section id="entrar" class="entrar" hidden>
+  <form id="f-entrar" class="caja-entrar" novalidate>
+    <div class="marca grande"><img src="icono.svg" alt=""><b>Morveh<span>TV</span></b></div>
+    <p class="sub">Entra con tu cuenta para ver películas y series.</p>
+    <label>Usuario<input id="e-usuario" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+    <label>Contraseña<input id="e-clave" type="password" autocomplete="current-password"></label>
+    <button class="boton primario ancho" type="submit">Entrar</button>
+    <p class="error" id="e-error" role="alert"></p>
+  </form>
+</section>
+
+<!-- App -->
+<div id="app" hidden>
+  <header id="cabecera">
+    <a class="marca" href="#/" aria-label="Inicio"><img src="icono.svg" alt=""><b>Morveh<span>TV</span></b></a>
+    <nav id="menu" aria-label="Secciones"></nav>
+    <div class="cab-derecha">
+      <a class="boton icono" href="#/buscar" id="ir-buscar" aria-label="Buscar" title="Buscar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></a>
+      <button class="avatar" id="yo" aria-label="Tu cuenta"></button>
+    </div>
+  </header>
+  <main id="vista"></main>
+</div>
+
+<!-- Reproductor -->
+<div id="reproductor" hidden>
+  <video id="video" playsinline preload="auto"></video>
+  <div class="rep-cargando" id="rep-cargando"><i></i></div>
+  <div class="rep-capa" id="rep-capa">
+    <div class="rep-arriba">
+      <button class="rep-boton" id="rep-cerrar" aria-label="Volver"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+      <div class="rep-titulo"><b id="rep-titulo"></b><small id="rep-sub"></small></div>
+    </div>
+    <button class="rep-centro" id="rep-centro" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" id="rep-centro-ico"></svg></button>
+    <div class="rep-abajo">
+      <div class="rep-barra">
+        <span id="rep-actual">0:00</span>
+        <input type="range" id="rep-pos" min="0" max="1000" value="0" step="1" aria-label="Posición">
+        <span id="rep-total">0:00</span>
+      </div>
+      <div class="rep-botones">
+        <button class="rep-boton" id="rep-menos" aria-label="Atrás 10 segundos"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><text x="12" y="15.5" text-anchor="middle">10</text></svg></button>
+        <button class="rep-boton grande" id="rep-play" aria-label="Reproducir o pausar"><svg viewBox="0 0 24 24" id="rep-play-ico"></svg></button>
+        <button class="rep-boton" id="rep-mas" aria-label="Adelante 10 segundos"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/><text x="12" y="15.5" text-anchor="middle">10</text></svg></button>
+        <span class="hueco"></span>
+        <button class="rep-boton" id="rep-pistas" aria-label="Audio y subtítulos"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 12h3M13 12h4M7 15.5h7"/></svg></button>
+        <button class="rep-boton" id="rep-siguiente" aria-label="Siguiente episodio" hidden><svg viewBox="0 0 24 24"><path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/></svg></button>
+        <button class="rep-boton" id="rep-completa" aria-label="Pantalla completa"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      </div>
+    </div>
+  </div>
+  <div class="rep-menu" id="rep-menu" hidden></div>
+  <div class="rep-aviso" id="rep-aviso" hidden></div>
+</div>
+
+<div class="avisos" id="avisos" aria-live="polite"></div>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>

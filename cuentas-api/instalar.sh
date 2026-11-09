@@ -9,6 +9,7 @@ APP=$DIR/cuentas-api
 ENV=/etc/morvehtv-cuentas/cuentas.env
 DATOS=/var/lib/morvehtv-cuentas
 DOMINIO=panel.morvehtv.com
+DOMINIO_APP=morvehtv.com
 CADDY=/etc/caddy/Caddyfile
 REPO_WEB=https://github.com/saitamaeditor/morvehtv-gestor.git
 WEB=/opt/morvehtv-cuentas-web
@@ -87,9 +88,32 @@ echo "== 5/6 Panel en https://$DOMINIO, Caddy y actualizaciones"
 # La web del panel (los archivos de morvehtv-gestor) se sirve desde la propia VPS
 if [[ ! -d $WEB/.git ]]; then git clone -q --depth 1 "$REPO_WEB" "$WEB"
 else git -C "$WEB" fetch -q --depth 1 origin main && git -C "$WEB" reset -q --hard origin/main; fi
-# El bloque de $DOMINIO se reescribe siempre (así se arreglan instalaciones anteriores)
+# Los bloques de $DOMINIO y de $DOMINIO_APP se reescriben siempre (así se arreglan instalaciones anteriores)
 cp "$CADDY" /tmp/Caddyfile.prev
-awk -v d="$DOMINIO {" '$0==d{s=1} !s{print} s&&/^}/{s=0}' /tmp/Caddyfile.prev > "$CADDY"
+awk -v d="$DOMINIO {" -v a="$DOMINIO_APP, www.$DOMINIO_APP {" '$0==d||$0==a{s=1} !s{print} s&&/^}/{s=0}' /tmp/Caddyfile.prev > "$CADDY"
+# La app MorvehTV (interfaz propia sobre Emby) en https://$DOMINIO_APP: los archivos de cuentas-api/app
+# y la API de Emby en /emby/… (mismo dominio: sin problemas de CORS, y Emby ya entiende ese prefijo)
+cat >> "$CADDY" <<CADDY
+
+$DOMINIO_APP, www.$DOMINIO_APP {
+	tls /etc/caddy/cf-origen.pem /etc/caddy/cf-origen.key
+	@www host www.$DOMINIO_APP
+	redir @www https://$DOMINIO_APP{uri} 308
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+	handle /emby/* {
+		reverse_proxy 127.0.0.1:8096
+	}
+	handle {
+		root * $APP/app
+		header Cache-Control no-cache
+		file_server
+	}
+}
+CADDY
 cat >> "$CADDY" <<CADDY
 
 $DOMINIO {
@@ -137,5 +161,5 @@ else
 fi
 
 echo
-echo "LISTO. Panel: https://$DOMINIO"
+echo "LISTO. Panel: https://$DOMINIO · App: https://$DOMINIO_APP"
 echo "(Si es la primera vez: en Cloudflare → DNS, registro A «panel» → 94.143.140.93, nube naranja.)"

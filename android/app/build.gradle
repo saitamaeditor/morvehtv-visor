@@ -1,5 +1,5 @@
-// App MorvehTV para móvil y Android TV: tu servidor de Emby (emby.morvehtv.com) a pantalla
-// completa. Sin librerías externas.
+// App MorvehTV para móvil y Android TV: la interfaz propia de MorvehTV (morvehtv.com, que usa tu
+// Emby por debajo) a pantalla completa. Sin librerías externas.
 plugins {
     id 'com.android.application'
 }
@@ -15,7 +15,7 @@ android {
         // GitHub Actions numera cada compilación; así cada APK nuevo se instala encima del anterior
         versionCode Integer.parseInt(System.getenv('NUMERO_COMPILACION') ?: '1')
         versionName "1.0.${System.getenv('NUMERO_COMPILACION') ?: '0'}"
-        buildConfigField 'String', 'SERVIDOR', '"https://emby.morvehtv.com/web/index.html"'
+        buildConfigField 'String', 'SERVIDOR', '"https://morvehtv.com/"'
     }
 
     buildFeatures {

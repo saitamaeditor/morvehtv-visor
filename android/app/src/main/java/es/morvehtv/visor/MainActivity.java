@@ -32,9 +32,9 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 /**
- * MorvehTV: tu servidor de Emby (emby.morvehtv.com) a pantalla completa, para móvil y Android TV.
- * La web de Emby hace todo (entrar, bibliotecas, fichas, reproductor); aquí solo se añade lo que una
- * web no puede: vídeo a pantalla completa y en horizontal, botón Atrás del sistema y del mando,
+ * MorvehTV: la interfaz propia de MorvehTV (morvehtv.com, con tu Emby por debajo) a pantalla
+ * completa, para móvil y Android TV. La web hace todo (entrar, portada, fichas, reproductor, mando);
+ * aquí solo se añade lo que una web no puede: vídeo a pantalla completa y en horizontal, botón Atrás del sistema y del mando,
  * teclas multimedia del mando, pantalla encendida mientras se ve algo y actualizarse sola.
  */
 public class MainActivity extends Activity {
