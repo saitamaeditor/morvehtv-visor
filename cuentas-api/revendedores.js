@@ -14,6 +14,8 @@ const AJ_MOV = 'embyMovimientos';
 export const COSTE_MES = 1;
 const MAX_CREDITOS = 100000;
 const DIAS_TOKEN = 30;
+// Demos (cuentas de prueba gratis): los revendedores, con límites; el administrador, sin ellos
+export const DEMO = { horasRevendedor: [1, 3, 6, 12, 24], horasAdmin: [1, 3, 6, 12, 24, 48, 72], activasMax: 3, alDiaMax: 5 };
 
 let p = null;
 export function iniciar(opciones) { p = opciones.perfiles; }
@@ -153,6 +155,7 @@ async function resumen(actor) {
     yo: actor.admin ? { rol: 'admin', usuario: actor.usuario } : yo(fresco ?? actor),
     revendedores: visibles.map((x) => ({ id: x.id, usuario: x.usuario, nombre: x.nombre || x.usuario, rol: x.rol })),
     costeMes: COSTE_MES,
+    demo: { horas: actor.admin ? DEMO.horasAdmin : DEMO.horasRevendedor, ...(actor.admin ? {} : { activasMax: DEMO.activasMax, alDiaMax: DEMO.alDiaMax, hoy: (fresco?.demos ?? []).filter((f) => Date.now() - f < 24 * 3600e3).length }) },
   };
 }
 
@@ -292,6 +295,30 @@ export async function atender(ruta, metodo, datos, actor) {
       const c = await emby.crear({ ...datos, pantallas, caduca: new Date(Date.now() + mesesADias(meses) * 864e5).toISOString() }, actor.usuario, actor.id);
       return r({ ...c, coste }, `crea la cuenta de Emby ${c.usuario} (revendedor ${actor.usuario})`);
     } catch (e) { await devolver(actor, coste, `devolución: no se pudo crear ${nombreCuenta}`); throw e; }
+  }
+  // Demo: gratis, 1 pantalla, unas horas. Usuario y contraseña los genera el gestor (se pueden cambiar)
+  if (ruta === '/api/panel/emby/demo') {
+    const horas = Number(datos.horas);
+    if (!(actor.admin ? DEMO.horasAdmin : DEMO.horasRevendedor).includes(horas)) throw error(400, 'Duración de la demo no válida');
+    const caduca = new Date(Date.now() + horas * 3600e3).toISOString();
+    const crearla = () => emby.crear({ usuario: datos.usuario, clave: datos.clave, nota: datos.nota, bibliotecas: datos.bibliotecas ?? null, pantallas: 1, descargas: false, caduca },
+      actor.usuario, actor.admin ? null : actor.id, { demo: true });
+    const texto = `${horas} ${horas === 1 ? 'hora' : 'horas'}`;
+    if (actor.admin) { const c = await crearla(); return r({ ...c, caduca }, `crea la demo de Emby ${c.usuario} (${texto})`); }
+    // Límites del revendedor: demos activas a la vez y demos en las últimas 24 h (se cuentan aunque las borre)
+    return enCola(async () => {
+      const ahora = Date.now();
+      const activas = Object.values(await emby.extrasEmby()).filter((x) => x.demo && x.dueno === actor.id && x.caduca && new Date(x.caduca).getTime() > ahora).length;
+      if (activas >= DEMO.activasMax) throw error(429, `Ya tienes ${activas} demos activas: espera a que caduque alguna (máximo ${DEMO.activasMax} a la vez)`);
+      const t = await todos(); const yo2 = t[actor.id];
+      if (!yo2) throw error(403, 'Tu cuenta de revendedor ya no existe');
+      yo2.demos = (yo2.demos ?? []).filter((f) => ahora - f < 24 * 3600e3);
+      if (yo2.demos.length >= DEMO.alDiaMax) throw error(429, `Ya has creado ${yo2.demos.length} demos en las últimas 24 horas (máximo ${DEMO.alDiaMax})`);
+      const c = await crearla();
+      yo2.demos.push(ahora); await guardar(t);
+      await movimiento(actor, `crea la demo ${c.usuario} (${texto})`);
+      return r({ ...c, caduca }, `crea la demo de Emby ${c.usuario} (${texto}, revendedor ${actor.usuario})`);
+    });
   }
   if (ruta === '/api/panel/emby/renovar') {
     await puedeCuenta(actor, datos.id);

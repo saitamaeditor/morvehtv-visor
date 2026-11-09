@@ -10,6 +10,7 @@ const CLAVE = String(process.env.EMBY_API_KEY ?? '').trim();
 const PUBLICA = String(process.env.EMBY_PUBLICA ?? 'https://emby.morvehtv.com').trim().replace(/\/+$/, '');
 const AJUSTE = 'emby';
 const PANTALLAS_MAX = 10;
+const DEMO_BORRAR = Number(process.env.DEMO_BORRAR_MS ?? 24 * 3600e3); // demo caducada → se borra a las 24 h
 
 let p = null;
 const error = (status, message) => Object.assign(new Error(message), { status });
@@ -20,7 +21,8 @@ export function iniciar(opciones) {
   // Repasa las caducadas cada 10 minutos (solo el servidor de verdad, y solo si Emby está configurado)
   if (opciones.nube && configurado()) {
     setTimeout(repasarCaducadas, 60000).unref();
-    setInterval(repasarCaducadas, 10 * 60000).unref();
+    // Cada 2 minutos: las demos duran horas y tienen que cortarse a su hora
+    setInterval(repasarCaducadas, 2 * 60000).unref();
   }
 }
 
@@ -210,6 +212,7 @@ export async function resumen() {
       admin: Boolean(pol.IsAdministrator),
       desactivada: Boolean(pol.IsDisabled),
       caduca: x.caduca ?? null,
+      demo: Boolean(x.demo),
       dueno: x.dueno ?? null,
       desde: x.desde ?? x.creada ?? u.DateCreated ?? null,
       caducada: Boolean(x.caduca && new Date(x.caduca).getTime() <= ahora),
@@ -238,7 +241,7 @@ export async function resumen() {
 }
 
 // ---------- Acciones ----------
-export async function crear(datos, por, dueno = null) {
+export async function crear(datos, por, dueno = null, { demo = false } = {}) {
   const nombre = nombreValido(datos.usuario);
   const clave = claveValida(datos.clave);
   const pantallas = pantallasValidas(datos.pantallas);
@@ -261,7 +264,7 @@ export async function crear(datos, por, dueno = null) {
     throw e;
   }
   const ahora = new Date().toISOString();
-  await cambiarExtra(nuevo.Id, { caduca, nota, creada: ahora, desde: ahora, por, ...(dueno && { dueno }) });
+  await cambiarExtra(nuevo.Id, { caduca, nota, creada: ahora, desde: ahora, por, ...(dueno && { dueno }), ...(demo && { demo: true }) });
   return { id: nuevo.Id, usuario: nombre };
 }
 
@@ -321,7 +324,8 @@ export async function renovar(id, { dias, fecha } = {}) {
     caduca = new Date(desde + n * 864e5).toISOString();
   }
   await ponerPolitica(id, { ...u.Policy, IsDisabled: false });
-  await cambiarExtra(id, { caduca, desde: x.caduca && new Date(x.caduca).getTime() > Date.now() ? (x.desde ?? new Date().toISOString()) : new Date().toISOString(), caducadaSola: false });
+  // Renovar una demo la convierte en cuenta normal (ya no se borra sola)
+  await cambiarExtra(id, { caduca, desde: x.caduca && new Date(x.caduca).getTime() > Date.now() ? (x.desde ?? new Date().toISOString()) : new Date().toISOString(), caducadaSola: false, demo: false });
   return { ok: true, caduca };
 }
 
@@ -367,6 +371,15 @@ export async function repasarCaducadas() {
     const extra = await extras();
     const ahora = Date.now();
     for (const [id, x] of Object.entries(extra)) {
+      // Las demos caducadas se borran solas pasado un día (si no se han renovado)
+      if (x.demo && x.caduca && ahora - new Date(x.caduca).getTime() > DEMO_BORRAR) {
+        try {
+          const u = await usuario(id);
+          if (!u.Policy?.IsAdministrator) { await llamar(`/Users/${encodeURIComponent(id)}`, { metodo: 'DELETE' }); console.log(`Emby: demo ${u.Name} borrada (caducó hace más de un día)`); }
+          await cambiarExtra(id, null);
+        } catch (e) { if (e.status === 404) await cambiarExtra(id, null); else console.error(`Emby: no se pudo borrar una demo caducada (${e.message})`); }
+        continue;
+      }
       if (!x.caduca || new Date(x.caduca).getTime() > ahora || x.caducadaSola) continue;
       try {
         const u = await usuario(id);
