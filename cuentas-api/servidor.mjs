@@ -22,6 +22,7 @@ import * as telegram from './telegram.js';
 import * as e2 from './e2.js';
 import * as fichas from './fichas.js';
 import * as episodios from './episodios.js';
+import * as carteles from './carteles.js';
 
 const pedirEpisodios = (url) => episodios.listar(Object.fromEntries(['tmdb', 'imdb', 'nombre', 'ano', 'carpeta', 'serie'].map((k) => [k, url.searchParams.get(k) ?? ''])));
 const PUERTO = Number(process.env.PUERTO ?? 10100);
@@ -285,7 +286,7 @@ async function atender(req, res) {
   res.setHeader('x-frame-options', 'DENY');
   const url = new URL(req.url, 'http://x');
   const ruta = url.pathname.replace(/\/+$/, '') || '/';
-  if (ruta === '/api/salud') return json(res, 200, { ok: true, emby: emby.configurado(), telegram: telegram.estado, e2: e2.estado });
+  if (ruta === '/api/salud') return json(res, 200, { ok: true, emby: emby.configurado(), telegram: telegram.estado, e2: e2.estado, carteles: carteles.estado });
   if (!ruta.startsWith('/api/panel/')) return json(res, 404, { error: 'No existe' });
   cors(req, res);
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
@@ -391,6 +392,7 @@ async function control(req, res) {
     if (d.accion === 'poner') { const r = await ponerAdmin(d.usuario, d.clave); await registrar(r.usuario, r.nuevo ? 'cuenta de administrador creada desde la VPS' : 'contraseña cambiada desde la VPS'); return json(res, 200, r); }
     if (d.accion === 'quitar') { await quitarAdmin(d.usuario); await registrar('sistema', `quita el administrador ${String(d.usuario).toLowerCase()}`); return json(res, 200, { ok: true }); }
     if (d.accion === 'lista') return json(res, 200, { admins: await listaAdmins() });
+    if (d.accion === 'carteles') { const r = await carteles.repaso({ ya: true }); if (!r.error && !r.ocupado) await registrar('sistema', `repasa los carteles de Emby (${r.puestos} puestos de TMDB)`); return json(res, 200, r); }
     if (d.accion === 'telegram-todo') { const r = await telegram.avisarTodo(d.biblioteca ?? ''); await registrar('sistema', r.bibliotecas ? `pide a Telegram avisar de todo lo de ${r.bibliotecas.join(', ')}` : 'pide a Telegram avisar de todo el contenido'); return json(res, 200, r); }
     throw error(400, 'Acción no válida');
   } catch (e) { json(res, Number.isInteger(e.status) ? e.status : 500, { error: e.message }); }
@@ -401,6 +403,7 @@ async function iniciar() {
   emby.iniciar({ perfiles: almacen, nube: true });
   revendedores.iniciar({ perfiles: almacen });
   telegram.iniciar({ perfiles: almacen });
+  carteles.iniciar({ perfiles: almacen });
   e2.iniciar({ perfiles: almacen, origenes: [PANEL_PUBLICO, ...ORIGENES], escanear: emby.configurado() ? emby.escanear : null, avisarEmby: emby.configurado() ? emby.avisarCambios : null, alAvisar: () => telegram.pronto(10000) });
 }
 

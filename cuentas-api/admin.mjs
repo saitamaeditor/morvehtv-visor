@@ -4,6 +4,7 @@
 //   docker exec -it morvehtv-cuentas node admin.mjs quitar <usuario>
 //   docker exec    morvehtv-cuentas node admin.mjs lista
 //   docker exec    morvehtv-cuentas node admin.mjs avisar-todo [biblioteca]   → Telegram avisa de todo lo que hay en Emby (o en esa biblioteca)
+//   docker exec    morvehtv-cuentas node admin.mjs carteles   → pone en Emby los carteles que le falten (TMDB)
 // La contraseña también puede llegar por la entrada estándar (una línea), sin que se vea.
 import http from 'node:http';
 import path from 'node:path';
@@ -56,6 +57,16 @@ try {
     if (process.stdin.isTTY && clave !== await leerClave('Repítela: ')) throw new Error('Las contraseñas no coinciden');
     const r = await pedir({ accion: 'poner', usuario, clave });
     console.log(r.nuevo ? `Cuenta de administrador «${r.usuario}» creada.` : `Contraseña de «${r.usuario}» cambiada (sus sesiones se han cerrado).`);
+  } else if (orden === 'carteles') {
+    console.log('Repasando los carteles de Emby (puede tardar un poco si faltan muchos)…');
+    const r = await pedir({ accion: 'carteles' });
+    if (r.ocupado) { console.log('Ya hay un repaso en marcha: vuelve a probar en un minuto.'); process.exit(0); }
+    if (r.error) throw new Error(r.error);
+    if (r.bibliotecas.length) console.log(`Proveedores de internet activados en: ${r.bibliotecas.join(', ')} (Emby las está refrescando)`);
+    console.log(`${r.total} películas y series · sin cartel: ${r.sinCartel} · carteles puestos de TMDB: ${r.puestos} · pedidos a Emby: ${r.refrescados} · no encontrados: ${r.noEncontrados}`);
+    if (!r.tmdb) console.log('Sin clave de TMDB: solo se le ha pedido a Emby que los busque.');
+    if (r.faltan?.length) console.log(`No están en TMDB: ${r.faltan.slice(0, 40).join(' · ')}${r.faltan.length > 40 ? ` y ${r.faltan.length - 40} más` : ''}
+Revisa su nombre (Título (Año)) o ponles el código [imdbid=tt…] en la carpeta.`);
   } else if (orden === 'avisar-todo') {
     const r = await pedir({ accion: 'telegram-todo', biblioteca: process.argv.slice(3).join(' ') });
     console.log(r.bibliotecas ? `Hecho: el bot de Telegram va a avisar de todo lo que hay en ${r.bibliotecas.map((x) => `«${x}»`).join(', ')},`
@@ -66,7 +77,7 @@ try {
     await pedir({ accion: 'quitar', usuario });
     console.log(`Administrador «${usuario.toLowerCase()}» quitado.`);
   } else {
-    console.log('Uso: node admin.mjs crear|clave|quitar <usuario>  ·  node admin.mjs lista  ·  node admin.mjs avisar-todo [biblioteca]');
+    console.log('Uso: node admin.mjs crear|clave|quitar <usuario>  ·  node admin.mjs lista  ·  node admin.mjs avisar-todo [biblioteca]  ·  node admin.mjs carteles');
     process.exit(2);
   }
 } catch (e) {

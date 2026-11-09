@@ -46,6 +46,18 @@ async function llamar(ruta, { metodo = 'GET', datos } = {}) {
 
 // Para otros módulos (avisos de Telegram): la API de Emby y sus imágenes, con la clave del servidor
 export const consultar = (ruta) => llamar(ruta);
+export const enviarA = (ruta, datos = {}) => llamar(ruta, { metodo: 'POST', datos });
+// Poner la imagen principal (cartel) de un elemento: Emby la quiere en base64 en el cuerpo
+export async function ponerCartel(id, imagen, tipo = 'image/jpeg') {
+  if (!configurado()) throw error(503, 'Emby no está conectado');
+  let r;
+  try {
+    r = await fetch(`${BASE}/Items/${encodeURIComponent(id)}/Images/Primary`, {
+      method: 'POST', headers: { 'X-Emby-Token': CLAVE, 'content-type': tipo }, body: Buffer.from(imagen).toString('base64'), signal: AbortSignal.timeout(30000),
+    });
+  } catch (e) { throw error(502, `No se pudo conectar con Emby (${e.cause?.code || e.message})`); }
+  if (!r.ok) throw error(502, `Emby respondió ${r.status} al poner el cartel`);
+}
 // Buscar una ficha en TMDB/IMDb a través de Emby (usa los proveedores de metadatos de Emby: no hace
 // falta clave de TMDB propia). tipo: 'Movie' o 'Series'; info: { Name, Year, ProviderIds }
 export const buscarFicha = (tipo, info) => llamar(`/Items/RemoteSearch/${tipo}`, {

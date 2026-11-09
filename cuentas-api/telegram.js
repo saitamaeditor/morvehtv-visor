@@ -352,7 +352,11 @@ async function portadaDe(m) {
   if (m.ficha) {
     const x = m.ficha;
     const f = await tm.cartel({ tipo: x.Type === 'Series' ? 'tv' : 'movie', ...codigosDe(x), nombre: x.Name, ano: x.ProductionYear ?? null });
-    if (f) { console.log(`Telegram: «${x.Name}» sin cartel en Emby: va el de TMDB`); return f; }
+    if (f) {
+      console.log(`Telegram: «${x.Name}» sin cartel en Emby: va el de TMDB (y se le pone también en Emby)`);
+      if (m.fotoDe) emby.ponerCartel(m.fotoDe, f.datos, f.tipo).catch(() => {});
+      return f;
+    }
   }
   if (m.lib) {
     const f = await portadaBiblioteca(m.lib);
