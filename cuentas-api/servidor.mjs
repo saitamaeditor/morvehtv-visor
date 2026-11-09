@@ -20,6 +20,7 @@ import * as emby from './emby.js';
 import * as revendedores from './revendedores.js';
 import * as telegram from './telegram.js';
 import * as e2 from './e2.js';
+import * as fichas from './fichas.js';
 
 const PUERTO = Number(process.env.PUERTO ?? 10100);
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -244,6 +245,7 @@ async function atender(req, res) {
   if (ruta === '/api/panel/registro') return json(res, 200, (await almacen.leerAjuste('registro')) ?? []);
   // Subir a e2: SOLO administradores (los revendedores ya se han quedado fuera arriba)
   if (ruta === '/api/panel/e2/carpetas') return json(res, 200, { carpetas: await e2.carpetas(url.searchParams.get('en') ?? '') });
+  if (ruta === '/api/panel/e2/ficha') return json(res, 200, await fichas.buscar(url.searchParams.get('q'), url.searchParams.get('tipo')));
   if (ruta.startsWith('/api/panel/e2/') && req.method === 'POST') {
     if (ruta === '/api/panel/e2/abrir') return json(res, 200, await e2.abrir(d, usuario));
     if (ruta === '/api/panel/e2/trozos') return json(res, 200, await e2.trozos(d, usuario));

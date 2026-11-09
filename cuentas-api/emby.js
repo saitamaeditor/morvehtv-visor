@@ -46,6 +46,12 @@ async function llamar(ruta, { metodo = 'GET', datos } = {}) {
 
 // Para otros módulos (avisos de Telegram): la API de Emby y sus imágenes, con la clave del servidor
 export const consultar = (ruta) => llamar(ruta);
+// Buscar una ficha en TMDB/IMDb a través de Emby (usa los proveedores de metadatos de Emby: no hace
+// falta clave de TMDB propia). tipo: 'Movie' o 'Series'; info: { Name, Year, ProviderIds }
+export const buscarFicha = (tipo, info) => llamar(`/Items/RemoteSearch/${tipo}`, {
+  metodo: 'POST',
+  datos: { SearchInfo: { MetadataLanguage: 'es', MetadataCountryCode: 'ES', ...info }, IncludeDisabledProviders: true },
+});
 // Escanear las bibliotecas (tras subir algo a e2 desde el gestor)
 export const escanear = () => llamar('/Library/Refresh', { metodo: 'POST' });
 // Avisar a Emby de archivos nuevos concretos (rutas como las ve Emby: /e2/…): solo mira esas
