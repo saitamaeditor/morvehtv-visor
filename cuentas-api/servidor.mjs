@@ -20,11 +20,8 @@ import * as emby from './emby.js';
 import * as revendedores from './revendedores.js';
 import * as telegram from './telegram.js';
 import * as e2 from './e2.js';
-import * as fichas from './fichas.js';
-import * as episodios from './episodios.js';
 import * as carteles from './carteles.js';
 
-const pedirEpisodios = (url) => episodios.listar(Object.fromEntries(['tmdb', 'imdb', 'nombre', 'ano', 'carpeta', 'serie'].map((k) => [k, url.searchParams.get(k) ?? ''])));
 const PUERTO = Number(process.env.PUERTO ?? 10100);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DATOS = process.env.DATOS ?? '/datos/datos.json';
@@ -110,7 +107,6 @@ const usuarioValido = (u) => {
 async function ponerAdmin(usuario, clave) {
   const u = usuarioValido(usuario);
   if (String(clave ?? '').length < 10) throw error(400, 'La contraseña debe tener al menos 10 caracteres');
-  if ((await leerSubidores())[u]) throw error(409, 'Ya hay un subidor con ese usuario');
   const admins = (await almacen.leerAjuste('admins')) ?? {};
   const nuevo = !admins[u];
   admins[u] = { clave: cifrar(clave), creado: admins[u]?.creado ?? new Date().toISOString() };
@@ -133,75 +129,6 @@ async function quitarAdmin(usuario) {
 }
 const listaAdmins = async () => Object.keys((await almacen.leerAjuste('admins')) ?? {});
 
-// ---------- Subidores: cuentas que SOLO pueden subir contenido nuevo a e2 ----------
-// Las crea un administrador desde el gestor. No pueden reemplazar ni borrar nada, ni ver cuentas,
-// revendedores o la actividad; opcionalmente, solo en algunas carpetas de e2. Token «sb_…».
-const leerSubidores = async () => (await almacen.leerAjuste('subidores')) ?? {};
-function carpetasValidas(lista) {
-  if (lista == null || (Array.isArray(lista) && !lista.length)) return null; // todas
-  if (!Array.isArray(lista) || lista.length > 50) throw error(400, 'Carpetas no válidas');
-  const c = [...new Set(lista.map((x) => String(x ?? '').trim()))];
-  if (c.some((x) => !x || x.length > 100 || x.includes('/') || x.startsWith('_') || /[\u0000-\u001f]/.test(x))) throw error(400, 'Carpetas no válidas');
-  return c;
-}
-const vistaSubidor = (u, x) => ({ usuario: u, creado: x.creado, por: x.por ?? null, activo: x.activo !== false, carpetas: x.carpetas ?? null, ultimo: x.ultimo ?? null, subidas: x.subidas ?? 0 });
-async function cerrarSesionesDe(u) {
-  const ses = (await almacen.leerAjuste('sesiones')) ?? {};
-  let cambia = false;
-  for (const [k, s] of Object.entries(ses)) if (s.usuario === u) { delete ses[k]; cambia = true; }
-  if (cambia) await almacen.guardarAjuste('sesiones', ses);
-}
-async function crearSubidor(d, por) {
-  const u = usuarioValido(d.usuario);
-  if (((await almacen.leerAjuste('admins')) ?? {})[u]) throw error(409, 'Ese usuario ya es de un administrador');
-  const todos = await leerSubidores();
-  if (todos[u]) throw error(409, 'Ya existe un subidor con ese usuario');
-  if (String(d.clave ?? '').length < 8) throw error(400, 'La contraseña debe tener al menos 8 caracteres');
-  todos[u] = { clave: cifrar(d.clave), creado: new Date().toISOString(), por, activo: true, carpetas: carpetasValidas(d.carpetas) };
-  await almacen.guardarAjuste('subidores', todos);
-  return vistaSubidor(u, todos[u]);
-}
-async function editarSubidor(d) {
-  const u = usuarioValido(d.usuario);
-  const todos = await leerSubidores();
-  const x = todos[u];
-  if (!x) throw error(404, 'No existe ese subidor');
-  const cambios = [];
-  if (d.clave != null) {
-    if (String(d.clave).length < 8) throw error(400, 'La contraseña debe tener al menos 8 caracteres');
-    x.clave = cifrar(d.clave); cambios.push('contraseña');
-  }
-  if (d.activo != null) { x.activo = Boolean(d.activo); cambios.push(x.activo ? 'reactiva' : 'suspende'); }
-  if (d.carpetas !== undefined) { x.carpetas = carpetasValidas(d.carpetas); cambios.push('carpetas'); }
-  await almacen.guardarAjuste('subidores', todos);
-  // Contraseña nueva o suspendido: fuera de todas sus sesiones
-  if (d.clave != null || x.activo === false) await cerrarSesionesDe(u);
-  return { subidor: vistaSubidor(u, x), cambios };
-}
-async function borrarSubidor(d) {
-  const u = usuarioValido(d.usuario);
-  const todos = await leerSubidores();
-  if (!todos[u]) throw error(404, 'No existe ese subidor');
-  delete todos[u];
-  await almacen.guardarAjuste('subidores', todos);
-  await cerrarSesionesDe(u);
-  return u;
-}
-async function subidorDeToken(token) {
-  const ses = (await almacen.leerAjuste('sesiones')) ?? {};
-  const s = ses[huella(token)];
-  if (!s || s.tipo !== 'subidor' || s.caduca < Date.now()) return null;
-  const x = (await leerSubidores())[s.usuario];
-  if (!x || x.activo === false) return null;
-  return { usuario: s.usuario, carpetas: x.carpetas ?? null };
-}
-async function apuntarSubida(u) {
-  const todos = await leerSubidores();
-  if (!todos[u]) return;
-  todos[u].ultimo = new Date().toISOString(); todos[u].subidas = (todos[u].subidas ?? 0) + 1;
-  await almacen.guardarAjuste('subidores', todos);
-}
-
 const fallos = new Map(); // por usuario y por IP: 6 fallos → 15 minutos fuera
 function frenar(claves) {
   for (const k of claves) { const f = fallos.get(k); if (f && f.hasta > Date.now() && f.n >= 6) throw error(429, 'Demasiados intentos: espera 15 minutos'); }
@@ -220,18 +147,15 @@ async function entrarAdmin(d, ip) {
   frenar(claves);
   const admins = (await almacen.leerAjuste('admins')) ?? {};
   const a = admins[usuario];
-  // Administrador o, si no lo es, subidor (los nombres no se repiten entre los dos)
-  const sb = a ? null : (await leerSubidores())[usuario];
-  if (!claveOk(d.clave, (a ?? sb)?.clave)) { fallo(claves); throw error(401, 'Usuario o contraseña incorrectos'); }
-  if (sb && sb.activo === false) throw error(403, 'Tu cuenta de subidor está suspendida');
-  const token = `${sb ? 'sb' : 'ad'}_${randomBytes(32).toString('base64url')}`;
+  if (!claveOk(d.clave, a?.clave)) { fallo(claves); throw error(401, 'Usuario o contraseña incorrectos'); }
+  const token = `ad_${randomBytes(32).toString('base64url')}`;
   const ses = (await almacen.leerAjuste('sesiones')) ?? {};
   const ahora = Date.now();
   for (const [k, s] of Object.entries(ses)) if (s.caduca < ahora) delete ses[k];
-  ses[huella(token)] = { usuario, caduca: ahora + DIAS_TOKEN * 86400000, ...(sb && { tipo: 'subidor' }) };
+  ses[huella(token)] = { usuario, caduca: ahora + DIAS_TOKEN * 86400000 };
   await almacen.guardarAjuste('sesiones', ses);
-  await registrar(sb ? `${usuario} (subidor)` : usuario, 'entra en el panel');
-  return { token, usuario, nombre: usuario, rol: sb ? 'subidor' : 'admin', e2: e2.configurado(), ...(sb && { carpetas: sb.carpetas ?? null }) };
+  await registrar(usuario, 'entra en el panel');
+  return { token, usuario, nombre: usuario, rol: 'admin' };
 }
 async function adminDeToken(token) {
   const ses = (await almacen.leerAjuste('sesiones')) ?? {};
@@ -313,69 +237,12 @@ async function atender(req, res) {
     return json(res, 200, r.datos);
   }
 
-  // Subidores: SOLO subir contenido nuevo a e2 (sin reemplazar nada) y solo en sus carpetas
-  if (tk.startsWith('sb_')) {
-    const sb = await subidorDeToken(tk);
-    if (!sb) throw error(401, 'La sesión ha caducado: vuelve a entrar');
-    const quien = `sb:${sb.usuario}`; // las subidas de un subidor no se mezclan con las de un admin
-    const permitida = (raiz) => !sb.carpetas || sb.carpetas.includes(raiz);
-    if (ruta === '/api/panel/yo') return json(res, 200, { usuario: sb.usuario, nombre: sb.usuario, rol: 'subidor', e2: e2.configurado(), carpetas: sb.carpetas });
-    if (ruta === '/api/panel/salir') { await salirAdmin(tk); return json(res, 200, { ok: true }); }
-    if (ruta === '/api/panel/e2/carpetas') {
-      const en = url.searchParams.get('en') ?? '';
-      if (en && !permitida(en.replace(/^\/+/, '').split('/')[0])) throw error(403, 'No tienes acceso a esa carpeta');
-      const lista = await e2.carpetas(en);
-      return json(res, 200, { carpetas: en ? lista : lista.filter(permitida) });
-    }
-    if (ruta === '/api/panel/e2/ficha') return json(res, 200, await fichas.buscar(url.searchParams.get('q'), url.searchParams.get('tipo')));
-    if (ruta === '/api/panel/e2/episodios') {
-      const c = url.searchParams.get('carpeta') ?? '';
-      if (c && !permitida(c.replace(/^\/+/, '').split('/')[0])) throw error(403, 'No tienes acceso a esa carpeta');
-      return json(res, 200, await pedirEpisodios(url));
-    }
-    if (req.method === 'POST' && ruta === '/api/panel/e2/abrir') {
-      if (!permitida(String(d.ruta ?? '').replace(/^\/+/, '').split('/')[0])) throw error(403, 'No puedes subir a esa carpeta');
-      try { return json(res, 200, await e2.abrir({ ...d, reemplazar: false }, quien)); } catch (e) {
-        if (e.status === 409) throw error(409, `${e.message}: un subidor no puede reemplazar lo que ya hay`);
-        throw e;
-      }
-    }
-    if (req.method === 'POST' && ruta === '/api/panel/e2/trozos') return json(res, 200, await e2.trozos(d, quien));
-    if (req.method === 'POST' && ruta === '/api/panel/e2/cancelar') return json(res, 200, await e2.cancelar(d, quien));
-    if (req.method === 'POST' && ruta === '/api/panel/e2/cerrar') {
-      const r = await e2.cerrar(d, quien);
-      await registrar(`${sb.usuario} (subidor)`, `sube a e2 «${r.key}» (${(r.tamano / 1073741824).toFixed(2)} GB)`);
-      await apuntarSubida(sb.usuario);
-      return json(res, 200, r);
-    }
-    throw error(403, 'Tu cuenta solo puede subir contenido');
-  }
-
   // Administradores
   const usuario = tk.startsWith('ad_') ? await adminDeToken(tk) : null;
   if (!usuario) throw error(401, 'La sesión ha caducado: vuelve a entrar');
-  if (ruta === '/api/panel/yo') return json(res, 200, { usuario, nombre: usuario, rol: 'admin', e2: e2.configurado() });
+  if (ruta === '/api/panel/yo') return json(res, 200, { usuario, nombre: usuario, rol: 'admin' });
   if (ruta === '/api/panel/salir') { await salirAdmin(tk); return json(res, 200, { ok: true }); }
   if (ruta === '/api/panel/registro') return json(res, 200, (await almacen.leerAjuste('registro')) ?? []);
-  // Subidores (los gestiona el administrador)
-  if (ruta === '/api/panel/subidores') return json(res, 200, Object.entries(await leerSubidores()).map(([u, x]) => vistaSubidor(u, x)).sort((a, b) => a.usuario.localeCompare(b.usuario)));
-  if (req.method === 'POST' && ruta === '/api/panel/subidores/crear') { const r = await crearSubidor(d, usuario); await registrar(usuario, `crea el subidor ${r.usuario}`); return json(res, 200, r); }
-  if (req.method === 'POST' && ruta === '/api/panel/subidores/editar') { const r = await editarSubidor(d); await registrar(usuario, `cambia el subidor ${r.subidor.usuario} (${r.cambios.join(', ') || 'nada'})`); return json(res, 200, r.subidor); }
-  if (req.method === 'POST' && ruta === '/api/panel/subidores/borrar') { const u = await borrarSubidor(d); await registrar(usuario, `borra el subidor ${u}`); return json(res, 200, { ok: true }); }
-  // Subir a e2: administradores (y, con límites, los subidores de arriba)
-  if (ruta === '/api/panel/e2/carpetas') return json(res, 200, { carpetas: await e2.carpetas(url.searchParams.get('en') ?? '') });
-  if (ruta === '/api/panel/e2/ficha') return json(res, 200, await fichas.buscar(url.searchParams.get('q'), url.searchParams.get('tipo')));
-  if (ruta === '/api/panel/e2/episodios') return json(res, 200, await pedirEpisodios(url));
-  if (ruta.startsWith('/api/panel/e2/') && req.method === 'POST') {
-    if (ruta === '/api/panel/e2/abrir') return json(res, 200, await e2.abrir(d, usuario));
-    if (ruta === '/api/panel/e2/trozos') return json(res, 200, await e2.trozos(d, usuario));
-    if (ruta === '/api/panel/e2/cancelar') return json(res, 200, await e2.cancelar(d, usuario));
-    if (ruta === '/api/panel/e2/cerrar') {
-      const r = await e2.cerrar(d, usuario);
-      await registrar(usuario, `sube a e2 «${r.key}» (${(r.tamano / 1073741824).toFixed(2)} GB)`);
-      return json(res, 200, r);
-    }
-  }
   if (ruta.startsWith('/api/panel/emby')) {
     const r = await revendedores.atender(ruta, req.method, d, { admin: true, usuario });
     if (r.registro) await registrar(usuario, r.registro);
@@ -400,6 +267,14 @@ async function control(req, res) {
 
 async function iniciar() {
   await cargar();
+  // «Subir» y los subidores se quitaron del panel (10-11-2026): fuera sus datos y sus sesiones
+  if (datos.subidores) {
+    delete datos.subidores;
+    const ses = (await almacen.leerAjuste('sesiones')) ?? {};
+    for (const [k, x] of Object.entries(ses)) if (x.tipo === 'subidor') delete ses[k];
+    await almacen.guardarAjuste('sesiones', ses); // guarda el archivo entero (ya sin «subidores»)
+    console.log('Subidores quitados: sus cuentas y sesiones ya no existen');
+  }
   emby.iniciar({ perfiles: almacen, nube: true });
   revendedores.iniciar({ perfiles: almacen });
   telegram.iniciar({ perfiles: almacen });
