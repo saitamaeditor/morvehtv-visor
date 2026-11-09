@@ -3,6 +3,7 @@
 //   docker exec -it morvehtv-cuentas node admin.mjs clave  <usuario>   → igual (cambia la contraseña)
 //   docker exec -it morvehtv-cuentas node admin.mjs quitar <usuario>
 //   docker exec    morvehtv-cuentas node admin.mjs lista
+//   docker exec    morvehtv-cuentas node admin.mjs avisar-todo   → Telegram avisa de todo lo que hay en Emby
 // La contraseña también puede llegar por la entrada estándar (una línea), sin que se vea.
 import http from 'node:http';
 import path from 'node:path';
@@ -55,11 +56,16 @@ try {
     if (process.stdin.isTTY && clave !== await leerClave('Repítela: ')) throw new Error('Las contraseñas no coinciden');
     const r = await pedir({ accion: 'poner', usuario, clave });
     console.log(r.nuevo ? `Cuenta de administrador «${r.usuario}» creada.` : `Contraseña de «${r.usuario}» cambiada (sus sesiones se han cerrado).`);
+  } else if (orden === 'avisar-todo') {
+    await pedir({ accion: 'telegram-todo' });
+    console.log('Hecho: el bot de Telegram va a avisar de TODO lo que hay en las bibliotecas de Emby,');
+    console.log('una película o serie cada 3 segundos (Telegram no deja ir más rápido). Para ver cómo va:');
+    console.log('  docker logs -f --since 1m morvehtv-cuentas 2>&1 | grep Telegram');
   } else if (orden === 'quitar' && usuario) {
     await pedir({ accion: 'quitar', usuario });
     console.log(`Administrador «${usuario.toLowerCase()}» quitado.`);
   } else {
-    console.log('Uso: node admin.mjs crear|clave|quitar <usuario>  ·  node admin.mjs lista');
+    console.log('Uso: node admin.mjs crear|clave|quitar <usuario>  ·  node admin.mjs lista  ·  node admin.mjs avisar-todo');
     process.exit(2);
   }
 } catch (e) {
