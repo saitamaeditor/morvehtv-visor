@@ -7,6 +7,9 @@ main() {
   APP=$DIR/cuentas-api
   exec 9>/run/morvehtv-cuentas.lock
   flock -n 9 || exit 0
+  # La web del panel: se actualiza sola (Caddy sirve los archivos tal cual)
+  WEB=/opt/morvehtv-cuentas-web
+  if [[ -d $WEB/.git ]]; then git -C "$WEB" fetch -q --depth 1 origin main && git -C "$WEB" reset -q --hard origin/main; fi
   cd "$DIR"
   git fetch -q --depth 1 origin main
   if [[ "${1:-}" != "--forzar" && "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]; then exit 0; fi

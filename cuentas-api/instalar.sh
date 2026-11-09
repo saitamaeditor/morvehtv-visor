@@ -10,6 +10,8 @@ ENV=/etc/morvehtv-cuentas/cuentas.env
 DATOS=/var/lib/morvehtv-cuentas
 DOMINIO=panel.morvehtv.com
 CADDY=/etc/caddy/Caddyfile
+REPO_WEB=https://github.com/saitamaeditor/morvehtv-gestor.git
+WEB=/opt/morvehtv-cuentas-web
 
 [[ $EUID -eq 0 ]] || { echo "Lánzalo como root"; exit 1; }
 command -v docker >/dev/null || { echo "Falta Docker"; exit 1; }
@@ -50,24 +52,38 @@ for _ in $(seq 1 20); do curl -fsS -o /dev/null http://127.0.0.1:10100/api/salud
 curl -fsS http://127.0.0.1:10100/api/salud >/dev/null || { echo "No arranca. Mira: docker logs --tail 50 morvehtv-cuentas"; exit 1; }
 docker logs morvehtv-cuentas 2>&1 | tail -n 3 | sed 's/^/   /'
 
-echo "== 5/6 Caddy ($DOMINIO) y actualizaciones"
-if ! grep -q "^$DOMINIO" "$CADDY"; then
-  cp "$CADDY" /tmp/Caddyfile.prev
-  cat >> "$CADDY" <<CADDY
+echo "== 5/6 Panel en https://$DOMINIO, Caddy y actualizaciones"
+# La web del panel (los archivos de morvehtv-gestor) se sirve desde la propia VPS
+if [[ ! -d $WEB/.git ]]; then git clone -q --depth 1 "$REPO_WEB" "$WEB"
+else git -C "$WEB" fetch -q --depth 1 origin main && git -C "$WEB" reset -q --hard origin/main; fi
+# El bloque de $DOMINIO se reescribe siempre (así se arreglan instalaciones anteriores)
+cp "$CADDY" /tmp/Caddyfile.prev
+awk -v d="$DOMINIO {" '$0==d{s=1} !s{print} s&&/^}/{s=0}' /tmp/Caddyfile.prev > "$CADDY"
+cat >> "$CADDY" <<CADDY
 
 $DOMINIO {
 	tls /etc/caddy/cf-origen.pem /etc/caddy/cf-origen.key
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
 	handle /api/* {
 		reverse_proxy 127.0.0.1:10100
 	}
 	handle {
-		respond 404
+		root * $WEB
+		@ocultos path /.git* /README.md /publicar.sh /version.txt
+		respond @ocultos 404
+		@pagina path / /index.html
+		header @pagina Cache-Control no-cache
+		file_server
 	}
 }
 CADDY
-  if caddy validate --config "$CADDY" --adapter caddyfile >/dev/null 2>&1; then systemctl reload caddy; rm -f /tmp/Caddyfile.prev
-  else cp /tmp/Caddyfile.prev "$CADDY"; echo "ERROR en Caddy: dejado como estaba"; exit 1; fi
-fi
+if caddy validate --config "$CADDY" --adapter caddyfile >/dev/null 2>&1; then systemctl reload caddy; rm -f /tmp/Caddyfile.prev
+else cp /tmp/Caddyfile.prev "$CADDY"; echo "ERROR en Caddy: dejado como estaba"; exit 1; fi
 cat > /etc/cron.d/morvehtv-cuentas <<CRON
 */5 * * * * root $APP/actualizar.sh >> /var/log/morvehtv-cuentas.log 2>&1
 CRON
@@ -90,5 +106,5 @@ else
 fi
 
 echo
-echo "LISTO. Falta solo, en Cloudflare → DNS: registro A «panel» → 94.143.140.93 (nube naranja)."
-echo "Panel: https://saitamaeditor.github.io/morvehtv-gestor/"
+echo "LISTO. Panel: https://$DOMINIO"
+echo "(Si es la primera vez: en Cloudflare → DNS, registro A «panel» → 94.143.140.93, nube naranja.)"
