@@ -391,7 +391,7 @@ async function control(req, res) {
     if (d.accion === 'poner') { const r = await ponerAdmin(d.usuario, d.clave); await registrar(r.usuario, r.nuevo ? 'cuenta de administrador creada desde la VPS' : 'contraseña cambiada desde la VPS'); return json(res, 200, r); }
     if (d.accion === 'quitar') { await quitarAdmin(d.usuario); await registrar('sistema', `quita el administrador ${String(d.usuario).toLowerCase()}`); return json(res, 200, { ok: true }); }
     if (d.accion === 'lista') return json(res, 200, { admins: await listaAdmins() });
-    if (d.accion === 'telegram-todo') { await telegram.avisarTodo(); await registrar('sistema', 'pide a Telegram avisar de todo el contenido'); return json(res, 200, { ok: true }); }
+    if (d.accion === 'telegram-todo') { const r = await telegram.avisarTodo(d.biblioteca ?? ''); await registrar('sistema', r.bibliotecas ? `pide a Telegram avisar de todo lo de ${r.bibliotecas.join(', ')}` : 'pide a Telegram avisar de todo el contenido'); return json(res, 200, r); }
     throw error(400, 'Acción no válida');
   } catch (e) { json(res, Number.isInteger(e.status) ? e.status : 500, { error: e.message }); }
 }

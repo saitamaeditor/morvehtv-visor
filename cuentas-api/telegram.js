@@ -351,13 +351,20 @@ async function fichas(ids) {
 }
 
 // Avisar de todo lo que hay en las bibliotecas (orden desde la VPS: admin.mjs avisar-todo)
-export async function avisarTodo() {
+// Con «biblioteca» solo las que contengan ese texto en el nombre («docuseries», «07 - Docuseries»…)
+const normal = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().trim();
+export async function avisarTodo(biblioteca = '') {
   if (!activo) throw new Error(`Telegram no está activo (${estado})`);
   if (!datos.chat) throw new Error('Telegram todavía no tiene grupo');
-  datos.pedirTodo = true;
+  let nombres = null;
+  if (biblioteca) {
+    nombres = (await bibliotecas()).filter((l) => normal(l.nombre).includes(normal(biblioteca))).map((l) => l.nombre);
+    if (!nombres.length) throw new Error(`No hay ninguna biblioteca de Emby que se llame «${biblioteca}»`);
+  }
+  datos.pedirTodo = biblioteca ? normal(biblioteca) : true;
   await guardarDatos();
   pronto(2000);
-  return { ok: true };
+  return { ok: true, bibliotecas: nombres };
 }
 
 // Mirar Emby enseguida (lo llama e2.js al avisar a Emby de algo nuevo, y el propio repaso
@@ -394,7 +401,9 @@ export async function repaso() {
     // «Avisar de todo» (admin.mjs avisar-todo): todo lo que hay pasa a la cola, como si fuera nuevo
     if (datos.pedirTodo) {
       let total = 0;
+      const filtro = typeof datos.pedirTodo === 'string' ? datos.pedirTodo : '';
       for (const lib of libs) {
+        if (filtro && !normal(lib.nombre).includes(filtro)) continue;
         const items = await idsDe(lib);
         datos.conocidos[lib.id] = [];
         for (const x of items) datos.esperando[x.id] = { lib: lib.id, visto: ahora - MADURO };
@@ -407,11 +416,13 @@ export async function repaso() {
     }
     for (const lib of libs) {
       const items = await idsDe(lib);
-      // Mientras una biblioteca esté vacía tampoco cuenta como apuntada: si Emby la vació (montaje de
-      // e2 caído durante un escaneo) y luego vuelve todo, no se avisa de todo otra vez
-      if (!datos.conocidos[lib.id]?.length && !datos.todo[lib.id]) {
-        if (!items.length) { datos.conocidos[lib.id] = []; continue; }
+      // Biblioteca que no se había visto nunca: lo que ya tiene se apunta sin avisar. Una que ya se
+      // conocía (aunque estuviera vacía) avisa de lo nuevo: lo primero que se sube a una biblioteca
+      // vacía SÍ se avisa. (Si Emby la vacía un rato porque se cayó el montaje, al volver los ids son
+      // los mismos —Emby los saca de la ruta— y siguen en «conocidos», así que no se repite nada.)
+      if (!Array.isArray(datos.conocidos[lib.id]) && !datos.todo[lib.id]) {
         datos.conocidos[lib.id] = items.map((x) => x.id);
+        if (!items.length) continue;
         console.log(`Telegram: biblioteca «${lib.nombre}» apuntada (${items.length} elementos; solo se avisará de lo que llegue a partir de ahora)`);
         continue;
       }
