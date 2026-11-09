@@ -1,6 +1,5 @@
-// App MorvehTV para móvil y Android TV: una pantalla con el visor publicado en Render.
-// Usa el mismo reproductor que la web. La única librería externa es el SDK de anuncios de Google,
-// para la «WebView API for Ads» (los anuncios de AdSense de la web, permitidos dentro de la app).
+// App MorvehTV para móvil y Android TV: tu servidor de Emby (emby.morvehtv.com) a pantalla
+// completa. Sin librerías externas.
 plugins {
     id 'com.android.application'
 }
@@ -16,7 +15,7 @@ android {
         // GitHub Actions numera cada compilación; así cada APK nuevo se instala encima del anterior
         versionCode Integer.parseInt(System.getenv('NUMERO_COMPILACION') ?: '1')
         versionName "1.0.${System.getenv('NUMERO_COMPILACION') ?: '0'}"
-        buildConfigField 'String', 'SERVIDOR', '"https://morvehtv.com/"'
+        buildConfigField 'String', 'SERVIDOR', '"https://emby.morvehtv.com/web/index.html"'
     }
 
     buildFeatures {
@@ -57,7 +56,4 @@ android {
 }
 
 dependencies {
-    // Google Mobile Ads: solo para registrar el WebView (WebView API for Ads); la app no pone
-    // anuncios propios, los de AdSense los pone la web
-    implementation 'com.google.android.gms:play-services-ads:23.6.0'
 }

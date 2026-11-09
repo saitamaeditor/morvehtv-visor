@@ -19,12 +19,6 @@
         android:usesCleartextTraffic="false"
         android:supportsRtl="false">
 
-        <!-- WebView API for Ads de Google: los anuncios de AdSense de la web dentro de la app.
-             Con este aviso el SDK no necesita un ID de app de AdMob (solo se registra el WebView). -->
-        <meta-data
-            android:name="com.google.android.gms.ads.INTEGRATION_MANAGER"
-            android:value="webview" />
-
         <activity
             android:name=".MainActivity"
             android:exported="true"

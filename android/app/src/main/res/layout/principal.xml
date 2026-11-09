@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Pantalla de espera mientras la web carga (o Render despierta) -->
+    <!-- Pantalla de espera mientras carga Emby -->
     <LinearLayout
         android:id="@+id/carga"
         android:layout_width="match_parent"
