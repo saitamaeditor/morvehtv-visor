@@ -22,6 +22,10 @@
 //    al grupo (con los temas activados) y escribir cualquier cosa.
 // Lo que hay que recordar (grupo, temas, hasta cuándo se ha avisado) va en el ajuste «telegram».
 import * as emby from './emby.js';
+import * as tm from './tmdb.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const TOKEN = String(process.env.TELEGRAM_TOKEN ?? '').trim();
 const API = (process.env.TELEGRAM_API ?? 'https://api.telegram.org').replace(/\/$/, '');
@@ -291,6 +295,9 @@ function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
   return {
     texto: montar(partes, ficha.Overview, 1024),
     fotoDe: ficha.Id,
+    lib, ficha,
+    // Si Emby aún no tiene la sinopsis y TMDB sí, se rehace el texto con ella
+    conSinopsis: (s) => montar(partes, s, 1024),
     boton: botones(ficha.Id, ficha.RemoteTrailers?.[0]?.Url),
   };
 }
@@ -303,13 +310,64 @@ function resumen(lib, grupos) {
   return {
     texto: [`🆕 <b>${grupos.length} NOVEDADES</b>  ·  ${html(seccion.nombre)}`, SEPARADOR, ...lineas].join('\n').slice(0, 4096),
     fotoDe: null,
+    lib,
     boton: { reply_markup: { inline_keyboard: [[{ text: '▶ Abrir Emby', url: `${emby.direccionPublica()}/web/index.html` }]] } },
   };
 }
 
-async function enviar(tema, { texto, fotoDe, boton }) {
+// ---------- La portada de cada aviso ----------
+// Siempre va con imagen: el cartel de Emby; si Emby no lo tiene, el de TMDB (por el código de IMDb o
+// TMDB que Emby o el nombre de la carpeta —«[imdbid=tt…]»— le den, o por título y año); y si tampoco,
+// la portada de la biblioteca (cuentas-api/portadas/<biblioteca>.jpg)
+const DIR_PORTADAS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'portadas');
+const sinAcentos = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+async function portadaBiblioteca(lib) {
+  let archivos = [];
+  try { archivos = (await fs.readdir(DIR_PORTADAS)).filter((f) => /\.jpe?g$/i.test(f)); } catch { return null; }
+  // «04 - Peliculas Anime» → «peliculas-anime»; si no hay esa, la que más se le parezca por palabras
+  const slug = sinAcentos(lib.nombre).replace(/^\s*\d+\s*[-–.]\s*/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const carpeta = sinAcentos(lib.carpetas?.[0] ?? '').replace(/\/$/, '').replace(/[^a-z0-9]+/g, '-');
+  let f = archivos.find((a) => a.replace(/\.jpe?g$/i, '') === slug) ?? archivos.find((a) => a.replace(/\.jpe?g$/i, '') === carpeta);
+  if (!f) {
+    const pal = new Set([...slug.split('-'), ...carpeta.split('-')].filter((x) => x.length > 2));
+    const nota = (a) => a.replace(/\.jpe?g$/i, '').split('-').filter((x) => pal.has(x)).length - a.split('-').length * 0.01;
+    f = archivos.filter((a) => nota(a) >= 1).sort((a, b) => nota(b) - nota(a))[0];
+  }
+  if (!f) return null;
+  try { return { datos: await fs.readFile(path.join(DIR_PORTADAS, f)), tipo: 'image/jpeg' }; } catch { return null; }
+}
+function codigosDe(ficha) {
+  const ids = Object.fromEntries(Object.entries(ficha.ProviderIds ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]));
+  const ruta = String(ficha.Path ?? '');
+  return {
+    imdb: ids.imdb ?? /imdbid[=-](tt\d{6,10})/i.exec(ruta)?.[1] ?? null,
+    tmdb: ids.tmdb ?? /tmdbid[=-](\d+)/i.exec(ruta)?.[1] ?? null,
+  };
+}
+async function portadaDe(m) {
+  if (m.fotoDe) {
+    const f = await emby.imagen(`/Items/${encodeURIComponent(m.fotoDe)}/Images/Primary?maxWidth=780&quality=90`);
+    if (f) return f;
+  }
+  if (m.ficha) {
+    const x = m.ficha;
+    const f = await tm.cartel({ tipo: x.Type === 'Series' ? 'tv' : 'movie', ...codigosDe(x), nombre: x.Name, ano: x.ProductionYear ?? null });
+    if (f) { console.log(`Telegram: «${x.Name}» sin cartel en Emby: va el de TMDB`); return f; }
+  }
+  if (m.lib) {
+    const f = await portadaBiblioteca(m.lib);
+    if (f && m.ficha) console.log(`Telegram: «${m.ficha.Name}» sin cartel en Emby ni TMDB: va la portada de la biblioteca`);
+    if (f) return f;
+  }
+  return null;
+}
+
+async function enviar(tema, m) {
+  const { boton } = m;
+  let { texto } = m;
   const base = { chat_id: datos.chat, message_thread_id: tema.id, parse_mode: 'HTML', ...boton };
-  const foto = fotoDe ? await emby.imagen(`/Items/${encodeURIComponent(fotoDe)}/Images/Primary?maxWidth=780&quality=90`) : null;
+  const foto = await portadaDe(m);
+  if (foto?.sinopsis && m.ficha && !m.ficha.Overview && m.conSinopsis) texto = m.conSinopsis(foto.sinopsis);
   if (foto) {
     // El cartel se sube desde Emby (Telegram no puede bajarlo: Emby pide la clave)
     const f = new FormData();
@@ -343,7 +401,7 @@ async function mandarA(lib, m) {
 //  · datos.conocidos = { <id biblioteca>: [ids de películas, series y episodios que ya estaban] }
 //  · datos.esperando = { <id>: { lib, visto } } → visto por primera vez; se avisa a los MADURO ms
 // La primera vez que se ve una biblioteca, todo lo suyo cuenta como conocido (no se avisa del catálogo).
-const CAMPOS = 'DateCreated,Overview,Genres,People,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks,RemoteTrailers,OriginalTitle,SeriesId,SeriesName,ParentIndexNumber,IndexNumber';
+const CAMPOS = 'ProviderIds,Path,DateCreated,Overview,Genres,People,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks,RemoteTrailers,OriginalTitle,SeriesId,SeriesName,ParentIndexNumber,IndexNumber';
 
 async function idsDe(lib) {
   const r = await emby.consultar(`/Items?ParentId=${encodeURIComponent(lib.id)}&Recursive=true&IncludeItemTypes=Movie,Series,Episode&Fields=SeriesId&EnableImages=false&EnableUserData=false`);

@@ -4,15 +4,13 @@
 //  2) TVmaze (API pública, sin clave; títulos en inglés y poco contenido español), si no
 // y se marca cuáles ya están en e2 mirando los «S01E02» de la carpeta de la serie.
 import * as e2 from './e2.js';
+import * as tm from './tmdb.js';
 
 const error = (status, message) => Object.assign(new Error(message), { status });
 const TVMAZE = process.env.TVMAZE_URL || 'https://api.tvmaze.com';
-const TMDB = process.env.TMDB_URL || 'https://api.themoviedb.org/3';
-const CLAVE_TMDB = (process.env.TMDB_API_KEY ?? '').trim();
 const VIDEO = /\.(mkv|mp4|m4v|avi|mov|webm|ts|m2ts|wmv|mpg|mpeg)$/i;
 const cache = new Map(); // dirección → { hasta, datos }
 const HORAS = 6 * 3600e3;
-export const conTmdb = () => Boolean(CLAVE_TMDB);
 
 async function pedir(url, nombre, cabeceras = {}) {
   const c = cache.get(url);
@@ -30,31 +28,17 @@ async function pedir(url, nombre, cabeceras = {}) {
 const norm = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // ---- TMDB ----
-// Clave v3 (32 caracteres) por ?api_key=; token v4 (largo) por la cabecera Authorization
-function tmdb(ruta, q = {}) {
-  const v4 = CLAVE_TMDB.length > 40;
-  const p = new URLSearchParams({ language: 'es-ES', ...q, ...(v4 ? {} : { api_key: CLAVE_TMDB }) });
-  return pedir(`${TMDB}${ruta}?${p}`, 'TMDB', v4 ? { authorization: `Bearer ${CLAVE_TMDB}` } : {});
-}
 async function serieTmdb({ tmdbId, imdb, nombre, ano }) {
-  if (/^\d{1,9}$/.test(tmdbId ?? '')) return Number(tmdbId);
-  if (/^tt\d{6,10}$/i.test(imdb ?? '')) {
-    const f = await tmdb(`/find/${imdb.toLowerCase()}`, { external_source: 'imdb_id' });
-    if (f?.tv_results?.[0]) return f.tv_results[0].id;
-  }
-  if (!nombre) return null;
-  const r = (await tmdb('/search/tv', { query: nombre, ...(ano ? { first_air_date_year: ano } : {}) }))?.results ?? [];
-  const igual = r.find((x) => norm(x.name) === norm(nombre) || norm(x.original_name) === norm(nombre));
-  return (igual ?? (r.length === 1 ? r[0] : null))?.id ?? null;
+  return (await tm.buscar({ tipo: 'tv', tmdb: tmdbId, imdb, nombre, ano }))?.id ?? null;
 }
 async function deTmdb(datos) {
   const id = await serieTmdb(datos);
   if (!id) return null;
-  const s = await tmdb(`/tv/${id}`);
+  const s = await tm.tmdb(`/tv/${id}`);
   if (!s) return null;
   const temporadas = [];
   for (const t of (s.seasons ?? []).filter((x) => Number.isInteger(x.season_number) && x.episode_count > 0)) {
-    const d = await tmdb(`/tv/${id}/season/${t.season_number}`);
+    const d = await tm.tmdb(`/tv/${id}/season/${t.season_number}`);
     const episodios = (d?.episodes ?? []).filter((x) => Number.isInteger(x.episode_number))
       .map((x) => ({ e: x.episode_number, titulo: x.name ?? '', fecha: x.air_date || null }));
     // Si TMDB aún no tiene el detalle, al menos los números
@@ -107,11 +91,11 @@ export async function listar({ tmdb: tmdbId, imdb, nombre, ano, carpeta, serie }
   const ya = await subidos(carpeta, serie);
   const datos = { tmdbId, imdb, nombre: String(nombre ?? '').trim(), ano };
   let r = null; let fallo = null;
-  if (CLAVE_TMDB) { try { r = await deTmdb(datos); } catch (e) { fallo = e; } }
+  if (tm.configurado()) { try { r = await deTmdb(datos); } catch (e) { fallo = e; } }
   if (!r || !r.temporadas.length) { try { r = (await deTvmaze(datos)) ?? r; } catch (e) { fallo ??= e; } }
   if (!r && fallo) throw fallo;
   const temporadas = (r?.temporadas ?? []).sort((a, b) => a.n - b.n).map((t) => ({
     n: t.n, episodios: t.episodios.sort((a, b) => a.e - b.e).map((x) => ({ ...x, ya: ya.has(`${t.n}x${x.e}`) })),
   }));
-  return { serie: r?.serie ?? null, fuente: r?.fuente ?? null, temporadas, ya: [...ya], tmdb: Boolean(CLAVE_TMDB) };
+  return { serie: r?.serie ?? null, fuente: r?.fuente ?? null, temporadas, ya: [...ya], tmdb: tm.configurado() };
 }
