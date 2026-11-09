@@ -16,6 +16,7 @@ import http from 'node:http';
 import https from 'node:https';
 import * as meta from './metadatos.js';
 import * as enlaces from './enlaces.js';
+import * as emby from './emby.js';
 import { analizarEnlaces, archivoEnlaces, detectarEtiquetas, IDIOMAS_ENLACE, CALIDADES_ENLACE } from './enlaces-video.js';
 
 // Subidas desde enlace en marcha y recientes (en memoria: id → estado)
@@ -69,6 +70,7 @@ export function iniciar(opciones) {
   alMantenimiento = opciones.alMantenimiento ?? alMantenimiento;
   pagosEstado = opciones.pagosEstado ?? pagosEstado;
   pagos = opciones.pagos ?? null;
+  emby.iniciar({ perfiles: p, nube });
   // La papelera se vacía sola pasados unos días (solo un servidor: el de Render)
   if (nube) { setTimeout(purgar, 120000).unref(); setInterval(purgar, 6 * 3600000).unref(); }
   // Borra las IPs que guardó el registro antes de dejar de apuntarlas
@@ -323,7 +325,7 @@ export async function atender(ruta, req, res, json, ip) {
   if (!admin && !colab) throw error(403, 'Esta cuenta ya no tiene acceso al gestor');
   const secciones = admin ? null : (colab.secciones || []);
   const puede = (clave) => !secciones || secciones.some((s) => String(clave).startsWith(s));
-  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento|fichas|avisos)/;
+  const SOLO_ADMIN = /^\/api\/panel\/(mover|borrar|papelera|registro|anuncios|cripto|colaboradores|admins|trabajo|mantenimiento|fichas|avisos|emby)/;
   if (!admin && (SOLO_ADMIN.test(ruta) || datos.anuncio)) throw error(403, 'Eso solo lo pueden hacer los administradores');
   const fuera = () => error(403, 'No tienes permiso en esa sección');
 
@@ -401,6 +403,40 @@ export async function atender(ruta, req, res, json, ip) {
     await p.guardarAjuste('colaboradores', lista.filter((x) => x.usuario !== usuario));
     await registrar(c, ip, `quita el permiso de colaborador a ${usuario}`);
     return json(res, 200, { ok: true });
+  }
+
+  // ---------- Cuentas de Emby (solo administradores) ----------
+  if (ruta === '/api/panel/emby' && req.method === 'GET') return json(res, 200, await emby.resumen());
+  if (ruta === '/api/panel/emby/crear') {
+    const r = await emby.crear(datos, c.usuario);
+    await registrar(c, ip, `crea la cuenta de Emby ${r.usuario}`);
+    return json(res, 200, r);
+  }
+  if (ruta === '/api/panel/emby/editar') {
+    await emby.editar(datos.id, datos.cambios ?? {});
+    await registrar(c, ip, `cambia la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
+    return json(res, 200, { ok: true });
+  }
+  if (ruta === '/api/panel/emby/clave') {
+    await emby.cambiarClave(datos.id, datos.clave);
+    await registrar(c, ip, `cambia la contraseña de la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
+    return json(res, 200, { ok: true });
+  }
+  if (ruta === '/api/panel/emby/activar') {
+    await emby.activar(datos.id, Boolean(datos.activa));
+    await registrar(c, ip, `${datos.activa ? 'activa' : 'desactiva'} la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
+    return json(res, 200, { ok: true });
+  }
+  if (ruta === '/api/panel/emby/renovar') {
+    const r = await emby.renovar(datos.id, { dias: datos.dias, ...('fecha' in datos && { fecha: datos.fecha }) });
+    await registrar(c, ip, `renueva la cuenta de Emby ${String(datos.nombre ?? datos.id).slice(0, 40)}`);
+    return json(res, 200, r);
+  }
+  if (ruta === '/api/panel/emby/cortar') return json(res, 200, await emby.cortar(datos.id));
+  if (ruta === '/api/panel/emby/borrar') {
+    const r = await emby.borrar(datos.id);
+    await registrar(c, ip, `borra la cuenta de Emby ${r.usuario}`);
+    return json(res, 200, r);
   }
 
   // Contenido de una carpeta (sus subcarpetas y sus archivos)
