@@ -23,7 +23,7 @@ import * as e2 from './e2.js';
 import * as fichas from './fichas.js';
 import * as episodios from './episodios.js';
 
-const pedirEpisodios = (url) => episodios.listar(Object.fromEntries(['imdb', 'nombre', 'ano', 'carpeta', 'serie'].map((k) => [k, url.searchParams.get(k) ?? ''])));
+const pedirEpisodios = (url) => episodios.listar(Object.fromEntries(['tmdb', 'imdb', 'nombre', 'ano', 'carpeta', 'serie'].map((k) => [k, url.searchParams.get(k) ?? ''])));
 const PUERTO = Number(process.env.PUERTO ?? 10100);
 const HOST = process.env.HOST ?? '127.0.0.1';
 const DATOS = process.env.DATOS ?? '/datos/datos.json';

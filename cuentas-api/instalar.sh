@@ -47,6 +47,17 @@ if ! grep -qs '^TELEGRAM_TOKEN=' "$ENV"; then
   printf 'TELEGRAM_TOKEN=%s\n' "$TG" >> "$ENV"
   unset TG
 fi
+# TMDB (opcional): lista de temporadas y episodios en «Subir» con títulos en español. Sin ella se
+# usa TVmaze, que tiene poco contenido español. Para ponerla después: sed -i '/^TMDB_API_KEY=/d' $ENV
+# y volver a lanzar el instalador.
+if ! grep -qs '^TMDB_API_KEY=' "$ENV"; then
+  echo "Clave de la API de TMDB para la lista de episodios (themoviedb.org → Ajustes → API: la «Clave de API»"
+  echo "o el «Token de acceso de lectura»). Pulsa Enter sin escribir nada para no ponerla. No se verá al pegarla:"
+  read -rs TK </dev/tty; echo
+  if [[ -n $TK && ! $TK =~ ^[A-Za-z0-9._-]{32,400}$ ]]; then echo "Esa clave no parece válida: se queda sin TMDB."; TK=; fi
+  printf 'TMDB_API_KEY=%s\n' "$TK" >> "$ENV"
+  unset TK
+fi
 # e2 (para «Subir» en el panel, solo administradores): las claves se copian del montaje de rclone
 # de esta VPS (el mismo bucket que ve Emby). Se vuelven a copiar cada vez: si cambias las claves en
 # rclone, basta con relanzar el instalador.
