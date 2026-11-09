@@ -1,0 +1,8 @@
+{
+  "name": "morvehtv-cuentas-api",
+  "private": true,
+  "type": "module",
+  "description": "API del panel MorvehTV Cuentas (cuentas de Emby y revendedores). Sin dependencias.",
+  "scripts": { "start": "node servidor.mjs" },
+  "engines": { "node": ">=22" }
+}
