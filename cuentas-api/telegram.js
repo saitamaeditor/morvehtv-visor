@@ -32,7 +32,7 @@ const COLORES = [7322096, 16766590, 13338331, 9367192, 16749490, 16478047]; // l
 
 let p = null;
 let activo = false;
-let datos = null; // { chat, chatNombre, temas: { 'lib:<id>' | 'SERIES/': { id, nombre } }, charla, avisos, ultimoEmby }
+let datos = null; // { chat, chatNombre, temas: { 'lib:<id>' | 'SERIES/': { id, nombre } }, charla, avisos, conocidos, esperando }
 let ocupado = false;
 let servidorId = null;
 export let estado = 'sin TELEGRAM_TOKEN';
@@ -324,17 +324,26 @@ async function mandarA(lib, m) {
 }
 
 // ---------- Lo nuevo de Emby ----------
+// Lo nuevo se detecta por id, NO por la fecha de alta: Emby suele poner como fecha la del archivo,
+// y lo que encuentra tarde (montaje de e2 con caché, escaneo cada x minutos, archivos que conservan
+// su fecha original) quedaba por detrás del último aviso y no se avisaba nunca.
+//  · datos.conocidos = { <id biblioteca>: [ids de películas, series y episodios que ya estaban] }
+//  · datos.esperando = { <id>: { lib, visto } } → visto por primera vez; se avisa a los MADURO ms
+// La primera vez que se ve una biblioteca, todo lo suyo cuenta como conocido (no se avisa del catálogo).
 const CAMPOS = 'DateCreated,Overview,Genres,People,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks,RemoteTrailers,OriginalTitle,SeriesId,SeriesName,ParentIndexNumber,IndexNumber';
-const fecha = (x) => Date.parse(x?.DateCreated ?? '') || 0;
 
-async function novedades(lib, desde, hasta) {
-  const r = await emby.consultar(`/Items?ParentId=${encodeURIComponent(lib.id)}&Recursive=true&IncludeItemTypes=Movie,Episode&SortBy=DateCreated&SortOrder=Descending&Limit=300&Fields=${CAMPOS}`);
-  return (r?.Items ?? []).filter((x) => fecha(x) > desde && fecha(x) <= hasta);
+async function idsDe(lib) {
+  const r = await emby.consultar(`/Items?ParentId=${encodeURIComponent(lib.id)}&Recursive=true&IncludeItemTypes=Movie,Series,Episode&Fields=SeriesId&EnableImages=false&EnableUserData=false`);
+  return (r?.Items ?? []).map((x) => ({ id: String(x.Id), tipo: x.Type, serie: x.SeriesId ? String(x.SeriesId) : null }));
 }
 async function fichas(ids) {
-  if (!ids.length) return new Map();
-  const r = await emby.consultar(`/Items?Ids=${ids.map(encodeURIComponent).join(',')}&Fields=${CAMPOS}`);
-  return new Map((r?.Items ?? []).map((x) => [String(x.Id), x]));
+  const m = new Map();
+  for (let i = 0; i < ids.length; i += 100) {
+    const trozo = ids.slice(i, i + 100);
+    const r = await emby.consultar(`/Items?Ids=${trozo.map(encodeURIComponent).join(',')}&Fields=${CAMPOS}`);
+    for (const x of r?.Items ?? []) m.set(String(x.Id), x);
+  }
+  return m;
 }
 
 export async function repaso() {
@@ -347,57 +356,78 @@ export async function repaso() {
       try { await charlaAlDia(); } catch (e) { charlaReintento = Date.now() + 600000; console.error(`Telegram: no se pudo crear el tema «Chat» (${e.message})`); }
     }
     if (!escuchando) escuchar();
-    const hasta = Date.now() - MADURO;
-    // La primera vez no se avisa de todo el catálogo: solo de lo que llegue a partir de ahora
-    if (!datos.ultimoEmby) { datos.ultimoEmby = hasta; await guardarDatos(); estado = 'ok'; return; }
-    const desde = datos.ultimoEmby;
+    const ahora = Date.now();
+    // Restos del sistema anterior (por fechas)
+    if ('ultimoEmby' in datos || 'enviados' in datos) { delete datos.ultimoEmby; delete datos.enviados; }
+    datos.conocidos ??= {}; datos.esperando ??= {};
 
-    const pendientes = []; // { lib, grupos }
-    for (const lib of await bibliotecas()) {
-      const items = await novedades(lib, desde, hasta);
-      if (!items.length) continue;
-      const pelis = items.filter((x) => x.Type === 'Movie').map((x) => ({ ficha: x, cuando: fecha(x) }));
-      const porSerie = new Map();
-      for (const e of items.filter((x) => x.Type === 'Episode' && x.SeriesId)) {
-        if (!porSerie.has(e.SeriesId)) porSerie.set(e.SeriesId, []);
-        porSerie.get(e.SeriesId).push(e);
+    // 1) Qué hay en cada biblioteca y qué no se había visto nunca
+    const libs = await bibliotecas();
+    const conocidos = {}; // id biblioteca → Set
+    for (const lib of libs) {
+      const items = await idsDe(lib);
+      if (!datos.conocidos[lib.id]) {
+        datos.conocidos[lib.id] = items.map((x) => x.id);
+        console.log(`Telegram: biblioteca «${lib.nombre}» apuntada (${items.length} elementos; solo se avisará de lo que llegue a partir de ahora)`);
+        continue;
+      }
+      const ya = conocidos[lib.id] = new Set(datos.conocidos[lib.id]);
+      for (const x of items) if (!ya.has(x.id) && !datos.esperando[x.id]) datos.esperando[x.id] = { lib: lib.id, visto: ahora };
+    }
+    await guardarDatos();
+
+    // 2) Lo que ya lleva MADURO en Emby (con la ficha completa), por biblioteca
+    const conocer = (libId, ids) => {
+      const s = conocidos[libId] ?? new Set(datos.conocidos[libId] ?? []);
+      for (const id of ids) { s.add(id); delete datos.esperando[id]; }
+      conocidos[libId] = s; datos.conocidos[libId] = [...s];
+    };
+    for (const lib of libs) {
+      const listos = Object.entries(datos.esperando).filter(([, e]) => e.lib === lib.id && ahora - e.visto >= MADURO).map(([id]) => id);
+      if (!listos.length) continue;
+      const f = await fichas(listos);
+      const pelis = []; const porSerie = new Map(); const sueltos = [];
+      for (const id of listos) {
+        const x = f.get(id);
+        if (!x) { sueltos.push(id); continue; } // ya no está en Emby
+        if (x.Type === 'Movie') pelis.push({ ficha: x, ids: [id] });
+        else if (x.Type === 'Episode' && x.SeriesId) {
+          const sid = String(x.SeriesId);
+          if (!porSerie.has(sid)) porSerie.set(sid, []);
+          porSerie.get(sid).push(x);
+        } else if (x.Type === 'Series' && ahora - datos.esperando[id].visto < 2 * 3600000) {
+          // La serie en sí se avisa con sus episodios: espera (hasta 2 h) a que lleguen, para que
+          // salga como «nueva serie» y no como «nuevos episodios»
+        } else sueltos.push(id);
       }
       const series = await fichas([...porSerie.keys()]);
       const grupos = [...pelis];
+      const yaEstaban = conocidos[lib.id] ?? new Set();
       for (const [sid, eps] of porSerie) {
-        const s = series.get(String(sid));
-        if (!s) continue;
-        // Serie que ya estaba antes del último aviso → «nuevos episodios»
-        grupos.push({ ficha: s, episodios: eps, nuevosEpisodios: fecha(s) <= desde, cuando: Math.max(...eps.map(fecha)) });
+        const s = series.get(sid);
+        if (!s) { sueltos.push(...eps.map((e) => String(e.Id))); continue; }
+        // Si la serie ya era conocida → «nuevos episodios»; si es nueva, aviso de serie nueva
+        grupos.push({ ficha: s, episodios: eps, nuevosEpisodios: yaEstaban.has(sid), ids: [...eps.map((e) => String(e.Id)), sid] });
       }
-      if (grupos.length) pendientes.push({ lib, grupos: grupos.sort((a, b) => a.cuando - b.cuando) });
-    }
-
-    // Lo ya enviado en un repaso que falló a medias no se repite
-    const hecho = new Set(datos.enviados ?? []);
-    const marcar = async (k) => { hecho.add(k); datos.enviados = [...hecho].slice(-500); await guardarDatos(); };
-    const marca = (g) => `${g.ficha.Id}:${g.cuando}`;
-    for (const p0 of pendientes) p0.grupos = p0.grupos.filter((g) => !hecho.has(marca(g)));
-    for (const { lib, grupos } of pendientes) {
-      if (!grupos.length) continue;
+      if (sueltos.length) conocer(lib.id, sueltos);
+      if (!grupos.length) { await guardarDatos(); continue; }
       if (grupos.length > MUCHOS) {
         const tema = await mandarA(lib, resumen(lib, grupos));
-        for (const g of grupos) hecho.add(marca(g));
-        await marcar(`resumen:${lib.id}:${hasta}`);
+        conocer(lib.id, grupos.flatMap((g) => g.ids)); await guardarDatos();
         console.log(`Telegram: resumen de ${grupos.length} novedades en «${tema.nombre}»`);
         await espera(PAUSA);
         continue;
       }
       for (const g of grupos) {
         const tema = await mandarA(lib, aviso(lib, g.ficha, g));
-        await marcar(marca(g));
+        // Apuntado justo después de enviarlo: si algo falla luego, no se repite
+        conocer(lib.id, g.ids); await guardarDatos();
         console.log(`Telegram: aviso en «${tema.nombre}»: ${g.ficha.Name}${g.episodios ? ` (${g.episodios.length} ep.)` : ''}`);
         await espera(PAUSA);
       }
     }
-    // Todo lo de este repaso queda avisado (si algo falla antes, se repite en el siguiente)
-    datos.ultimoEmby = hasta;
-    datos.enviados = [];
+    // Lo que espera de bibliotecas que ya no existen se olvida
+    for (const [id, e] of Object.entries(datos.esperando)) if (!libs.some((l) => l.id === e.lib)) delete datos.esperando[id];
     await guardarDatos();
     estado = 'ok';
   } catch (e) {
