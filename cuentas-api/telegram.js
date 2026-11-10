@@ -15,19 +15,21 @@
 //  · Igual que antes: tema «💬 Chat» abierto para hablar, temas de avisos cerrados, bienvenida a
 //    quien entra y /anuncio (los administradores del grupo, en privado al bot) → tema «📢 Avisos».
 //
-// Se configura en /etc/morvehtv-cuentas/cuentas.env (nunca en el código: el repositorio es público):
-//  · TELEGRAM_TOKEN: el del bot de @BotFather. El bot tiene que ser administrador del grupo con
-//    permiso para gestionar temas.
-//  · TELEGRAM_CHAT (opcional): id del grupo. Si no está, se busca solo: basta con añadir el bot
-//    al grupo (con los temas activados) y escribir cualquier cosa.
-// Lo que hay que recordar (grupo, temas, hasta cuándo se ha avisado) va en el ajuste «telegram».
+// Se configura desde el panel de gestión (sección «Telegram»): el token del bot de @BotFather se
+// guarda en el servidor (ajuste «telegramBot», nunca vuelve al navegador) y se puede conectar,
+// cambiar o desconectar sin reiniciar. Por compatibilidad, si el panel nunca lo ha tocado vale
+// TELEGRAM_TOKEN / TELEGRAM_CHAT de /etc/morvehtv-cuentas/cuentas.env.
+// El bot tiene que ser administrador del grupo con permiso para gestionar temas. El grupo se
+// encuentra solo: basta con añadir el bot al grupo (con los temas activados) y escribir algo.
+// Lo que hay que recordar (grupo, temas, qué se ha avisado, bibliotecas en silencio, opciones)
+// va en el ajuste «telegram».
 import * as emby from './emby.js';
 import * as tm from './tmdb.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const TOKEN = String(process.env.TELEGRAM_TOKEN ?? '').trim();
+let TOKEN = '';
 const API = (process.env.TELEGRAM_API ?? 'https://api.telegram.org').replace(/\/$/, '');
 const CADA = Number(process.env.TELEGRAM_CADA_MS ?? 60000);
 // Se avisa en cuanto Emby tiene el cartel (señal de que ya bajó la ficha: sinopsis, reparto…).
@@ -43,7 +45,11 @@ let activo = false;
 let datos = null; // { chat, chatNombre, temas: { 'lib:<id>' | 'SERIES/': { id, nombre } }, charla, avisos, conocidos, esperando }
 let ocupado = false;
 let servidorId = null;
-export let estado = 'sin TELEGRAM_TOKEN';
+let bot = null;          // nombre del bot (@…)
+let generacion = 0;      // cambia al conectar/desconectar: lo que era de la conexión anterior se para
+let relojes = [];
+let cortar = false;      // para cortar una tanda de avisos a medias (vaciar la cola, borrar avisos)
+export let estado = 'sin conectar';
 
 const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const html = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -68,47 +74,72 @@ async function llamar(metodo, cuerpo = {}, reintento = true) {
 
 export async function iniciar(opciones) {
   p = opciones.perfiles;
-  if (!TOKEN) return;
+  datos = { temas: {}, ...(await p.leerAjuste('telegram')) };
+  const guardado = await p.leerAjuste('telegramBot');
+  // El panel manda: si alguna vez se conectó o desconectó desde allí, el .env ya no cuenta
+  TOKEN = String(guardado ? guardado.token ?? '' : process.env.TELEGRAM_TOKEN ?? '').trim();
+  if (!guardado && process.env.TELEGRAM_CHAT && String(process.env.TELEGRAM_CHAT).trim() !== String(datos.chat)) {
+    datos = { ...datos, chat: String(process.env.TELEGRAM_CHAT).trim(), chatNombre: null, temas: {}, charla: null, avisos: null };
+  }
+  if (!TOKEN) { estado = 'sin conectar'; return; }
+  await arrancar();
+}
+
+function parar() {
+  generacion += 1;
+  activo = false;
+  for (const r of relojes) { clearTimeout(r); clearInterval(r); }
+  relojes = [];
+  if (prontoT) { clearTimeout(prontoT); prontoT = null; }
+  sondeo.abort(); escuchando = false;
+}
+
+async function arrancar(intento = 0) {
+  const mia = ++generacion;
   if (!emby.configurado()) { estado = 'Emby sin configurar'; return; }
   try {
     const yo = await llamar('getMe');
-    datos = { temas: {}, ...(await p.leerAjuste('telegram')) };
-    if (process.env.TELEGRAM_CHAT && String(process.env.TELEGRAM_CHAT).trim() !== String(datos.chat)) {
-      datos = { ...datos, chat: String(process.env.TELEGRAM_CHAT).trim(), chatNombre: null, temas: {}, charla: null, avisos: null };
-    }
+    if (mia !== generacion) return;
+    bot = yo.username;
     activo = true;
     estado = datos.chat ? 'ok' : 'falta el grupo';
     await llamar('deleteMyCommands', {}).catch(() => {});
     await llamar('setMyCommands', { commands: [{ command: 'anuncio', description: 'Publicar un aviso en el grupo (solo administradores)' }],
       scope: { type: 'all_private_chats' } }).catch(() => {});
     console.log(`Telegram: bot @${yo.username}${datos.chat ? `, grupo ${datos.chatNombre ?? datos.chat}` : ' (añádelo a un grupo con temas y escribe algo)'}`);
-    setTimeout(repaso, 15000).unref();
-    setInterval(repaso, CADA).unref();
+    relojes.push(setTimeout(repaso, 5000), setInterval(repaso, CADA));
+    relojes.forEach((r) => r.unref?.());
   } catch (e) {
+    if (mia !== generacion) return;
     estado = `error: ${e.message}`;
     // Un fallo de red al arrancar (la VPS recién reiniciada, Telegram caído un momento…) no deja el
     // bot apagado para siempre: se reintenta cada vez más espaciado (30 s, 1 min, 2 min… hasta 10 min).
     // Un token rechazado (401/404) no se arregla solo y no se reintenta.
     const rechazado = /unauthorized|not found/i.test(e.message);
     if (!rechazado) {
-      reintento = Math.min((reintento || 15000) * 2, 600000);
-      console.error(`Telegram: ${e.message} (se vuelve a intentar en ${Math.round(reintento / 1000)} s)`);
-      setTimeout(() => iniciar(opciones), reintento).unref?.();
+      const ms = Math.min(15000 * 2 ** (intento + 1), 600000);
+      console.error(`Telegram: ${e.message} (se vuelve a intentar en ${Math.round(ms / 1000)} s)`);
+      const r = setTimeout(() => { if (mia === generacion) arrancar(intento + 1); }, ms); r.unref?.(); relojes.push(r);
     } else console.error(`Telegram: ${e.message}`);
   }
 }
-let reintento = 0;
 
-// Busca el grupo con temas en los mensajes recientes del bot
+// El grupo: el primero con temas en el que el bot vea algo (mensaje o que lo añadan)
+async function grupoVisto(c) {
+  if (datos.chat || !c?.is_forum) return false;
+  datos = { ...datos, chat: String(c.id), chatNombre: c.title ?? null, temas: {}, charla: null, avisos: null };
+  await guardarDatos();
+  estado = 'ok';
+  console.log(`Telegram: grupo encontrado, «${c.title}»`);
+  pronto(2000);
+  return true;
+}
 async function buscarGrupo() {
   const updates = await llamar('getUpdates', { allowed_updates: ['message', 'my_chat_member'] });
   const g = updates.map((u) => u.message?.chat ?? u.my_chat_member?.chat).filter((c) => c && c.is_forum).at(-1);
-  if (!g) return false;
-  datos = { ...datos, chat: String(g.id), chatNombre: g.title ?? null, temas: {}, charla: null, avisos: null };
-  await guardarDatos();
-  console.log(`Telegram: grupo encontrado, «${g.title}»`);
-  return true;
+  return g ? grupoVisto(g) : false;
 }
+const silenciada = (lib) => (datos.silenciadas ?? []).includes(lib.id);
 
 // ---------- Temas (uno por biblioteca de Emby) ----------
 const ACENTOS = { peliculas: 'películas', pelicula: 'película', animacion: 'animación', musica: 'música', ninos: 'niños', tv: 'TV', hbo: 'HBO' };
@@ -129,9 +160,10 @@ async function cerrarTema(id) {
 
 async function crearTema(lib) {
   const { emoji, nombre } = nombreSeccion(lib.nombre);
+  const propio = datos.nombres?.[lib.id]; // nombre puesto desde el panel
   const color = COLORES[Object.keys(datos.temas).length % COLORES.length];
-  const t = await llamar('createForumTopic', { chat_id: datos.chat, name: `${emoji} ${nombre}`.slice(0, 128), icon_color: color });
-  datos.temas[lib.clave] = { id: t.message_thread_id, nombre: t.name };
+  const t = await llamar('createForumTopic', { chat_id: datos.chat, name: (propio || `${emoji} ${nombre}`).slice(0, 128), icon_color: color });
+  datos.temas[lib.clave] = { id: t.message_thread_id, nombre: t.name, ...(propio ? { propio: true, bib: lib.nombre } : {}) };
   await guardarDatos();
   console.log(`Telegram: tema creado, «${t.name}»`);
   await llamar('sendMessage', { chat_id: datos.chat, message_thread_id: t.message_thread_id, parse_mode: 'HTML',
@@ -438,6 +470,18 @@ export async function avisarTodo(biblioteca = '') {
   pronto(2000);
   return { ok: true, bibliotecas: nombres };
 }
+// Lo mismo para UNA biblioteca concreta (desde el panel, por su id)
+async function avisarTodoDe(libId) {
+  if (!activo) throw new Error(`Telegram no está activo (${estado})`);
+  if (!datos.chat) throw new Error('Telegram todavía no tiene grupo');
+  const lib = (await bibliotecas()).find((l) => l.id === String(libId));
+  if (!lib) throw new Error('Esa biblioteca ya no está en Emby');
+  if (silenciada(lib)) throw new Error('Esa biblioteca tiene los avisos apagados: enciéndelos primero');
+  datos.pedirTodo = { ids: [lib.id] };
+  await guardarDatos();
+  pronto(2000);
+  return lib;
+}
 
 // Mirar Emby enseguida (lo llama e2.js al avisar a Emby de algo nuevo, y el propio repaso
 // mientras algo espera su cartel)
@@ -455,9 +499,12 @@ export async function repaso() {
   ocupado = true;
   faltaCartel = false;
   try {
-    if (!datos.chat && !(await buscarGrupo())) { estado = 'falta el grupo'; return; }
+    // Sin grupo: se busca en lo que le ha llegado al bot; si no, se queda escuchando hasta que
+    // alguien escriba en un grupo con temas (o lo añadan a uno)
+    if (!datos.chat && (escuchando || !(await buscarGrupo()))) { estado = 'falta el grupo'; if (!escuchando) escuchar(); return; }
+    cortar = false;
     if (!servidorId) servidorId = (await emby.consultar('/System/Info').catch(() => null))?.Id ?? null;
-    if (Date.now() > charlaReintento) {
+    if (datos.opciones?.chat !== false && Date.now() > charlaReintento) {
       try { await charlaAlDia(); } catch (e) { charlaReintento = Date.now() + 600000; console.error(`Telegram: no se pudo crear el tema «Chat» (${e.message})`); }
     }
     if (!escuchando) escuchar();
@@ -475,8 +522,10 @@ export async function repaso() {
     if (datos.pedirTodo) {
       let total = 0;
       const filtro = typeof datos.pedirTodo === 'string' ? datos.pedirTodo : '';
+      const ids = Array.isArray(datos.pedirTodo?.ids) ? datos.pedirTodo.ids : null;
       for (const lib of libs) {
-        if (filtro && !normal(lib.nombre).includes(filtro)) continue;
+        if (silenciada(lib)) continue;
+        if (ids ? !ids.includes(lib.id) : filtro && !normal(lib.nombre).includes(filtro)) continue;
         const items = await idsDe(lib);
         datos.conocidos[lib.id] = [];
         for (const x of items) datos.esperando[x.id] = { lib: lib.id, visto: ahora - MADURO };
@@ -488,11 +537,13 @@ export async function repaso() {
       console.log(`Telegram: avisando de TODO: ${total} películas y series en ${libs.length} bibliotecas (una cada ${Math.round(PAUSA / 1000)} s)`);
     }
     // Cada biblioteca tiene su tema en cuanto aparece en Emby (no hace falta esperar a lo primero
-    // nuevo); si se le cambia el nombre en Emby, el tema también cambia
+    // nuevo); si se le cambia el nombre en Emby, el tema también cambia (salvo que se le haya puesto
+    // un nombre propio desde el panel). Las bibliotecas en silencio no tienen tema.
     for (const lib of libs) {
+      if (silenciada(lib)) continue;
       try {
         const tema = await temaDe(lib);
-        if (tema.bib && tema.bib !== lib.nombre) {
+        if (tema.bib && tema.bib !== lib.nombre && !tema.propio) {
           const { emoji, nombre } = nombreSeccion(lib.nombre);
           const nuevo = `${emoji} ${nombre}`.slice(0, 128);
           await llamar('editForumTopic', { chat_id: datos.chat, message_thread_id: tema.id, name: nuevo });
@@ -504,6 +555,13 @@ export async function repaso() {
     }
     for (const lib of libs) {
       const items = await idsDe(lib);
+      // En silencio: todo lo que tiene cuenta como visto (al encenderla solo avisa de lo que llegue)
+      if (silenciada(lib)) {
+        datos.conocidos[lib.id] = items.map((x) => x.id);
+        for (const [id, e] of Object.entries(datos.esperando)) if (e.lib === lib.id) delete datos.esperando[id];
+        delete datos.todo[lib.id]; delete datos.altas[lib.id];
+        continue;
+      }
       // Biblioteca que no se había visto nunca (categoría nueva): se avisa de TODO lo que trae, una
       // ficha por título, y durante su primer día todo lo que le llegue va también ficha a ficha
       // (nunca como resumen). (Si Emby la vacía un rato porque se cayó el montaje, al volver los ids
@@ -525,6 +583,7 @@ export async function repaso() {
       conocidos[libId] = s; datos.conocidos[libId] = [...s];
     };
     for (const lib of libs) {
+      if (cortar) break;
       const listos = Object.entries(datos.esperando).filter(([, e]) => e.lib === lib.id && ahora - e.visto >= MINIMO).map(([id]) => id);
       if (!listos.length) continue;
       const f = await fichas(listos);
@@ -568,6 +627,7 @@ export async function repaso() {
         continue;
       }
       for (const g of grupos) {
+        if (cortar) break;
         const tema = await mandarA(lib, aviso(lib, g.ficha, g));
         // Apuntado justo después de enviarlo: si algo falla luego, no se repite
         conocer(lib.id, g.ids); await guardarDatos();
@@ -583,7 +643,7 @@ export async function repaso() {
       if (!Object.values(datos.esperando).some((e) => e.lib === id)) { delete datos.todo[id]; const l = libs.find((x) => x.id === id); console.log(`Telegram: avisado todo lo de «${l?.nombre ?? id}»`); }
     }
     await guardarDatos();
-    estado = 'ok';
+    if (activo) estado = 'ok';
     // Algo espera su cartel: se vuelve a mirar en 20 s en vez de esperar al minuto
     if (faltaCartel || Object.values(datos.esperando).some((e) => Date.now() - e.visto < MINIMO)) pronto(20000);
   } catch (e) {
@@ -596,32 +656,38 @@ export async function repaso() {
 
 // ---------- Bienvenida y /anuncio (el bot escucha a Telegram) ----------
 let escuchando = false;
+let sondeo = new AbortController(); // corta la espera larga de getUpdates al desconectar
 const saludados = new Map();
 const ENTRADA_VIEJA = 6 * 3600;
 
 async function escuchar() {
   escuchando = true;
+  const mia = generacion;
+  sondeo = new AbortController();
   let offset;
-  while (activo) {
+  while (activo && mia === generacion) {
     try {
       const r = await fetch(`${API}/bot${TOKEN}/getUpdates`, {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ offset, timeout: 25, allowed_updates: ['message', 'chat_member'] }),
-        signal: AbortSignal.timeout(40000),
+        body: JSON.stringify({ offset, timeout: 25, allowed_updates: ['message', 'chat_member', 'my_chat_member'] }),
+        signal: AbortSignal.any([AbortSignal.timeout(40000), sondeo.signal]),
       });
       const d = await r.json().catch(() => ({}));
+      if (mia !== generacion) break;
       if (!d.ok) throw new Error(d.description ?? `error ${r.status}`);
       for (const u of d.result) {
         offset = u.update_id + 1;
-        await entrada(u).catch((e) => console.error(`Telegram: bienvenida (${e.message})`));
+        if (!datos.chat) await grupoVisto(u.message?.chat ?? u.my_chat_member?.chat).catch(() => {});
+        if (datos.opciones?.bienvenida !== false) await entrada(u).catch((e) => console.error(`Telegram: bienvenida (${e.message})`));
         await ordenAnuncio(u).catch((e) => console.error(`Telegram: anuncio (${e.message})`));
       }
     } catch (e) {
+      if (mia !== generacion) break;
       console.error(`Telegram: escuchando (${e.message})`);
       await espera(/conflict/i.test(e.message) ? 60000 : 10000);
     }
   }
-  escuchando = false;
+  if (mia === generacion) escuchando = false;
 }
 
 async function entrada(u) {
@@ -706,4 +772,189 @@ async function ordenAnuncio(u) {
   if (!texto && !foto) return responder('Escribe el aviso detrás del comando, por ejemplo:\n<code>/anuncio Esta noche de 2:00 a 3:00 Emby estará en mantenimiento.</code>\n\nTambién puedes mandar una foto con <code>/anuncio texto</code> como pie.');
   await publicarAviso(texto, foto);
   return responder('✅ Publicado en el tema «📢 Avisos» del grupo.');
+}
+
+// ---------- Panel de gestión (sección «Telegram», solo administradores) ----------
+// El token nunca sale del servidor: el panel solo ve el nombre del bot.
+const error = (status, mensaje) => Object.assign(new Error(mensaje), { status });
+const TOKEN_VALIDO = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
+
+async function probarToken(token) {
+  const r = await fetch(`${API}/bot${token}/getMe`, { method: 'POST', signal: AbortSignal.timeout(15000) }).catch(() => null);
+  const d = r ? await r.json().catch(() => ({})) : null;
+  if (!d?.ok) throw error(400, r ? 'Telegram no acepta ese token: cópialo otra vez de @BotFather' : 'No se pudo hablar con Telegram: prueba en un momento');
+  return d.result;
+}
+
+// Espera a que acabe la tanda de avisos en marcha (cortándola)
+async function esperarLibre() {
+  cortar = true;
+  for (let i = 0; i < 60 && ocupado; i++) await espera(500);
+  if (ocupado) throw error(409, 'El bot está ocupado: prueba en un minuto');
+}
+
+async function estadoPanel() {
+  let libs = [];
+  let errorEmby = null;
+  try { libs = emby.configurado() ? await bibliotecas() : []; } catch (e) { errorEmby = e.message; }
+  const cola = Object.values(datos.esperando ?? {});
+  const sil = new Set(datos.silenciadas ?? []);
+  return {
+    conectado: Boolean(TOKEN),
+    activo,
+    estado,
+    bot: bot && TOKEN ? `@${bot}` : null,
+    grupo: datos.chat ? { id: datos.chat, nombre: datos.chatNombre ?? null } : null,
+    opciones: { bienvenida: datos.opciones?.bienvenida !== false, chat: datos.opciones?.chat !== false },
+    temasFijos: { chat: datos.charla?.id ? '💬 Chat' : null, avisos: datos.avisos?.id ? '📢 Avisos' : null },
+    enCola: cola.length,
+    errorEmby,
+    bibliotecas: libs.map((l) => {
+      const t = datos.temas?.[l.clave];
+      return {
+        id: l.id, nombre: l.nombre, avisar: !sil.has(l.id),
+        tema: t ? { nombre: t.nombre, propio: Boolean(t.propio) } : null,
+        enCola: cola.filter((e) => e.lib === l.id).length,
+        todo: Boolean(datos.todo?.[l.id]),
+      };
+    }),
+  };
+}
+
+async function libDe(id) {
+  const lib = (await bibliotecas()).find((l) => l.id === String(id ?? ''));
+  if (!lib) throw error(404, 'Esa biblioteca ya no está en Emby');
+  return lib;
+}
+const exigirGrupo = () => {
+  if (!activo) throw error(409, 'Conecta antes el bot');
+  if (!datos.chat) throw error(409, 'El bot aún no tiene grupo');
+};
+
+export async function atenderPanel(ruta, metodo, d) {
+  if (!p) throw error(503, 'Telegram no está listo');
+  if (ruta === '' && metodo === 'GET') return { datos: await estadoPanel() };
+  if (metodo !== 'POST') throw error(405, 'Método no permitido');
+
+  if (ruta === '/conectar') {
+    const token = String(d.token ?? '').trim();
+    if (!TOKEN_VALIDO.test(token)) throw error(400, 'Eso no parece un token de bot (es como 123456789:AAH…)');
+    const yo = await probarToken(token);
+    parar();
+    const otroBot = Boolean(datos.chat && bot && bot !== yo.username);
+    TOKEN = token; bot = yo.username;
+    await p.guardarAjuste('telegramBot', { token });
+    // Otro bot: el grupo y los temas eran del anterior; se empieza de cero con el grupo que encuentre
+    if (otroBot) { datos = { ...datos, chat: null, chatNombre: null, temas: {}, charla: null, avisos: null }; await guardarDatos(); }
+    await arrancar();
+    return { datos: await estadoPanel(), registro: `conecta el bot de Telegram @${yo.username}` };
+  }
+  if (ruta === '/desconectar') {
+    parar();
+    const era = bot;
+    TOKEN = ''; estado = 'sin conectar';
+    await p.guardarAjuste('telegramBot', { token: '' });
+    return { datos: await estadoPanel(), registro: `desconecta el bot de Telegram${era ? ` @${era}` : ''}` };
+  }
+  if (ruta === '/grupo/cambiar') {
+    if (!activo) throw error(409, 'Conecta antes el bot');
+    await esperarLibre();
+    const era = datos.chatNombre ?? datos.chat;
+    datos = { ...datos, chat: null, chatNombre: null, temas: {}, charla: null, avisos: null };
+    await guardarDatos();
+    cortar = false;
+    estado = 'falta el grupo';
+    pronto(1000);
+    return { datos: await estadoPanel(), registro: `cambia el grupo de Telegram (antes ${era ?? 'ninguno'})` };
+  }
+  if (ruta === '/grupo/buscar') {
+    if (!activo) throw error(409, 'Conecta antes el bot');
+    pronto(300);
+    await espera(2500);
+    return { datos: await estadoPanel() };
+  }
+  if (ruta === '/biblioteca') {
+    const lib = await libDe(d.id);
+    let registro = null;
+    if (typeof d.avisar === 'boolean') {
+      const s = new Set(datos.silenciadas ?? []);
+      if (d.avisar) s.delete(lib.id); else s.add(lib.id);
+      datos.silenciadas = [...s];
+      await guardarDatos();
+      registro = `${d.avisar ? 'enciende' : 'apaga'} los avisos de Telegram de «${lib.nombre}»`;
+      pronto(1500);
+    }
+    if (typeof d.tema === 'string') {
+      exigirGrupo();
+      if (silenciada(lib)) throw error(409, 'Esa biblioteca tiene los avisos apagados');
+      const nombre = d.tema.trim().slice(0, 128);
+      const tema = await temaDe(lib);
+      const nuevo = nombre || (() => { const { emoji, nombre: n } = nombreSeccion(lib.nombre); return `${emoji} ${n}`.slice(0, 128); })();
+      if (nuevo !== tema.nombre) await llamar('editForumTopic', { chat_id: datos.chat, message_thread_id: tema.id, name: nuevo });
+      tema.nombre = nuevo; tema.propio = Boolean(nombre); tema.bib = lib.nombre;
+      datos.nombres = { ...(datos.nombres ?? {}) };
+      if (nombre) datos.nombres[lib.id] = nombre; else delete datos.nombres[lib.id];
+      await guardarDatos();
+      registro = `renombra el tema de Telegram de «${lib.nombre}» a «${nuevo}»`;
+    }
+    return { datos: await estadoPanel(), registro };
+  }
+  if (ruta === '/probar') {
+    exigirGrupo();
+    const lib = await libDe(d.id);
+    if (silenciada(lib)) throw error(409, 'Esa biblioteca tiene los avisos apagados');
+    const tema = await mandarA(lib, { texto: `🔔 <b>Mensaje de prueba</b>\nAsí llegarán aquí los avisos de «${html(lib.nombre)}».`, fotoDe: null, lib: null, boton: {} });
+    return { datos: { ok: true, tema: tema.nombre } };
+  }
+  if (ruta === '/avisar-todo') {
+    let lib;
+    try { lib = await avisarTodoDe(d.id); } catch (e) { throw error(409, e.message); }
+    return { datos: await estadoPanel(), registro: `pide a Telegram publicar todo lo de «${lib.nombre}»` };
+  }
+  if (ruta === '/vaciar-cola') {
+    if (!activo) throw error(409, 'Conecta antes el bot');
+    await esperarLibre();
+    const n = Object.keys(datos.esperando ?? {}).length;
+    datos.conocidos ??= {};
+    for (const [id, e] of Object.entries(datos.esperando ?? {})) (datos.conocidos[e.lib] ??= []).push(id);
+    datos.esperando = {}; datos.todo = {}; datos.altas = {}; delete datos.pedirTodo;
+    await guardarDatos();
+    cortar = false;
+    return { datos: await estadoPanel(), registro: `vacía la cola de avisos de Telegram (${n} pendientes)` };
+  }
+  if (ruta === '/opciones') {
+    datos.opciones = { ...(datos.opciones ?? {}) };
+    if (typeof d.bienvenida === 'boolean') datos.opciones.bienvenida = d.bienvenida;
+    if (typeof d.chat === 'boolean') {
+      datos.opciones.chat = d.chat;
+      // Apagar el Chat borra su tema; al encenderlo se crea de nuevo en el siguiente repaso
+      if (!d.chat && datos.charla?.id && activo && datos.chat) await llamar('deleteForumTopic', { chat_id: datos.chat, message_thread_id: datos.charla.id }).catch(() => {});
+      if (!d.chat) datos.charla = null;
+      pronto(1500);
+    }
+    await guardarDatos();
+    return { datos: await estadoPanel(), registro: 'cambia las opciones del grupo de Telegram' };
+  }
+  if (ruta === '/borrar-avisos') {
+    exigirGrupo();
+    await esperarLibre();
+    // Lo que hay ahora en Emby queda como ya avisado; luego se borran los temas (con sus mensajes)
+    datos.conocidos ??= {};
+    for (const lib of await bibliotecas()) datos.conocidos[lib.id] = (await idsDe(lib)).map((x) => x.id);
+    datos.esperando = {}; datos.todo = {}; datos.altas = {}; delete datos.pedirTodo;
+    let borrados = 0; const quedan = {};
+    for (const [k, t] of Object.entries(datos.temas ?? {})) {
+      try { await llamar('deleteForumTopic', { chat_id: datos.chat, message_thread_id: t.id }); borrados++; } catch (e) {
+        if (/not found|TOPIC_ID_INVALID/i.test(e.message)) borrados++; else quedan[k] = t;
+      }
+      await espera(400);
+    }
+    datos.temas = quedan;
+    await guardarDatos();
+    cortar = false;
+    pronto(3000); // los temas se vuelven a crear, vacíos
+    if (Object.keys(quedan).length) throw error(502, `Se borraron ${borrados} temas, pero ${Object.keys(quedan).length} no: el bot necesita ser administrador con permiso para borrar mensajes`);
+    return { datos: await estadoPanel(), registro: `borra todos los avisos de Telegram (${borrados} temas)` };
+  }
+  throw error(404, 'No existe');
 }

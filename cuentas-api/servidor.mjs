@@ -243,6 +243,11 @@ async function atender(req, res) {
   if (ruta === '/api/panel/yo') return json(res, 200, { usuario, nombre: usuario, rol: 'admin' });
   if (ruta === '/api/panel/salir') { await salirAdmin(tk); return json(res, 200, { ok: true }); }
   if (ruta === '/api/panel/registro') return json(res, 200, (await almacen.leerAjuste('registro')) ?? []);
+  if (ruta === '/api/panel/telegram' || ruta.startsWith('/api/panel/telegram/')) {
+    const r = await telegram.atenderPanel(ruta.slice('/api/panel/telegram'.length), req.method, d);
+    if (r.registro) await registrar(usuario, r.registro);
+    return json(res, 200, r.datos);
+  }
   if (ruta.startsWith('/api/panel/emby')) {
     const r = await revendedores.atender(ruta, req.method, d, { admin: true, usuario });
     if (r.registro) await registrar(usuario, r.registro);
