@@ -485,6 +485,21 @@ export async function repaso() {
       await guardarDatos();
       console.log(`Telegram: avisando de TODO: ${total} películas y series en ${libs.length} bibliotecas (una cada ${Math.round(PAUSA / 1000)} s)`);
     }
+    // Cada biblioteca tiene su tema en cuanto aparece en Emby (no hace falta esperar a lo primero
+    // nuevo); si se le cambia el nombre en Emby, el tema también cambia
+    for (const lib of libs) {
+      try {
+        const tema = await temaDe(lib);
+        if (tema.bib && tema.bib !== lib.nombre) {
+          const { emoji, nombre } = nombreSeccion(lib.nombre);
+          const nuevo = `${emoji} ${nombre}`.slice(0, 128);
+          await llamar('editForumTopic', { chat_id: datos.chat, message_thread_id: tema.id, name: nuevo });
+          console.log(`Telegram: tema renombrado, «${tema.nombre}» → «${nuevo}»`);
+          tema.nombre = nuevo;
+        }
+        if (tema.bib !== lib.nombre) { tema.bib = lib.nombre; await guardarDatos(); }
+      } catch (e) { console.error(`Telegram: no se pudo preparar el tema de «${lib.nombre}» (${e.message})`); }
+    }
     for (const lib of libs) {
       const items = await idsDe(lib);
       // Biblioteca que no se había visto nunca: lo que ya tiene se apunta sin avisar. Una que ya se
