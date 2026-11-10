@@ -22,6 +22,8 @@ export let estado = 'sin empezar';
 export function iniciar({ perfiles }) {
   p = perfiles;
   if (!emby.configurado()) { estado = 'Emby sin configurar'; return; }
+  // CARTELES=no en cuentas.env → no se repasa solo (la orden «admin.mjs carteles» sigue funcionando)
+  if (/^(no|0|off|false)$/i.test(String(process.env.CARTELES ?? '').trim())) { estado = 'desactivado'; return; }
   setTimeout(() => repaso().catch(() => {}), PRIMERO).unref?.();
   setInterval(() => repaso().catch(() => {}), CADA).unref?.();
 }
