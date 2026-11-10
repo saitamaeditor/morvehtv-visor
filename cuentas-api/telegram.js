@@ -283,7 +283,6 @@ function rangos(nums) {
 function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
   const esSerie = Boolean(episodios);
   const [emoji, que] = tipoDeAviso(lib, esSerie, nuevosEpisodios);
-  const seccion = nombreSeccion(lib.nombre);
   const anio = ficha.ProductionYear ? ` (${ficha.ProductionYear})` : '';
   const original = ficha.OriginalTitle && ficha.OriginalTitle.toLowerCase() !== String(ficha.Name).toLowerCase() ? `<i>${html(ficha.OriginalTitle)}</i>` : null;
   const nota = ficha.CommunityRating ? `⭐ <b>${Number(ficha.CommunityRating).toFixed(1)}</b>/10` : null;
@@ -310,7 +309,7 @@ function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
   }
   const etiquetas = [esSerie ? '#Serie' : '#Película', ...generos.map(etiqueta)].join(' ');
   const partes = (sinopsis) => [
-    `${emoji} <b>${que}</b>  ·  ${html(seccion.nombre)}`,
+    `${emoji} <b>${que}</b>`,
     SEPARADOR,
     `<b>${html(ficha.Name)}</b>${html(anio)}`,
     original,
@@ -336,11 +335,10 @@ function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
 
 // Muchas cosas a la vez: un resumen con la lista
 function resumen(lib, grupos) {
-  const seccion = nombreSeccion(lib.nombre);
   const lineas = grupos.slice(0, 30).map((g) => `▫️ ${html(g.ficha.Name)}${g.ficha.ProductionYear ? ` (${g.ficha.ProductionYear})` : ''}${g.episodios ? ` — ${g.episodios.length} ep.` : ''}`);
   if (grupos.length > 30) lineas.push(`▫️ y ${grupos.length - 30} más`);
   return {
-    texto: [`🆕 <b>${grupos.length} NOVEDADES</b>  ·  ${html(seccion.nombre)}`, SEPARADOR, ...lineas].join('\n').slice(0, 4096),
+    texto: [`🆕 <b>${grupos.length} NOVEDADES</b>`, SEPARADOR, ...lineas].join('\n').slice(0, 4096),
     fotoDe: null,
     lib,
     boton: { reply_markup: { inline_keyboard: [[{ text: '▶ Abrir Emby', url: `${emby.direccionPublica()}/web/index.html` }]] } },
