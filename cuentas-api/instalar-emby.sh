@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instala Emby DESDE CERO en un servidor Ubuntu/Debian, sin nada de iDrive ni de otro servidor. Como root:
+# Instala Emby y rclone DESDE CERO (rclone sin configurar, nada de iDrive ni de otro servidor). Como root:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/saitamaeditor/morvehtv-visor/main/cuentas-api/instalar-emby.sh)
 # - El contenido va en los discos del propio servidor: /srv/media (Emby lo ve como /media).
 #   Se sube por SFTP (WinSCP) a /srv/media/PELICULAS, /srv/media/SERIES, etc.
@@ -14,13 +14,17 @@ if [[ $(hostname) == rescue* ]]; then
   echo "Estás en el modo rescate de Hetzner (todo se pierde al reiniciar). Instala antes Ubuntu con «installimage»."; exit 1
 fi
 
-echo "== 1/3 Docker"
+echo "== 1/3 Docker y rclone"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl ca-certificates >/dev/null
+apt-get install -y -qq curl ca-certificates fuse3 unzip >/dev/null
 command -v docker >/dev/null || { curl -fsSL https://get.docker.com | sh >/dev/null; }
 systemctl enable --now docker >/dev/null 2>&1 || true
 docker info >/dev/null 2>&1 || { echo "Docker no arranca"; exit 1; }
+# rclone solo se instala: sin ningún remoto configurado (eso lo haces tú con «rclone config»)
+command -v rclone >/dev/null || { curl -fsSL https://rclone.org/install.sh | bash >/dev/null; }
+grep -qs '^user_allow_other' /etc/fuse.conf || echo user_allow_other >> /etc/fuse.conf
+echo "   $(rclone version | head -n1) instalado"
 
 echo "== 2/3 Emby"
 mkdir -p /opt/emby/config /srv/media/PELICULAS /srv/media/SERIES
