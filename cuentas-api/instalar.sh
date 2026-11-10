@@ -39,10 +39,8 @@ if [[ ! -s /etc/caddy/cf-origen.pem || ! -s /etc/caddy/cf-origen.key ]]; then
   [[ $CERT == -----BEGIN\ CERTIFICATE-----* && $KEY == -----BEGIN*PRIVATE\ KEY-----* ]] \
     || { echo "Eso no parece un certificado y su clave. Vuelve a lanzar el instalador."; exit 1; }
   install -d /etc/caddy
-  printf '%s
-' "$CERT" > /etc/caddy/cf-origen.pem
-  ( umask 027; printf '%s
-' "$KEY" > /etc/caddy/cf-origen.key )
+  printf '%s\n' "$CERT" > /etc/caddy/cf-origen.pem
+  ( umask 027; printf '%s\n' "$KEY" > /etc/caddy/cf-origen.key )
   chown root:caddy /etc/caddy/cf-origen.key; chmod 640 /etc/caddy/cf-origen.key
   unset KEY CERT
 fi
