@@ -130,7 +130,12 @@ done
 # ---------- 3. Montajes sin biblioteca en Emby → biblioteca ----------
 LIBS=$(emby GET /Library/VirtualFolders) || { echo "   ✗ Emby no responde"; exit 1; }
 declare -A HECHO=()
-while IFS= read -r P; do [[ -n $P ]] && HECHO[$P]=1; done < <(jq -r '.[].Locations[]?' <<<"$LIBS")
+# Un montaje ya está en Emby si una biblioteca usa esa carpeta O ALGUNA SUBCARPETA suya
+# (p. ej. «01.Peliculas FHD» usa /mnt/03.PEL-FHD/03.PEL-FHD [0-B], [C-D]…)
+mapfile -t EN_EMBY < <(jq -r '.[].Locations[]?' <<<"$LIBS")
+for PT in "${!PUNTOS[@]}"; do
+  for P in "${EN_EMBY[@]}"; do [[ $P == "$PT" || $P == "$PT"/* ]] && { HECHO[$PT]=1; break; }; done
+done
 tipo_de() { if [[ ${1^^} =~ (^|[^A-Z])(SER|SERIES|PROGRAMAS|TV|REALITIES|REALITY|ANIME-SER)([^A-Z]|$) ]]; then echo tvshows; else echo movies; fi; }
 # Gemelas: la misma carpeta en el otro remoto (con o sin el sufijo, p. ej. 00.PEL-4K y 00.PEL-4K2)
 gemelas() {
