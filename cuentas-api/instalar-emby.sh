@@ -46,7 +46,7 @@ services:
       - /srv/media:/media
 COMPOSE
 (cd /opt/emby && docker compose up -d --quiet-pull)
-for _ in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:8096/emby/System/Info/Public && break; sleep 3; done
+for _ in $(seq 1 60); do curl -fs -o /dev/null http://127.0.0.1:8096/emby/System/Info/Public && break; sleep 3; done
 curl -fsS -o /dev/null http://127.0.0.1:8096/emby/System/Info/Public || { echo "Emby no arranca. Mira: cd /opt/emby && docker compose logs --tail 50"; exit 1; }
 
 echo "== 3/3 Listo"
