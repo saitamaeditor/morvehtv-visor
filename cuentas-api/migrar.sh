@@ -13,6 +13,11 @@ CUENTAS=https://raw.githubusercontent.com/saitamaeditor/morvehtv-visor/main/cuen
 
 [[ $EUID -eq 0 ]] || { echo "Lánzalo como root"; exit 1; }
 [[ -f /etc/debian_version ]] || { echo "Este script es para Ubuntu o Debian"; exit 1; }
+# El «Rescue System» de Hetzner vive en la RAM: lo que se instale ahí se pierde al reiniciar
+if [[ $(hostname) == rescue* ]] || grep -qs 'hetzner' /etc/motd && [[ ! -d /boot/grub ]]; then
+  echo "Estás en el modo rescate (todo se pierde al reiniciar). Instala antes el sistema con «installimage»"
+  echo "(Ubuntu 24.04), reinicia, entra de nuevo y vuelve a lanzar este script."; exit 1
+fi
 trap 'ssh -o ControlPath=$SOCK -O exit "root@$VIEJO" 2>/dev/null || true' EXIT
 viejo() { $SSH "root@$VIEJO" "$@"; }
 # Copia carpetas o archivos de la antigua al mismo sitio en esta (-x: sin meterse en montajes como /mnt/e2)
@@ -34,6 +39,9 @@ if ! command -v caddy >/dev/null; then
   curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -qq && apt-get install -y -qq caddy >/dev/null
 fi
+
+systemctl enable --now docker >/dev/null 2>&1 || true
+docker info >/dev/null 2>&1 || { echo "Docker no arranca en este servidor: no sigo (la antigua no se ha tocado)"; exit 1; }
 
 echo "== 2/7 Conexión con la VPS antigua ($VIEJO). Escribe su contraseña de root (no se verá):"
 ssh -o ControlPath="$SOCK" -o ControlMaster=yes -o ControlPersist=3h -o StrictHostKeyChecking=accept-new -fN "root@$VIEJO"
