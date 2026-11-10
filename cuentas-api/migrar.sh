@@ -58,7 +58,7 @@ traer /opt/emby /var/lib/morvehtv-cuentas /etc/morvehtv-cuentas /etc/caddy "$RCL
 
 echo "== 4/7 Parando la antigua (para que no haya dos Emby ni dos bots de Telegram a la vez)"
 viejo 'rm -f /etc/cron.d/morvehtv-cuentas
-  cd /opt/emby && for c in $(docker compose ps -aq) $(docker ps -aq -f name=^morvehtv-cuentas$); do docker update -q --restart=no "$c" >/dev/null; docker stop "$c" >/dev/null; done; true'
+  cd /opt/emby && for c in $(docker compose ps -aq) $(docker ps -aq -f name=^morvehtv-cuentas$); do docker update --restart=no "$c" >/dev/null; docker stop "$c" >/dev/null; done; true'
 
 echo "== 5/7 Copia final (solo lo que ha cambiado)"
 traer /opt/emby /var/lib/morvehtv-cuentas
@@ -96,4 +96,4 @@ if [[ $FALLO == 0 ]]; then echo "MIGRADO."; else echo "Hay algo con ✗: revísa
 echo "Ahora en Cloudflare → DNS cambia a $IP (nube naranja) los registros A de:"
 echo "   morvehtv.com · www · emby · panel"
 echo "Si algo fuera mal, vuelve a encender la antigua con:"
-echo "   ssh root@$VIEJO 'cd /opt/emby && docker compose start && docker update -q --restart=unless-stopped \$(docker compose ps -aq) morvehtv-cuentas; docker start morvehtv-cuentas'"
+echo "   ssh root@$VIEJO 'cd /opt/emby && docker compose start && docker update --restart=unless-stopped \$(docker compose ps -aq) morvehtv-cuentas; docker start morvehtv-cuentas'"
