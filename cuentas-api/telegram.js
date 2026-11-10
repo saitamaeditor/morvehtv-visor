@@ -283,15 +283,16 @@ function rangos(nums) {
 function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
   const esSerie = Boolean(episodios);
   const [emoji, que] = tipoDeAviso(lib, esSerie, nuevosEpisodios);
-  const anio = ficha.ProductionYear ? ` (${ficha.ProductionYear})` : '';
+  const anio = ficha.ProductionYear ? `  ·  ${ficha.ProductionYear}` : '';
   const original = ficha.OriginalTitle && ficha.OriginalTitle.toLowerCase() !== String(ficha.Name).toLowerCase() ? `<i>${html(ficha.OriginalTitle)}</i>` : null;
   const nota = ficha.CommunityRating ? `⭐ <b>${Number(ficha.CommunityRating).toFixed(1)}</b>/10` : null;
   const edad = ficha.OfficialRating ? `🔖 ${html(ficha.OfficialRating)}` : null;
   const duracion = esSerie ? null : (duracionTexto(ficha.RunTimeTicks) && `⏱ ${duracionTexto(ficha.RunTimeTicks)}`);
   const generos = (ficha.Genres ?? []).slice(0, 3);
   const gente = (tipo) => (ficha.People ?? []).filter((x) => x.Type === tipo).map((x) => x.Name);
-  const autor = esSerie ? null : (gente('Director').length ? `🎬 Dirección: ${lista(gente('Director'), 2)}` : null);
-  const reparto = gente('Actor').length ? `👥 Reparto: ${lista(gente('Actor'), 4)}` : null;
+  const dato = (icono, titulo, valor) => (valor ? `${icono} <b>${titulo}</b>  ›  ${valor}` : null);
+  const autor = esSerie ? null : dato('🎬', 'Dirección', lista(gente('Director'), 2));
+  const reparto = dato('👥', 'Reparto', lista(gente('Actor'), 4));
 
   let eps = null;
   if (esSerie) {
@@ -299,30 +300,26 @@ function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
     if (nuevosEpisodios) {
       // Lista corta: «T2 · E5 · Título»
       const orden = [...episodios].sort((a, b) => (a.ParentIndexNumber ?? 0) - (b.ParentIndexNumber ?? 0) || (a.IndexNumber ?? 0) - (b.IndexNumber ?? 0));
-      const lineas = orden.slice(0, 8).map((e) => `▫️ ${[Number.isInteger(e.ParentIndexNumber) && `T${e.ParentIndexNumber}`, Number.isInteger(e.IndexNumber) && `E${e.IndexNumber}`].filter(Boolean).join(' · ')}${e.Name && !/^episod/i.test(e.Name) ? ` — ${html(corto(e.Name, 40))}` : ''}`);
-      if (orden.length > 8) lineas.push(`▫️ y ${orden.length - 8} más`);
-      eps = [`📀 ${episodios.length} episodio${episodios.length === 1 ? '' : 's'} nuevo${episodios.length === 1 ? '' : 's'}`, ...lineas].join('\n');
+      const lineas = orden.slice(0, 8).map((e) => `     ▸ ${[Number.isInteger(e.ParentIndexNumber) && `T${e.ParentIndexNumber}`, Number.isInteger(e.IndexNumber) && `E${e.IndexNumber}`].filter(Boolean).join(' · ')}${e.Name && !/^episod/i.test(e.Name) ? ` — ${html(corto(e.Name, 40))}` : ''}`);
+      if (orden.length > 8) lineas.push(`     ▸ y ${orden.length - 8} más`);
+      eps = [`📀 <b>${episodios.length} episodio${episodios.length === 1 ? '' : 's'} nuevo${episodios.length === 1 ? '' : 's'}</b>`, ...lineas].join('\n');
     } else {
       const porTemp = temps.map((t) => `${temps.length > 1 ? `T${t}: ` : ''}${rangos(episodios.filter((e) => e.ParentIndexNumber === t).map((e) => e.IndexNumber))}`).filter((x) => !/: ?$/.test(x));
-      eps = `📀 ${episodios.length} episodio${episodios.length === 1 ? '' : 's'}${temps.length ? `  ·  ${temporadasTexto(temps)}` : ''}${porTemp.length && episodios.length <= 40 ? `\n     ${porTemp.join('  ·  ')}` : ''}`;
+      eps = `📀 <b>${episodios.length} episodio${episodios.length === 1 ? '' : 's'}</b>${temps.length ? `  ·  ${temporadasTexto(temps)}` : ''}${porTemp.length && episodios.length <= 40 ? `\n     ▸ ${porTemp.join('  ·  ')}` : ''}`;
     }
   }
   const etiquetas = [esSerie ? '#Serie' : '#Película', ...generos.map(etiqueta)].join(' ');
+  // Bloques separados por una línea en blanco; los que quedan vacíos no dejan hueco
+  const bloque = (...lineas) => { const l = lineas.filter(Boolean); return l.length ? l.join('\n') : null; };
   const partes = (sinopsis) => [
-    `${emoji} <b>${que}</b>`,
-    SEPARADOR,
-    `<b>${html(ficha.Name)}</b>${html(anio)}`,
-    original,
-    '',
-    [nota, duracion, edad].filter(Boolean).join('   ') || null,
-    generos.length ? `🎭 ${generos.map(html).join(' · ')}` : null,
-    nuevosEpisodios ? null : autor,
-    nuevosEpisodios ? null : reparto,
-    eps,
-    sinopsis && !nuevosEpisodios ? `\n${sinopsis}` : null,
-    '',
-    etiquetas,
-  ];
+    bloque(`${emoji} <b>${que}</b>`, SEPARADOR),
+    bloque(`🎞 <b>${html(ficha.Name)}</b>${html(anio)}`, original),
+    bloque([nota, duracion, edad].filter(Boolean).join('   │   ')),
+    bloque(dato('🎭', 'Género', generos.map(html).join(', ')), nuevosEpisodios ? null : autor, nuevosEpisodios ? null : reparto),
+    bloque(eps),
+    sinopsis && !nuevosEpisodios ? bloque('📝 <b>Sinopsis</b>', sinopsis) : null,
+    bloque(SEPARADOR, '✅ <b>Ya disponible en MorvehTV</b>', `🏷 ${etiquetas}`),
+  ].filter(Boolean).join('\n\n').split('\n');
   return {
     texto: montar(partes, ficha.Overview, 1024),
     fotoDe: ficha.Id,
@@ -335,10 +332,10 @@ function aviso(lib, ficha, { episodios = null, nuevosEpisodios = false } = {}) {
 
 // Muchas cosas a la vez: un resumen con la lista
 function resumen(lib, grupos) {
-  const lineas = grupos.slice(0, 30).map((g) => `▫️ ${html(g.ficha.Name)}${g.ficha.ProductionYear ? ` (${g.ficha.ProductionYear})` : ''}${g.episodios ? ` — ${g.episodios.length} ep.` : ''}`);
-  if (grupos.length > 30) lineas.push(`▫️ y ${grupos.length - 30} más`);
+  const lineas = grupos.slice(0, 30).map((g) => `▸ <b>${html(g.ficha.Name)}</b>${g.ficha.ProductionYear ? `  ·  ${g.ficha.ProductionYear}` : ''}${g.episodios ? `  ·  ${g.episodios.length} ep.` : ''}`);
+  if (grupos.length > 30) lineas.push(`▸ y ${grupos.length - 30} más`);
   return {
-    texto: [`🆕 <b>${grupos.length} NOVEDADES</b>`, SEPARADOR, ...lineas].join('\n').slice(0, 4096),
+    texto: [`🆕 <b>${grupos.length} NOVEDADES</b>`, SEPARADOR, '', ...lineas, '', SEPARADOR, '✅ <b>Ya disponible en MorvehTV</b>'].join('\n').slice(0, 4096),
     fotoDe: null,
     lib,
     boton: { reply_markup: { inline_keyboard: [[{ text: '▶ Abrir Emby', url: `${emby.direccionPublica()}/web/index.html` }]] } },
