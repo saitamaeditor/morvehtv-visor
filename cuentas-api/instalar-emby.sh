@@ -44,6 +44,7 @@ services:
     volumes:
       - /opt/emby/config:/config
       - /srv/media:/media
+      - /mnt:/mnt:ro,rslave
 COMPOSE
 (cd /opt/emby && docker compose up -d --quiet-pull)
 for _ in $(seq 1 60); do curl -fs -o /dev/null http://127.0.0.1:8096/emby/System/Info/Public && break; sleep 3; done
