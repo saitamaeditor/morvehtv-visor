@@ -61,8 +61,7 @@ if ! grep -qs '^EMBY_API_KEY=.\+' "$ENV"; then
   echo "Pega la clave de API de Emby (Panel de Emby → Avanzado → Claves de API). No se verá al pegarla:"
   read -rs CLAVE </dev/tty; echo
   [[ $CLAVE =~ ^[A-Za-z0-9]{16,64}$ ]] || { echo "Esa clave no parece válida. Vuelve a lanzar el instalador."; exit 1; }
-  umask 077
-  printf 'EMBY_URL=http://127.0.0.1:8096\nEMBY_API_KEY=%s\nEMBY_PUBLICA=https://emby.morvehtv.com\n' "$CLAVE" > "$ENV"
+  ( umask 077; printf 'EMBY_URL=http://127.0.0.1:8096\nEMBY_API_KEY=%s\nEMBY_PUBLICA=https://emby.morvehtv.com\n' "$CLAVE" > "$ENV" )
   unset CLAVE
 fi
 # Telegram (opcional): avisos de lo nuevo de Emby en el grupo. Se pregunta una sola vez; para
@@ -127,6 +126,8 @@ echo "== 5/6 Panel en https://$DOMINIO, Caddy y actualizaciones"
 # La web del panel (los archivos de morvehtv-gestor) se sirve desde la propia VPS
 if [[ ! -d $WEB/.git ]]; then git clone -q --depth 1 "$REPO_WEB" "$WEB"
 else git -C "$WEB" fetch -q --depth 1 origin main && git -C "$WEB" reset -q --hard origin/main; fi
+# Caddy (usuario caddy) tiene que poder leer la web del panel y la app
+chmod -R a+rX "$WEB" "$APP/app"; chmod a+x "$DIR" "$APP"
 # Los bloques de $DOMINIO y de $DOMINIO_APP se reescriben siempre (así se arreglan instalaciones anteriores)
 cp "$CADDY" /tmp/Caddyfile.prev
 awk -v d="$DOMINIO {" -v a="$DOMINIO_APP, www.$DOMINIO_APP {" -v e="$DOMINIO_EMBY {" '$0==d||$0==a||$0==e{s=1} !s{print} s&&/^}/{s=0}' /tmp/Caddyfile.prev > "$CADDY"
