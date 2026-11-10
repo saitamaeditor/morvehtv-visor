@@ -16,6 +16,36 @@ WEB=/opt/morvehtv-cuentas-web
 
 [[ $EUID -eq 0 ]] || { echo "Lánzalo como root"; exit 1; }
 command -v docker >/dev/null || { echo "Falta Docker"; exit 1; }
+DOMINIO_EMBY=emby.morvehtv.com
+# Servidor nuevo: Caddy (el que da la cara a internet) se instala si falta
+if ! command -v caddy >/dev/null; then
+  echo "== Instalando Caddy"
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq && apt-get install -y -qq git curl gnupg debian-keyring debian-archive-keyring apt-transport-https >/dev/null
+  curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt > /etc/apt/sources.list.d/caddy-stable.list
+  apt-get update -qq && apt-get install -y -qq caddy >/dev/null
+  systemctl enable -q --now caddy
+fi
+# Certificado de origen de Cloudflare (los dominios van por Cloudflare con la nube naranja)
+if [[ ! -s /etc/caddy/cf-origen.pem || ! -s /etc/caddy/cf-origen.key ]]; then
+  echo "Falta el certificado de origen de Cloudflare. Créalo en Cloudflare → morvehtv.com → SSL/TLS →"
+  echo "Servidor de origen → Crear certificado (deja *.morvehtv.com y morvehtv.com, RSA, 15 años, PEM)."
+  leerpem() { local l t=''; while IFS= read -r ${1:-} l </dev/tty; do t+="$l"$'\n'; [[ $l == -----END* ]] && break; done; printf '%s' "$t"; }
+  echo "Pega el «Certificado de origen» entero (de -----BEGIN a -----END CERTIFICATE-----):"
+  CERT=$(leerpem)
+  echo "Pega la «Clave privada» entera (de -----BEGIN a -----END PRIVATE KEY-----). No se verá al pegarla:"
+  KEY=$(leerpem -s); echo
+  [[ $CERT == -----BEGIN\ CERTIFICATE-----* && $KEY == -----BEGIN*PRIVATE\ KEY-----* ]] \
+    || { echo "Eso no parece un certificado y su clave. Vuelve a lanzar el instalador."; exit 1; }
+  install -d /etc/caddy
+  printf '%s
+' "$CERT" > /etc/caddy/cf-origen.pem
+  ( umask 027; printf '%s
+' "$KEY" > /etc/caddy/cf-origen.key )
+  chown root:caddy /etc/caddy/cf-origen.key; chmod 640 /etc/caddy/cf-origen.key
+  unset KEY CERT
+fi
 
 echo "== 1/6 Código (solo cuentas-api)"
 if [[ ! -d $DIR/.git ]]; then
@@ -101,7 +131,16 @@ if [[ ! -d $WEB/.git ]]; then git clone -q --depth 1 "$REPO_WEB" "$WEB"
 else git -C "$WEB" fetch -q --depth 1 origin main && git -C "$WEB" reset -q --hard origin/main; fi
 # Los bloques de $DOMINIO y de $DOMINIO_APP se reescriben siempre (así se arreglan instalaciones anteriores)
 cp "$CADDY" /tmp/Caddyfile.prev
-awk -v d="$DOMINIO {" -v a="$DOMINIO_APP, www.$DOMINIO_APP {" '$0==d||$0==a{s=1} !s{print} s&&/^}/{s=0}' /tmp/Caddyfile.prev > "$CADDY"
+awk -v d="$DOMINIO {" -v a="$DOMINIO_APP, www.$DOMINIO_APP {" -v e="$DOMINIO_EMBY {" '$0==d||$0==a||$0==e{s=1} !s{print} s&&/^}/{s=0}' /tmp/Caddyfile.prev > "$CADDY"
+# Emby para las apps de Emby y los clientes, en https://$DOMINIO_EMBY
+cat >> "$CADDY" <<CADDY
+
+$DOMINIO_EMBY {
+	tls /etc/caddy/cf-origen.pem /etc/caddy/cf-origen.key
+	header -Server
+	reverse_proxy 127.0.0.1:8096
+}
+CADDY
 # La app MorvehTV (interfaz propia sobre Emby) en https://$DOMINIO_APP: los archivos de cuentas-api/app
 # y la API de Emby en /emby/… (mismo dominio: sin problemas de CORS, y Emby ya entiende ese prefijo)
 cat >> "$CADDY" <<CADDY
@@ -173,4 +212,4 @@ fi
 
 echo
 echo "LISTO. Panel: https://$DOMINIO · App: https://$DOMINIO_APP"
-echo "(Si es la primera vez: en Cloudflare → DNS, registro A «panel» → $(hostname -I | awk '{print $1}'), nube naranja.)"
+echo "Si este servidor es nuevo: en Cloudflare → DNS pon \"panel\", \"emby\", \"morvehtv.com\" y \"www\" → $(hostname -I | awk '{print $1}') (nube naranja)."
