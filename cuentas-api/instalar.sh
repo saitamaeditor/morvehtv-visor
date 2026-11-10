@@ -173,4 +173,4 @@ fi
 
 echo
 echo "LISTO. Panel: https://$DOMINIO · App: https://$DOMINIO_APP"
-echo "(Si es la primera vez: en Cloudflare → DNS, registro A «panel» → 94.143.140.93, nube naranja.)"
+echo "(Si es la primera vez: en Cloudflare → DNS, registro A «panel» → $(hostname -I | awk '{print $1}'), nube naranja.)"
