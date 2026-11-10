@@ -404,7 +404,8 @@ async function mandarA(lib, m) {
 // su fecha original) quedaba por detrás del último aviso y no se avisaba nunca.
 //  · datos.conocidos = { <id biblioteca>: [ids de películas, series y episodios que ya estaban] }
 //  · datos.esperando = { <id>: { lib, visto } } → visto por primera vez; se avisa a los MADURO ms
-// La primera vez que se ve una biblioteca, todo lo suyo cuenta como conocido (no se avisa del catálogo).
+//  · datos.altas = { <id biblioteca>: cuándo se vio por primera vez } → su primer día, todo ficha a ficha
+// La primera vez que se ve una biblioteca (categoría nueva) se avisa de todo lo que trae.
 const CAMPOS = 'ProviderIds,Path,DateCreated,Overview,Genres,People,ProductionYear,CommunityRating,OfficialRating,RunTimeTicks,RemoteTrailers,OriginalTitle,SeriesId,SeriesName,ParentIndexNumber,IndexNumber';
 
 async function idsDe(lib) {
@@ -463,7 +464,8 @@ export async function repaso() {
     const ahora = Date.now();
     // Restos del sistema anterior (por fechas)
     if ('ultimoEmby' in datos || 'enviados' in datos) { delete datos.ultimoEmby; delete datos.enviados; }
-    datos.conocidos ??= {}; datos.esperando ??= {};
+    datos.conocidos ??= {}; datos.esperando ??= {}; datos.altas ??= {};
+    const recien = (libId) => ahora - (datos.altas[libId] ?? 0) < 86400000;
 
     // 1) Qué hay en cada biblioteca y qué no se había visto nunca
     const libs = await bibliotecas();
@@ -502,15 +504,14 @@ export async function repaso() {
     }
     for (const lib of libs) {
       const items = await idsDe(lib);
-      // Biblioteca que no se había visto nunca: lo que ya tiene se apunta sin avisar. Una que ya se
-      // conocía (aunque estuviera vacía) avisa de lo nuevo: lo primero que se sube a una biblioteca
-      // vacía SÍ se avisa. (Si Emby la vacía un rato porque se cayó el montaje, al volver los ids son
-      // los mismos —Emby los saca de la ruta— y siguen en «conocidos», así que no se repite nada.)
+      // Biblioteca que no se había visto nunca (categoría nueva): se avisa de TODO lo que trae, una
+      // ficha por título, y durante su primer día todo lo que le llegue va también ficha a ficha
+      // (nunca como resumen). (Si Emby la vacía un rato porque se cayó el montaje, al volver los ids
+      // son los mismos —Emby los saca de la ruta— y siguen en «conocidos», así que no se repite nada.)
       if (!Array.isArray(datos.conocidos[lib.id]) && !datos.todo[lib.id]) {
-        datos.conocidos[lib.id] = items.map((x) => x.id);
-        if (!items.length) continue;
-        console.log(`Telegram: biblioteca «${lib.nombre}» apuntada (${items.length} elementos; solo se avisará de lo que llegue a partir de ahora)`);
-        continue;
+        datos.conocidos[lib.id] = [];
+        datos.altas[lib.id] = ahora;
+        console.log(`Telegram: categoría nueva «${lib.nombre}»${items.length ? `: avisando de sus ${items.filter((x) => x.tipo !== 'Episode').length} películas y series` : ''}`);
       }
       const ya = conocidos[lib.id] = new Set(datos.conocidos[lib.id]);
       for (const x of items) if (!ya.has(x.id) && !datos.esperando[x.id]) datos.esperando[x.id] = { lib: lib.id, visto: ahora };
@@ -558,8 +559,8 @@ export async function repaso() {
       }
       if (!grupos.length) { await guardarDatos(); continue; }
       // (avisando de todo: una ficha por título, nunca un resumen; por orden alfabético)
-      if (datos.todo[lib.id]) grupos.sort((a, b) => String(a.ficha.SortName ?? a.ficha.Name).localeCompare(String(b.ficha.SortName ?? b.ficha.Name), 'es'));
-      if (grupos.length > MUCHOS && !datos.todo[lib.id]) {
+      if (datos.todo[lib.id] || recien(lib.id)) grupos.sort((a, b) => String(a.ficha.SortName ?? a.ficha.Name).localeCompare(String(b.ficha.SortName ?? b.ficha.Name), 'es'));
+      if (grupos.length > MUCHOS && !datos.todo[lib.id] && !recien(lib.id)) {
         const tema = await mandarA(lib, resumen(lib, grupos));
         conocer(lib.id, grupos.flatMap((g) => g.ids)); await guardarDatos();
         console.log(`Telegram: resumen de ${grupos.length} novedades en «${tema.nombre}»`);
@@ -576,6 +577,7 @@ export async function repaso() {
     }
     // Lo que espera de bibliotecas que ya no existen se olvida
     for (const [id, e] of Object.entries(datos.esperando)) if (!libs.some((l) => l.id === e.lib)) delete datos.esperando[id];
+    for (const id of Object.keys(datos.altas)) if (!recien(id) || !libs.some((l) => l.id === id)) delete datos.altas[id];
     // «Avisar de todo» termina en cada biblioteca cuando ya no le queda nada en la cola
     for (const id of Object.keys(datos.todo)) {
       if (!Object.values(datos.esperando).some((e) => e.lib === id)) { delete datos.todo[id]; const l = libs.find((x) => x.id === id); console.log(`Telegram: avisado todo lo de «${l?.nombre ?? id}»`); }
